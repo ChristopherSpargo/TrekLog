@@ -1,0 +1,68 @@
+{
+  "name": "TrekLog",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "start": "node node_modules/react-native/local-cli/cli.js start",
+    "tsc": "tsc",
+    "clean": "rimraf artifacts",
+    "build": "npm run clean && npm run tsc",
+    "lint": "tslint src/**/*.ts",
+    "watch": "npm run tsc -- -w",
+    "start:android": "npm run build && concurrently -r 'npm run watch' 'react-native run-android",
+    "test": "jest"
+  },
+  "dependencies": {
+    "mobx": "^4.9.3",
+    "mobx-react": "^5.4.3",
+    "react": "16.8.3",
+    "react-native": "0.59.2",
+    "react-native-camera": "^1.13.1",
+    "react-native-cli": "^2.0.1",
+    "react-native-image-pan-zoom": "^2.1.11",
+    "react-native-linear-gradient": "^2.5.4",
+    "react-native-maps": "github:react-native-community/react-native-maps#master",
+    "react-native-mauron85-background-geolocation": "^0.5.2",
+    "react-native-svg": "^9.3.6",
+    "react-native-svg-charts": "^5.2.0",
+    "react-native-video": "^4.4.0",
+    "react-navigation": "^2.18.3"
+  },
+  "devDependencies": {
+    "@babel/core": "7.4.0",
+    "@babel/runtime": "7.4.2",
+    "@react-native-community/eslint-config": "0.0.3",
+    "@types/react": "^16.8.10",
+    "@types/react-native": "^0.57.42",
+    "@types/react-native-svg-charts": "^5.0.1",
+    "@types/react-native-video": "^3.1.2",
+    "@types/react-navigation": "^3.0.6",
+    "babel-jest": "24.5.0",
+    "eslint": "5.15.3",
+    "jest": "^24.0.0",
+    "metro-react-native-babel-preset": "0.53.1",
+    "react-native-typescript-transformer": "^1.2.12",
+    "react-test-renderer": "16.8.3",
+    "rimraf": "^2.6.3",
+    "tslint": "^5.14.0",
+    "typescript": "^3.3.4000"
+  },
+  "jest": {
+    "preset": "react-native",
+    "moduleFileExtensions": [
+      "ts",
+      "tsx",
+      "js"
+    ],
+    "transform": {
+      "^.+\\.(js)$": "<rootDir>/node_modules/babel-jest",
+      "\\.(ts|tsx)$": "<rootDir>/node_modules/ts-jest/preprocessor.js"
+    },
+    "testRegex": "(/__tests__/.*|\\.(test|spec))\\.(ts|tsx|js)$",
+    "testPathIgnorePatterns": [
+      "\\.snap$",
+      "<rootDir>/node_modules/"
+    ],
+    "cacheDirectory": ".jest/cache"
+  }
+}
