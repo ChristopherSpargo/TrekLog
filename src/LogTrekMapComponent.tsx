@@ -9,7 +9,7 @@ import TrekDisplay from './TrekDisplayComponent';
 import NumbersBar, { NUMBERS_AREA_HEIGHT, TREK_LABEL_HEIGHT } from './NumbersBarComponent'
 import { ModalModel } from './ModalModel'
 import {LimitsObj} from './TrekLimitsComponent'
-import { CONTROLS_HEIGHT} from './App';
+import { CONTROLS_HEIGHT, NAV_ICON_SIZE} from './App';
 import TrekLogHeader from './TreklogHeaderComponent';
 import { LocationSvc } from './LocationService';
 import { LoggingSvc } from './LoggingService';
@@ -99,11 +99,11 @@ class LogTrekMap extends Component<{
     const reviewOk = !stopOk && this.trekInfo.pendingReview;
     const statsHt = NUMBERS_AREA_HEIGHT + TREK_LABEL_HEIGHT;
     const mapBottom = (stopOk && this.trekInfo.statsOpen ? statsHt : 0) + CONTROLS_HEIGHT;
-    const { controlsArea, navItem, navIcon, roundedTop } = this.props.uiTheme;
+    const { controlsArea, navItem, navIcon } = this.props.uiTheme;
     const sdIcon = this.trekInfo.speedDialZoom ? "ZoomOutMap" : "Location";
     const sdValue = this.trekInfo.speedDialZoom ? "All" : "Current";
     const { navIconColor, highTextColor, trekLogBlue } = this.props.uiTheme.palette;
-    const navIconSize = 24;
+    const navIconSize = NAV_ICON_SIZE;
 
     const styles = StyleSheet.create({
       container: { ... StyleSheet.absoluteFillObject },
@@ -125,7 +125,7 @@ class LogTrekMap extends Component<{
       },
     })
 
-    const cBorder = this.trekInfo.statsOpen ? {borderTopColor: highTextColor} : roundedTop;
+    const cBorder = this.trekInfo.statsOpen ? {borderTopColor: highTextColor} : {};
 
     return (
       <View style={[styles.container]}>

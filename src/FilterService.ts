@@ -81,19 +81,20 @@ export class FilterSvc {
   @observable sortByDate : boolean;
 
   // default filter values
-  @observable dateDefMin;
-  @observable dateDefMax;
-  @observable distDefMin;
-  @observable distDefMax;
-  @observable timeDefMin;
-  @observable timeDefMax;
-  @observable speedDefMin;
-  @observable speedDefMax;
-  @observable calsDefMin;
-  @observable calsDefMax;
-  @observable stepsDefMin;
-  @observable stepsDefMax;
-  @observable filterRuns;
+  @observable dateDefMin : string;
+  @observable dateDefMax : string;
+  @observable distDefMin : string;
+  @observable distDefMax : string;
+  @observable timeDefMin : string;
+  @observable timeDefMax : string;
+  @observable speedDefMin : string;
+  @observable speedDefMax : string;
+  @observable calsDefMin : string;
+  @observable calsDefMax : string;
+  @observable stepsDefMin : string;
+  @observable stepsDefMax : string;
+  @observable filterRuns : number;
+  @observable foundType : boolean;
 
   filterMode = '';
   barGraphData: BarGraphInfo = {items: [], range: {max: 0, min: 0, range: 0}};
@@ -143,6 +144,7 @@ export class FilterSvc {
     this.stepsDefMin = '';
     this.stepsDefMax = '';
     this.setFilterRuns(0);
+    this.setFoundType(false);
   }
 
   // set observable that will cause the bar graph to scroll to a bar
@@ -315,6 +317,11 @@ export class FilterSvc {
   @action
   setFilterRuns = (val: number) => {
     this.filterRuns = val;
+  }
+
+  @action
+  setFoundType = (status: boolean) => {
+    this.foundType = status;
   }
 
   incFilterRuns = () => {
@@ -550,6 +557,7 @@ export class FilterSvc {
 
   // Check the given trek aginst the filter values.  Return true if trek passes all filters.
   checkTrek = (trek: TrekObj) => {
+
     let dist = this.utilsSvc.convertDist(trek.trekDist, this.filter.distUnits);
     let speed = this.utilsSvc.convertSpeed(trek.trekDist, trek.duration, this.filter.speedUnits);
     let time = trek.duration / 60;
@@ -613,6 +621,7 @@ export class FilterSvc {
 
   // return a list of treks sorted and filtered by the current settings
   filterAndSort = () : number[] => {
+    let foundSelectedType = false;
     let treks : number[] = [];
 
     if (this.trekInfo.allTreks.length) {
@@ -620,12 +629,16 @@ export class FilterSvc {
       for( let i=0; i<this.trekInfo.allTreks.length; i++){
         if (this.checkTrek(this.trekInfo.allTreks[i])){
           treks.push(i);
+          if ((this.trekInfo.typeSelections & TREK_SELECT_BITS[this.trekInfo.allTreks[i].type])) { 
+            foundSelectedType = true; 
+          } 
         }
       }
       treks.sort(this.sortFunc);
     }
     this.setFilteredTreks(treks);
     this.incFilterRuns();
+    this.setFoundType(foundSelectedType);
     return treks;
   }
 

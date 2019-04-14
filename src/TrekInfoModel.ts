@@ -373,7 +373,11 @@ export class TrekInfo {
             this.currentUserSettings.weight = this.weight;
             this.currentUserSettings.packWeight = this.packWeight;
             // Then, get the treks
-            return this.readAllTreks(this.user);
+            this.readAllTreks(this.user)
+            .then((status) => {
+              resolve(status)
+            })
+            .catch(() => {})
           })
           .catch (() => {
             this.settingsFound = "NO_SETTINGS";
@@ -397,7 +401,7 @@ export class TrekInfo {
 // read populate the allTreks array with the treks for the given user
 readAllTreks = (user: string) => {
   const {infoConfirmColor, infoConfirmTextColor} = uiTheme.palette;
-  return new Promise<string> ((resolve) => {
+  return new Promise<string> ((resolve, _reject) => {
     this.storageSvc.fetchAllTreks(user)
     .then((result) => {
       this.allTreks = result.list;

@@ -11,6 +11,7 @@ class TextInputField extends React.Component<{
   inputWidth        ?: number,
   textColor         ?: string,
   kbType            ?: string,
+  autoFocus         ?: boolean,
   placeholderValue  ?: string,
   style             ?: any,
   returnType        ?: string,      // defaults to 'text'
@@ -18,7 +19,7 @@ class TextInputField extends React.Component<{
   uiTheme           ?: any,
 }, {} > {
 
-  @observable value;
+  @observable value : string;
 
   constructor(props) {
     super(props);
@@ -44,6 +45,10 @@ class TextInputField extends React.Component<{
     }
     this.props.onChangeFn(this.props.returnType !== "value" ? v : parseFloat(v));
     this.setValue('');
+  }
+
+  checkForEnter = (key : any) => {
+    if(key === 'Enter') { this.setValueInput(); }
   }
 
   render() {
@@ -73,8 +78,10 @@ class TextInputField extends React.Component<{
           placeholder={this.props.placeholderValue}
           value={this.value}
           onBlur={this.setValueInput}
+          onKeyPress={(key) => this.checkForEnter(key)}
           keyboardType={kbType as KeyboardTypeOptions}
           underlineColorAndroid={mediumTextColor}
+          autoFocus={this.props.autoFocus ? true : false}
       /> 
     )
   }

@@ -164,10 +164,10 @@ export class ModalModel {
     this.rpData.selection           = mData.selection || '';
     this.rpData.cancelText          = mData.cancelText || 'CANCEL';
     this.rpData.okText              = mData.okText || 'OK';
-    this.radioPickerOpen = true;
     return new Promise((resolve, reject) => {
       this.rpData.resolve = resolve;
       this.rpData.reject = reject;
+      this.radioPickerOpen = true;    // putting this here (later) helps avoid an empty picker (no radios)
     });
   }
 

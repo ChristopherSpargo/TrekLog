@@ -3,7 +3,7 @@ import { observer, inject } from 'mobx-react';
 import { observable, action } from 'mobx';
 import { View, StyleSheet, Text, TextInput, Keyboard } from 'react-native';
 
-import { BACKDROP_Z_INDEX, LABEL_FORM_Z_INDEX } from './App';
+import { BACKDROP_Z_INDEX, LABEL_FORM_Z_INDEX, NAV_ICON_SIZE } from './App';
 import { APP_ICONS } from './SvgImages';
 import SvgIcon from './SvgIconComponent';
 import { ModalModel } from './ModalModel'
@@ -132,7 +132,7 @@ class TrekLabelForm extends React.Component<{
     const labelChars = (MAX_LABEL_LENGTH - this.labelValue.length) + " characters left";
     const notePrompt = "Note:";
     const noteChars =  (MAX_NOTE_LENGTH - this.noteValue.length) + " characters left";
-    const navIconSize = 24;
+    const navIconSize = NAV_ICON_SIZE;
 
     const styles = StyleSheet.create({
       container: { ... StyleSheet.absoluteFillObject },

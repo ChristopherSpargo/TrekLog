@@ -1,148 +1,157 @@
-import React, { Component } from 'react';
-import { View, Text, StyleSheet, TouchableNativeFeedback } from 'react-native';
-import { observer, inject } from 'mobx-react';
-import SvgIcon from './SvgIconComponent';
-import { APP_ICONS } from './SvgImages';
+import React, { useContext } from "react";
+import { View, Text, StyleSheet, TouchableNativeFeedback } from "react-native";
+import { useObserver } from "mobx-react-lite";
 
-@inject('uiTheme')
-@observer
-class RadioGroup extends Component<{
-  uiTheme ?: any,
-  onChangeFn ?:  Function,  // call this when value of radio changes
-  selected ?: string,       // value of the current selection
-  labels ?:   string[],     // label for each radio choice
-  itemHeight ?: number,     // height for items
-  align ?: string,          // style to apply to each item container
-  itemStyle ?: any,         // style object for items
-  labelStyle ?: any,        // style object for labels
-  justify ?: string,        // how to justify buttons
-  values ?:   string[],     // value for each radio choice
-  icons ?: string[],        // icons to use in place of standard radio button
-  iconAreaStyle ?: any,     // style object for the icon area when icons present
-  colors ?: string[],       // color for each icon
-  inline ?:   boolean,      // if true, labels should be inline with icons (otherwise above or below the icons)
-  radioFirst ?: boolean     // if true, labels are after (or below) the icons
-  vertical ?: boolean,      // if true, arrange group vertically
-}, {} > {
+import { UiThemeContext } from "./App";
+import SvgIcon from "./SvgIconComponent";
+import { APP_ICONS } from "./SvgImages";
 
-  valueChange = (indx: number) => {
-    requestAnimationFrame(() =>{
-      this.props.onChangeFn(this.props.values[indx]);
+function RadioGroup({
+  onChangeFn = undefined, // call this when value of radio changes
+  selected = undefined, // value of the current selection
+  labels = undefined, // label for each radio choice
+  itemHeight = undefined, // height for items
+  align = undefined, // style to apply to each item container
+  itemStyle = undefined, // style object for items
+  labelStyle = undefined, // style object for labels
+  justify = undefined, // how to justify buttons
+  values = undefined, // value for each radio choice
+  icons = undefined, // icons to use in place of standard radio button
+  iconAreaStyle = undefined, // style object for the icon area when icons present
+  colors = undefined, // color for each icon
+  inline = undefined, // if true, labels should be inline with icons (otherwise above or below the icons)
+  radioFirst = undefined, // if true, labels are after (or below) the icons
+  vertical = undefined // if true, arrange group vertically
+}) {
+  const uiTheme: any = useContext(UiThemeContext);
+
+  const validProps = values && (labels || icons);
+  const selectedIndx = values.indexOf(selected);
+  const vert = vertical;
+  const defHeight = 30;
+  const iHeight = itemHeight || defHeight;
+  const iconSize = 40;
+  const just = justify === "start" ? "flex-start" : "center";
+  const alignDir = align === "start" ? "flex-start" : "center";
+  const { secondaryColor, highlightColor, highTextColor } = uiTheme.palette;
+  const lStyle = labelStyle || {};
+  const iaStyleProp = iconAreaStyle || {};
+  const iStyle = itemStyle || {};
+
+  const styles = StyleSheet.create({
+    container: {
+      flexDirection: vert ? "column" : "row",
+      justifyContent: just,
+      alignItems: alignDir,
+      flexWrap: vert ? "nowrap" : "wrap"
+    },
+    item: {
+      marginRight: vert ? 0 : 15,
+      height: itemHeight,
+      flexDirection: inline ? "row" : "column",
+      alignItems: "center",
+      justifyContent: inline ? "flex-start" : "center"
+    },
+    label: {
+      fontSize: 16,
+      paddingLeft: inline && radioFirst ? 3 : 0,
+      color: highTextColor
+    },
+    typeIconArea: {
+      flexDirection: "row",
+      justifyContent: "center",
+      marginTop: 15,
+      marginRight: 8,
+      width: iHeight - 10,
+      height: iHeight - 10,
+      borderBottomWidth: 2,
+      borderStyle: "solid",
+      borderColor: "transparent"
+    },
+    iconHighlight: {
+      borderColor: highlightColor
+    },
+    statHeadingArea: {
+      marginTop: 5,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center"
+    },
+    typeIcon: {
+      marginRight: 5,
+      width: iconSize,
+      height: iconSize,
+      backgroundColor: "transparent"
+    }
+  });
+
+  function valueChange(indx: number) {
+    requestAnimationFrame(() => {
+      onChangeFn(values[indx]);
     });
   }
 
-  render() {
-
-    const validProps = this.props.values && 
-                      (this.props.labels || this.props.icons);
-    const selectedIndx = this.props.values.indexOf(this.props.selected);
-    const vertical = this.props.vertical;
-    const defHeight = 30;
-    const itemHeight = this.props.itemHeight || defHeight;
-    const iconSize = 40;
-    const justify = this.props.justify === 'start' ? "flex-start" : "center";
-    const align = this.props.align === 'start' ? "flex-start" : "center";
-    const { secondaryColor, highlightColor, highTextColor } = this.props.uiTheme.palette;
-    const labelStyle = this.props.labelStyle || {};
-    const iaStyleProp = this.props.iconAreaStyle || {};
-    const itemStyle = this.props.itemStyle || {};
-
-    const styles = StyleSheet.create({
-      container: {
-        flexDirection: vertical ? "column" : "row",
-        justifyContent: justify,
-        alignItems: align,
-        flexWrap: vertical ? "nowrap" : "wrap",
-      },
-      item: {
-        marginRight: vertical ? 0 : 15,
-        height: itemHeight,
-        flexDirection: this.props.inline ? "row" : "column",
-        alignItems: "center",
-        justifyContent: this.props.inline ? "flex-start" : "center",
-      },
-      label: {
-        fontSize: 16,
-        paddingLeft: (this.props.inline && this.props.radioFirst) ? 3 : 0,
-        color: highTextColor,
-      },
-      typeIconArea: {
-        flexDirection: "row",
-        justifyContent: "center",
-        marginTop: 15,
-        marginRight: 8,
-        width: itemHeight - 10,
-        height: itemHeight - 10,
-        borderBottomWidth: 2,
-        borderStyle: "solid",
-        borderColor: "transparent",
-      },
-      iconHighlight: {
-        borderColor: highlightColor,
-      },
-      statHeadingArea: {
-        marginTop: 5,
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "center"
-      },
-      typeIcon: {
-        marginRight: 5,
-        width: iconSize,
-        height: iconSize,
-        backgroundColor: "transparent",
-      },
-    });
-
-    return(
-      <View>
-        {(validProps && this.props.selected !== undefined) &&
-          <View style={styles.container}>
-          {!this.props.icons && 
-            this.props.labels.map((item, indx) => 
-                  <TouchableNativeFeedback  key={indx}
-                    // background={TouchableNativeFeedback.SelectableBackgroundBorderless()}
-                    onPress={() => this.valueChange(indx)}>
-                    <View style={[styles.item, itemStyle]}>
-                      {!this.props.radioFirst &&
-                        <Text style={[styles.label, labelStyle]}>{item}</Text>
-                      }
-                      <SvgIcon 
-                          size={24}
-                          widthAdj={0}
-                          fill={selectedIndx === indx ? secondaryColor : "black"}
-                          paths={APP_ICONS[selectedIndx === indx ? 'RadioButtonChecked' : 'RadioButtonUnchecked']}
-                      />
-                      {this.props.radioFirst &&
-                        <Text style={[styles.label, labelStyle]}>{item}</Text>
-                      }
-                    </View>
-                  </TouchableNativeFeedback>
-            )
-          }
-          {this.props.icons && 
-            this.props.icons.map((item, indx) => 
-              <TouchableNativeFeedback key={indx} 
+  return useObserver(() => (
+    <View>
+      {validProps && (selected !== undefined) && (
+        <View style={styles.container}>
+          {!icons &&
+            labels.map((item, indx) => (
+              <TouchableNativeFeedback
+                key={indx}
+                // background={TouchableNativeFeedback.SelectableBackgroundBorderless()}
+                onPress={() => valueChange(indx)}
+              >
+                <View style={[styles.item, iStyle]}>
+                  {!radioFirst && (
+                    <Text style={[styles.label, lStyle]}>{item}</Text>
+                  )}
+                  <SvgIcon
+                    size={24}
+                    widthAdj={0}
+                    fill={selectedIndx === indx ? secondaryColor : "black"}
+                    paths={
+                      APP_ICONS[
+                        selectedIndx === indx
+                          ? "RadioButtonChecked"
+                          : "RadioButtonUnchecked"
+                      ]
+                    }
+                  />
+                  {radioFirst && (
+                    <Text style={[styles.label, lStyle]}>{item}</Text>
+                  )}
+                </View>
+              </TouchableNativeFeedback>
+            ))}
+          {icons &&
+            icons.map((item, indx) => (
+              <TouchableNativeFeedback
+                key={indx}
                 background={TouchableNativeFeedback.SelectableBackgroundBorderless()}
-                onPress={() => this.valueChange(indx)}>
-                <View style={[styles.typeIconArea, iaStyleProp, selectedIndx === indx ? styles.iconHighlight : {}]}>
-                  <SvgIcon 
-                      style={styles.typeIcon}
-                      size={iconSize}
-                      widthAdj={0}
-                      fill={this.props.colors[indx]}
-                      paths={APP_ICONS[item]}
+                onPress={() => valueChange(indx)}
+              >
+                <View
+                  style={[
+                    styles.typeIconArea,
+                    iaStyleProp,
+                    selectedIndx === indx ? styles.iconHighlight : {}
+                  ]}
+                >
+                  <SvgIcon
+                    style={styles.typeIcon}
+                    size={iconSize}
+                    widthAdj={0}
+                    fill={colors[indx]}
+                    paths={APP_ICONS[item]}
                   />
                 </View>
               </TouchableNativeFeedback>
-              )
-          }
-          </View>
-        }
-      </View>
-    )
-  }
-
+            ))}
+        </View>
+      )}
+    </View>
+  ))
 }
 
 export default RadioGroup;

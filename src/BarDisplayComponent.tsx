@@ -1,52 +1,46 @@
-import React from 'react'
+import React, { useContext, useEffect, useRef, MutableRefObject } from 'react'
 import { View, FlatList, TouchableNativeFeedback, StyleSheet, Text } from 'react-native'
-// import { observable } from 'mobx'
 import LinearGradient from 'react-native-linear-gradient';
-import { observer, inject } from 'mobx-react'
+import { useObserver } from "mobx-react-lite";
 
 import { APP_ICONS } from './SvgImages';
-import { TREK_TYPE_COLORS_OBJ } from './App'
-import {  BarData } from './FilterService';
-import { TrekInfo, NumericRange } from './TrekInfoModel';
+import { TREK_TYPE_COLORS_OBJ, UiThemeContext, TrekInfoContext } from './App'
 import SvgIcon from './SvgIconComponent';
 
-@inject('uiTheme')
-// @observer
-class BarItem extends React.PureComponent <{
-  item : BarData, 
-  index : number, 
-  range : NumericRange, 
-  maxHt : number, 
-  lastItem : boolean,
-  selected : number,
-  barWidth : number,
-  style : any,
-  pressed : Function,
-  uiTheme ?: any,
-}, {} > {
+function BarItem({
+  item, 
+  index, 
+  range, 
+  maxHt, 
+  lastItem,
+  selected,
+  barWidth,
+  style,
+  pressed
+}) {
+  const uiTheme: any = useContext(UiThemeContext);
 
-  barPressed = (idx: number, bar: number) => {
+  function barPressed (idx: number, bar: number) {
     requestAnimationFrame(() => {
-      this.props.pressed(idx, bar);
+      pressed(idx, bar);
     })
   }
 
-  render () {
     const { highTextColor, dividerColor, itemSelectedColor, itemMeetsGoal, itemMissesGoal,
-      itemNotSelected } = this.props.uiTheme.palette;
-    const iconPaths = APP_ICONS[this.props.item.type];
-    const newVal = this.props.range.max - this.props.item.value;
-    const rangePct = (this.props.range.range / this.props.range.max);
-    const newRange = rangePct < .25 ? (this.props.range.max * .25) : this.props.range.range;
+            itemNotSelected } = uiTheme.palette;
+    const iconPaths = APP_ICONS[item.type];
+    const newVal = range.max - item.value;
+    const rangePct = (range.range / range.max);
+    const newRange = rangePct < .25 ? (range.max * .25) : range.range;
     const pct = rangePct > .005 ? ((newRange - newVal) / newRange) : .5;
-    const itemHeight = (pct * (this.props.maxHt - 25)) + 25;
-    const idx = this.props.item.index !== undefined ? this.props.item.index : this.props.index;
-    const selItem = this.props.selected === this.props.index;
+    const itemHeight = (pct * (maxHt - 25)) + 25;
+    const idx = item.index !== undefined ? item.index : index;
+    const selItem = selected === index;
     let goalGrad = itemNotSelected;
-    if(this.props.item.indicatorFill){
-        goalGrad = this.props.item.indicatorFill === 'red' ? itemMissesGoal : itemMeetsGoal;
+    if(item.indicatorFill){
+        goalGrad = item.indicatorFill === 'red' ? itemMissesGoal : itemMeetsGoal;
     }
-    const barGradientStart = (selItem  && !this.props.item.indicatorFill) ? itemSelectedColor : goalGrad; 
+    const barGradientStart = (selItem  && !item.indicatorFill) ? itemSelectedColor : goalGrad; 
     const barGradientEnd = 'white';
     const styles = StyleSheet.create({
       itemArea: {
@@ -54,8 +48,8 @@ class BarItem extends React.PureComponent <{
         borderLeftWidth: 1,
         borderColor: dividerColor,
         borderStyle: "solid",
-        width: this.props.barWidth,
-        height: this.props.style.height,
+        width: barWidth,
+        height: style.height,
         paddingTop: 5,
         backgroundColor: "white",
       },
@@ -64,13 +58,13 @@ class BarItem extends React.PureComponent <{
       },
       areaAbove: {
         flex: 1,
-        width: this.props.barWidth,
+        width: barWidth,
         justifyContent: "space-between",
         alignItems: "center",
         paddingBottom: 3,
       },
       areaBelow: {
-        width: this.props.barWidth,
+        width: barWidth,
         alignItems: "center",
         paddingTop: 5,
       },
@@ -95,77 +89,69 @@ class BarItem extends React.PureComponent <{
     })
   
     return (
-      <View style={[styles.itemArea, this.props.lastItem ? styles.bdrRt : {}]}>
+      <View style={[styles.itemArea, lastItem ? styles.bdrRt : {}]}>
         <TouchableNativeFeedback
           background={TouchableNativeFeedback.SelectableBackgroundBorderless()}
-          onPress={this.props.item.noPress ? undefined : () => this.barPressed(idx, this.props.index)}
+          onPress={item.noPress ? undefined : () => barPressed(idx, index)}
         >
         <View>
           <View style={styles.areaAbove}>
-            <Text style={selItem ? styles.indicatorSel : styles.indicator}>{this.props.item.indicator}</Text>
-            {this.props.item.type && 
+            <Text style={selItem ? styles.indicatorSel : styles.indicator}>{item.indicator}</Text>
+            {item.type && 
               <SvgIcon
                 paths={iconPaths}
-                fill={TREK_TYPE_COLORS_OBJ[this.props.item.type]}
+                fill={TREK_TYPE_COLORS_OBJ[item.type]}
                 size={20}
               />
             }
           </View>
           <LinearGradient colors={[barGradientStart, barGradientEnd]} style={[styles.areaBelow,{height: itemHeight}]}>
-            <Text style={selItem ? styles.valueSel : styles.value}>{this.props.item.label1}</Text>
+            <Text style={selItem ? styles.valueSel : styles.value}>{item.label1}</Text>
           </LinearGradient>
         </View>
         </TouchableNativeFeedback>
       </View>
     )
-    }
 }
 
 
-@inject('trekInfo')
-@observer
-class BarDisplay extends React.Component <{
-  trekInfo ?: TrekInfo,
-  selectFn ?: Function,
-  selected ?: number,
-  style : any,
-  barWidth : number,
-  maxBarHeight: number,
-  data : BarData[],         // object with information for the graph bars
-  dataRange: any,           // range of values in the data {max,min,range}
-  scrollToBar ?: number,    // index of bar to scroll to (just to update the display)
-}, {} > {
+function BarDisplay({
+  selectFn = undefined,
+  selected = undefined,
+  style,
+  barWidth,
+  maxBarHeight,
+  data,         // object with information for the graph bars
+  dataRange,           // range of values in the data {max,min,range}
+  scrollToBar = undefined,    // index of bar to scroll to (just to update the display)
+}) {
+  const trekInfo: any = useContext(TrekInfoContext);
 
-  scrollRef;
-  selectedBar = 0;
+  const scrollRef : MutableRefObject<FlatList<View>> = useRef();
+  const selectedBar = useRef(0);
 
-  shouldComponentUpdate() {
-    return this.props.trekInfo.updateGraph || (this.selectedBar !== this.props.selected);
-  }
-
-  componentDidUpdate(){
-    if(this.props.scrollToBar !== undefined) { 
-      this.moveScrollPos(this.props.scrollToBar >= 0 ? this.props.scrollToBar : 0);}
-    if (this.selectedBar !== this.props.selected){
-        this.selectedBar = this.props.selected;
-        if (this.selectedBar >= 0){
-            this.moveScrollPos(this.props.selected);
+  useEffect(() => {
+    if(scrollToBar !== undefined) { 
+      moveScrollPos(scrollToBar >= 0 ? scrollToBar : 0);}
+    if (selectedBar !== selected){
+        selectedBar.current = selected;
+        if (selectedBar.current >= 0){
+            moveScrollPos(selected);
         }
     }
-  }
+  })
 
-  moveScrollPos = (barNum: number) => {
-    this.scrollRef.scrollToOffset({offset: (barNum - 2) * this.props.barWidth, animated: true});
+  function moveScrollPos (barNum: number) {
+    scrollRef.current.scrollToOffset({offset: (barNum - 2) * barWidth, animated: true});
   }
       
-  barPressed = (val: any, bar: number) => {
-      this.selectedBar = bar;
-      this.props.selectFn(val)
+  function barPressed (val: any, bar: number) {
+      selectedBar.current = bar;
+      selectFn(val)
   }
 
-  render() {
-    this.props.trekInfo.setUpdateGraph(false);
-    const lastIndex = this.props.data.length ? this.props.data.length - 1 : 0;
+    trekInfo.setUpdateGraph(false);
+    const lastIndex = data.length ? data.length - 1 : 0;
 
 
     const _keyExtractor = (_item, index) => index.toString();
@@ -174,29 +160,27 @@ class BarDisplay extends React.Component <{
           <BarItem 
             item={item}
             index={index}
-            range={this.props.dataRange}
-            maxHt={this.props.maxBarHeight}
+            range={dataRange}
+            maxHt={maxBarHeight}
             lastItem={index === lastIndex}
-            selected={this.props.selected}
-            barWidth={this.props.barWidth}
-            style={this.props.style}
-            pressed={this.barPressed}
+            selected={selected}
+            barWidth={barWidth}
+            style={style}
+            pressed={barPressed}
           />
         );
 
-    return (
+    return useObserver(() => (
       <FlatList
-        ref={e => this.scrollRef = e}
-        data={this.props.data}
+        ref={scrollRef}
+        data={data}
         keyExtractor={_keyExtractor}
-        extraData={this.props.selected}
+        extraData={selected}
         initialNumToRender={10}
         horizontal
         renderItem={_renderItem}
       />
-    )
-  }
-
+    ))
 }
 
-export default BarDisplay
+export default BarDisplay;

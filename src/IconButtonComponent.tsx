@@ -74,7 +74,7 @@ class IconButton extends Component<{
         >
           <View style={[styles.shadowArea]}>
             <View style={[styles.menuButton, propStyle, 
-                  { borderColor: 'transparent', elevation: 4}]}>
+                  { borderColor: 'transparent', elevation: 2}]}>
               {this.props.icon &&
                 <SvgIcon 
                   size={iconSize}

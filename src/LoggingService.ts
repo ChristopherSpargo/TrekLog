@@ -71,6 +71,20 @@ export class LoggingSvc {
     window.clearInterval(this.trekInfo.limitTimerId);     
   }
 
+  startPositionTracking = (gotPos: Function) => {
+    // Get the current GPS position
+        this.locationSvc.getCurrentLocation((location : Location) => {    
+        this.addPoint(location);
+        this.watchGeolocationPosition(gotPos, true);
+      },
+      { enableHighAccuracy: true, 
+        maximumAge        : 0, 
+        timeout           : 30000
+      }
+    );
+  }
+
+
   // Start the geolocation service
   watchGeolocationPosition = (gotPos: Function, startFresh: boolean) => {
     this.locationSvc.removeGeolocationListeners();  // clear existing callbacks
@@ -166,11 +180,11 @@ export class LoggingSvc {
   @action
   addPoint = (pos: Location) : boolean => {
     let added = false;
-    if (this.trekInfo.trekPointCount === 0) {  // start Trek timer after recieving first GPS reading
+    if (this.trekInfo.totalGpsPoints === 0) {  // start Trek timer after recieving first GPS reading
       this.startTrekTimer();
       this.setStartTime();
     }
-    this.pointsSinceSmooth++;
+    this.trekInfo.totalGpsPoints++;
     if (this.trekInfo.endTime === '') { this.updateDuration(); }
     let newPt = {l:{a: pos.latitude, o: pos.longitude}, 
                     t: Math.round((pos.time - this.trekInfo.startMS) / 1000), s: pos.speed};
@@ -182,30 +196,36 @@ export class LoggingSvc {
         newPt.s = 0;
       }
     }
-    let newDist = this.newPointDist(pos.latitude, pos.longitude);
-    this.trekInfo.totalGpsPoints++;
-    this.trekInfo.pointList.push(newPt);
-    this.trekInfo.setTrekPointCount();
-    this.trekInfo.drivingACar = this.trekInfo.drivingACar || (newPt.s/MPH_TO_MPS) > DRIVING_A_CAR_SPEED;
-    this.trekInfo.updateSpeedNow();
-    if (!this.trekInfo.limitsActive){  // don't change distance filter if limited trek
-      let range = this.utilsSvc.findRangeIndex(pos.speed, SPEED_RANGES_MPS);
-      if ((range !== -1) && (range != this.trekInfo.currSpeedRange)) {
-        // update the distance filter to reflect the new speed range
-        this.trekInfo.currSpeedRange = range;
-        this.trekInfo.minPointDist = DIST_FILTER_VALUES[range];
-        this.locationSvc.updateGeolocationConfig({distanceFilter: this.trekInfo.minPointDist});
+    // discard all but 1 0-speed points at beginning of trek (gps honing in)
+    if(this.trekInfo.trekPointCount !== 1 || newPt.s !== 0 || this.trekInfo.pointList[0].s !== 0){
+      this.pointsSinceSmooth++;
+      let newDist = this.newPointDist(pos.latitude, pos.longitude);
+      this.trekInfo.pointList.push(newPt);
+      this.trekInfo.setTrekPointCount();
+      this.trekInfo.drivingACar = this.trekInfo.drivingACar || (newPt.s/MPH_TO_MPS) > DRIVING_A_CAR_SPEED;
+      this.trekInfo.updateSpeedNow();
+      if (!this.trekInfo.limitsActive){  // don't change distance filter if limited trek
+        let range = this.utilsSvc.findRangeIndex(pos.speed, SPEED_RANGES_MPS);
+        if ((range !== -1) && (range != this.trekInfo.currSpeedRange)) {
+          // update the distance filter to reflect the new speed range
+          this.trekInfo.currSpeedRange = range;
+          this.trekInfo.minPointDist = DIST_FILTER_VALUES[range];
+          this.locationSvc.updateGeolocationConfig({distanceFilter: this.trekInfo.minPointDist});
+        }
       }
-    }
-    if (this.pointsSinceSmooth >= SMOOTH_INTERVAL) {
-      this.smoothTrek();
-      this.trekInfo.updateCalculatedValues();
+      if (this.pointsSinceSmooth >= SMOOTH_INTERVAL) {
+        this.smoothTrek();
+        this.trekInfo.updateCalculatedValues();
+      }
+      else {
+        this.updateDist(newDist);
+      } 
+      this.trekInfo.calculatedValuesTimer = CALC_VALUES_INTERVAL;
+      added = true;
     }
     else {
-      this.updateDist(newDist);
-    } 
-    this.trekInfo.calculatedValuesTimer = CALC_VALUES_INTERVAL;
-    added = true;
+      this.trekInfo.pointList[0] = newPt; // replace 0-speed point with new 0-speed pt
+    }
     return added;
   }
 

@@ -8,14 +8,14 @@ import { observer, inject } from 'mobx-react'
 import { Location } from 'react-native-mauron85-background-geolocation';
 
 import { TrekInfo, TrekType, TREK_VERBS_OBJ, START_VIB, STOP_VIB, DIST_UNIT_LONG_NAMES,
-         WEIGHT_UNIT_CHOICES, TREK_TYPE_LABELS, TREK_TYPE_BIKE, SWITCH_SPEED_AND_TIME, RestoreObject } from './TrekInfoModel';
+         WEIGHT_UNIT_CHOICES, TREK_TYPE_LABELS, TREK_TYPE_BIKE, SWITCH_SPEED_AND_TIME, RestoreObject, TREK_TYPE_WALK, TREK_TYPE_RUN, TREK_TYPE_HIKE, TREK_TYPE_CHOICES } from './TrekInfoModel';
 import { ToastModel } from './ToastModel';
 import { ModalModel } from './ModalModel'
 import TrekLimitsForm, {LimitsObj} from './TrekLimitsComponent'
 import { M_PER_MILE, LB_PER_KG, UtilsSvc, ACTIVITY_SPEEDS, ACTIVITY_BY_SPEED } from './UtilsService';
 import { WeatherSvc } from './WeatherSvc';
 import { GoalObj, GoalsSvc, GoalDisplayItem } from './GoalsService';
-import { CONTROLS_HEIGHT} from './App';
+import { CONTROLS_HEIGHT, NAV_ICON_SIZE } from './App';
 import SpeedDial, {SpeedDialItem} from './SpeedDialComponent';
 import TrekLogHeader from './TreklogHeaderComponent';
 import { StorageSvc } from './StorageService';
@@ -30,11 +30,10 @@ const gotoSettings = NavigationActions.navigate({
 
 const goBack = NavigationActions.back() ;
 
-@inject('trekInfo', 'toastSvc', 'modalSvc', 'uiTheme', 'weatherSvc', 'goalsSvc', 'storageSvc', 'locationSvc',
-        'loggingSvc', 'utilsSvc')
+@inject('trekInfo', 'toastSvc', 'modalSvc', 'weatherSvc', 'goalsSvc', 'storageSvc', 'locationSvc',
+        'loggingSvc', 'utilsSvc', 'uiTheme')
 @observer
 class LogTrek extends Component<{ 
-  uiTheme ?: any,
   toastSvc ?: ToastModel,
   trekInfo ?: TrekInfo,
   modalSvc ?: ModalModel,
@@ -44,6 +43,7 @@ class LogTrek extends Component<{
   locationSvc ?: LocationSvc,
   loggingSvc ?: LoggingSvc,
   utilsSvc ?: UtilsSvc,
+  uiTheme ?: any,
   navigation ?: any
 }, {} > {
 
@@ -59,7 +59,7 @@ class LogTrek extends Component<{
   trekInfo = this.props.trekInfo;
   glS = this.props.locationSvc;
   logSvc = this.props.loggingSvc;
-  palette = this.props.uiTheme.palette;
+  uiTheme = this.props.uiTheme;
   activeNav = '';
   limitProps : LimitsObj = {} as LimitsObj;
   typeSDRef : RefObject<SpeedDial>;
@@ -71,6 +71,7 @@ class LogTrek extends Component<{
       header: <TrekLogHeader titleText={params.title}
                                    icon={params.icon}
                                    logo
+                                   use={params.use}
               />,
     };
   }  
@@ -126,10 +127,11 @@ class LogTrek extends Component<{
       this.trekInfo.setAppReady(true);
       this.trekInfo.init()
       .then(() => {
+        this.setHeaderParams("Ready to Log");
         // Get the current GPS position so the log map shows where we are
-        this.props.locationSvc.getCurrentLocation((location) => {    
+        this.glS.getCurrentLocation((location) => {    
             this.trekInfo.initialLoc = {latitude: location.latitude, longitude: location.longitude};
-            this.props.locationSvc.stopGeolocation();
+            this.glS.stopGeolocation();
           },
           { enableHighAccuracy: true, 
             maximumAge        : 0, 
@@ -152,6 +154,9 @@ class LogTrek extends Component<{
   }
 
   componentDidMount() {
+    setTimeout(() => {
+      this.setHeaderParams("Ready to Log");
+    }, 1000);
     this._willBlurSubscription = this.props.navigation.addListener('willBlur', () =>
       BackHandler.removeEventListener('hardwareBackPress', this.onBackButtonPressAndroid));
     // if(!this.trekInfo.resObj){
@@ -193,7 +198,7 @@ class LogTrek extends Component<{
   }
 
   onBackButtonPressAndroid = () => {
-    const {infoConfirmColor, infoConfirmTextColor} = this.props.uiTheme.palette;
+    const {infoConfirmColor, infoConfirmTextColor} = this.uiTheme.palette;
 
     if (this.trekInfo.logging || this.trekInfo.pendingReview) {
       if(this.trekInfo.saveDialogOpen){ return true; }  // ignore back button if save dialog is open
@@ -253,7 +258,7 @@ class LogTrek extends Component<{
 
   // set up the parameters for the header controls
   setHeaderParams = (msg: string) => {
-    this.props.navigation.setParams({ title: msg, icon: this.trekInfo.type});
+    this.props.navigation.setParams({ title: msg, icon: this.trekInfo.type, use: this.trekInfo.user});
   }
 
   @action
@@ -312,15 +317,15 @@ class LogTrek extends Component<{
 
   // Start the logging process, timer starts when 1st GPS point recieved
   startLogging = () => {
-    this.logSvc.startTrek();                // this sets minPointDist
+    this.logSvc.startTrek();                
     this.trekInfo.setSpeedDialZoom(true);
-    this.logSvc.watchGeolocationPosition(this.gotPos, true);
+    this.logSvc.startPositionTracking(this.gotPos);   // this sets minPointDist and starts geolocation
     this.setHeaderParams("Logging");
   }
 
   // Stop the logging process. If there is something to save, confirm intentions with the user
   stopLogging = () => {
-    const {infoConfirmColor, infoConfirmTextColor} = this.props.uiTheme.palette;
+    const {infoConfirmColor, infoConfirmTextColor} = this.uiTheme.palette;
     let noPts = this.trekInfo.pointListEmpty() && !this.trekInfo.resObj;
     let saveText = noPts ? 'Abort' : 'Save'
     let discardText = noPts ? ' has been aborted.' : " has been discarded.";
@@ -598,6 +603,16 @@ class LogTrek extends Component<{
     .catch(() => {})    // no applicable goals found or met
   }
   
+  // process selection from speed dial item
+  sdSelected = (sel: string) => {
+    if(TREK_TYPE_CHOICES.indexOf(sel) !== -1) {
+      this.selectTrekType(sel as TrekType)
+    }
+    else {
+      this.setActiveNav(sel);
+    }
+  }
+
   selectTrekType = (value: TrekType) => {
     this.props.navigation.setParams({icon: value});
     this.trekInfo.updateType(value);
@@ -648,6 +663,9 @@ class LogTrek extends Component<{
           this.trekInfo.setShowMapInLog(true);
           this.props.navigation.navigate('LogTrekMap');
           break;
+        case 'Conditions':
+        this.props.navigation.navigate('Conditions');
+        break;
         default:
       }
     });
@@ -736,6 +754,31 @@ class LogTrek extends Component<{
     return label;
   }
 
+  // set up the items for the pre-trek actions speedDial
+  // allow user to change trek type and set a time or distance limit
+  getSdActions = () : SpeedDialItem[] => {
+    let type = this.trekInfo.type;
+    let actions : SpeedDialItem[] = [];
+    const altColor = this.uiTheme.palette.trekLogBlue;
+
+    actions.push({icon: 'CompassMath', label: 'Dist', value: 'StartD', bColor: altColor});
+    actions.push({icon: 'TimerSand', label: 'Time', value: 'StartT', bColor: altColor});
+    if (type !== TREK_TYPE_WALK){
+      actions.push({icon: 'Walk', label: 'Walk', value: 'Walk'});
+    }
+    if (type !== TREK_TYPE_RUN){
+      actions.push({icon: 'Run', label: 'Run', value: 'Run'});
+    }
+    if (type !== TREK_TYPE_BIKE){
+      actions.push({icon: 'Bike', label: 'Bike', value: 'Bike'});
+    }
+    if (type !== TREK_TYPE_HIKE){
+      actions.push({icon: 'Hike', label: 'Hike', value: 'Hike'});
+    }
+
+    return actions;
+  }
+
   render () {
 
     const numPts = this.trekInfo.trekPointCount;
@@ -745,23 +788,16 @@ class LogTrek extends Component<{
                     (this.trekInfo.timerOn || this.trekInfo.logging || this.trekInfo.limitsActive);
     const startOk = !limitsOk && !stopOk && !this.trekInfo.pendingReview;
     const reviewOk = !limitsOk && !stopOk && this.trekInfo.pendingReview;
-    // if(this.trekInfo.resObj){
-    //   alert(limitsOk + '\n' + stopOk + '\n' + startOk + '\n' + reviewOk + '\n' + this.trekInfo.pendingReview)
-    // }
-    const { controlsArea, navItem, navIcon, roundedTop } = this.props.uiTheme;
+    const { controlsArea, navItem, navIcon } = this.uiTheme;
     const { secondaryColor, navIconColor, highTextColor, trekLogBlue, pageBackground,
-            disabledTextColor } = this.props.uiTheme.palette;
-    const navIconSize = 24;
+            disabledTextColor } = this.uiTheme.palette;
+    const navIconSize = NAV_ICON_SIZE;
     const bigButtonSize = 150;
     const bigIconSize = 64;
     const bigTitle = this.formatBigTitle(startOk, reviewOk); 
     const showSpeed = this.trekInfo.showSpeedOrTime === 'speed';
 
-    const typeActions : SpeedDialItem[] = 
-            [{icon: 'Walk', label: 'Walk', value: 'Walk'},
-             {icon: 'Run', label: 'Run', value: 'Run'},
-             {icon: 'Bike', label: 'Bike', value: 'Bike'},
-             {icon: 'Hike', label: 'Hike', value: 'Hike'}]
+    const sdActions : SpeedDialItem[] = this.getSdActions();
  
 
     const styles = StyleSheet.create({
@@ -804,10 +840,10 @@ class LogTrek extends Component<{
         borderRadius: bigButtonSize / 2,
         padding: (bigButtonSize / 2) / 4,
         // borderColor: trekLogBlue,
-      }
+      },
     })
 
-    const cBorder = this.trekInfo.statsOpen ? {borderTopColor: 'transparent'} : roundedTop;
+    const cBorder = this.trekInfo.statsOpen ? {borderTopColor: 'transparent'} : {};
 
     return (
       <View style={[styles.container]}>
@@ -849,28 +885,10 @@ class LogTrek extends Component<{
               />
             </View>
           }
-          {(numPts === 0 && !this.trekInfo.logging) &&
-            <SpeedDial
-              icon="CompassMath"
-              bottom={135}
-              selectFn={() => this.setActiveNav('StartD')}
-              style={styles.speedDialTrigger}
-              iconSize="Large"
-            />
-          }
-          {(numPts === 0 && !this.trekInfo.logging) &&
-            <SpeedDial
-              icon="TimerSand"
-              bottom={70}
-              selectFn={() => this.setActiveNav('StartT')}
-              style={styles.speedDialTrigger}
-              iconSize="Large"
-            />
-          }
           {(numPts === 0 && !this.trekInfo.logging && this.trekInfo.type === 'Hike') &&
             <SpeedDial
               icon="Sack"
-              bottom={200}
+              bottom={70}
               selectFn={() => this.setActiveNav('StartH')}
               style={styles.speedDialTrigger}
               iconSize="Large"
@@ -881,10 +899,11 @@ class LogTrek extends Component<{
               ref={this.typeSDRef}
               icon={this.trekInfo.type}
               bottom={5}
-              items={typeActions}
-              selectFn={this.selectTrekType}
+              items={sdActions}
+              selectFn={this.sdSelected}
               style={styles.speedDialTrigger}
               horizontal={true}
+              autoClose={5000}
               iconSize="Large"
             />
           }
@@ -943,7 +962,17 @@ class LogTrek extends Component<{
           <View style={[controlsArea, cBorder]}>
             <IconButton 
               iconSize={navIconSize}
-              icon="Sigma"
+              icon="PartCloudyDay"
+              style={navItem}
+              iconStyle={navIcon}
+              color={navIconColor}
+              raised
+              onPressFn={this.setActiveNav}
+              onPressArg="Conditions"
+            />
+            <IconButton 
+              iconSize={navIconSize}
+              icon="ChartDonut"
               style={navItem}
               raised
               iconStyle={navIcon}
@@ -953,7 +982,7 @@ class LogTrek extends Component<{
             />
             <IconButton 
               iconSize={navIconSize}
-              icon="Certificate"
+              icon="Trophy"
               style={navItem}
               iconStyle={navIcon}
               color={navIconColor}
@@ -985,16 +1014,18 @@ class LogTrek extends Component<{
               onPressFn={this.setActiveNav}
               onPressArg="Stop"
             />
-            <IconButton 
-              iconSize={navIconSize}
-              icon="Map"
-              style={navItem}
-              iconStyle={navIcon}
-              color={navIconColor}
-              raised
-              onPressFn={this.setActiveNav}
-              onPressArg="ShowMap"
-            />
+            {numPts > 0 &&
+              <IconButton 
+                iconSize={navIconSize}
+                icon="Map"
+                style={navItem}
+                iconStyle={navIcon}
+                color={navIconColor}
+                raised
+                onPressFn={this.setActiveNav}
+                onPressArg="ShowMap"
+              />
+            }
           </View>
         }
         {reviewOk &&

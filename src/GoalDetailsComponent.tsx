@@ -451,7 +451,7 @@ class GoalDetails extends Component<{
 
     const { mediumTextColor, pageBackground, dividerColor, highTextColor,
             navIconColor, itemMeetsGoal, itemMissesGoal, listIconColor } = this.props.uiTheme.palette;
-    const { cardLayout, controlsArea, roundedTop, navItem, navIcon } = this.props.uiTheme;
+    const { cardLayout, controlsArea, navItem, navIcon } = this.props.uiTheme;
     const dObj = this.detailObj;
     const validDisplayObj = dObj !== undefined && dObj.items.length > 0;
     const statusBarHt = 15;
@@ -688,7 +688,7 @@ class GoalDetails extends Component<{
             }
           </View>
           {(chartForTreks) &&
-            <View style={[controlsArea, roundedTop]}>
+            <View style={controlsArea}>
               <IconButton 
                 iconSize={NAV_ICON_SIZE}
                 icon="Map"

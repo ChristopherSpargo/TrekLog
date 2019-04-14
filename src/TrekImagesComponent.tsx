@@ -1,7 +1,7 @@
 import React from 'react';
 import { Component } from 'react';
 import { View, StyleSheet, Text, Image, Alert, Dimensions, 
-          CameraRoll, Slider, TouchableWithoutFeedback } from 'react-native';
+          CameraRoll, Slider, TouchableWithoutFeedback, StatusBar } from 'react-native';
 import { RNCamera } from 'react-native-camera';
 import { observer, inject } from 'mobx-react';
 import { observable, action } from 'mobx';
@@ -16,6 +16,8 @@ import IconButton from './IconButtonComponent';
 import { ModalModel } from './ModalModel';
 import TrekLogHeader from './TreklogHeaderComponent';
 import { ToastModel } from './ToastModel';
+import { lowTextColor } from './App';
+import Waiting from './WaitingComponent';
 
 const goBack = NavigationActions.back() ;
 
@@ -35,16 +37,13 @@ class TrekImages extends Component<{
     const cmd = params.cmd;
 
     switch (cmd) {
-        // return {
-        //   header: <TrekLogHeader titleText={params.title || 'Take Image'}
-        //                               icon={params.icon || ''}
-        //               />
-        // }
       case 'show':
         return {
           header: <TrekLogHeader titleText={params.title || ''}
                                       icon={params.icon || ''}
                                       headerRightIcon="Delete"
+                                      backgroundColor="rgba(0,0,0,.2)"
+                                      position="absolute"
                                       headerRightFn={params.deleteImage}
                                       backButtonFn={() =>  navigation.dispatch(goBack)}
                   />
@@ -74,7 +73,8 @@ class TrekImages extends Component<{
   cameraSwitching   : boolean = false;
   imageTime         : number;
   mode              : string;
-  // _panResponder : any;
+  headerVisible     : boolean = true;
+  timeoutID         : number;
 
   @observable cameraIsOpen            : boolean;
   @observable videoRecording          : boolean;
@@ -90,6 +90,7 @@ class TrekImages extends Component<{
   @observable showVideoControls       : boolean;
   @observable currentVideoPos         : number;
   @observable videoDuration           : number;
+  @observable waitingForSave          : boolean;
 
 
   constructor(props) {
@@ -100,6 +101,7 @@ class TrekImages extends Component<{
     let cmd = this.props.navigation.getParam('cmd');
 
     this.mode = cmd;
+    this.hideStatusBar();
     this.setCameraIsOpen(false);
     this.setVideoRecording(false);
     this.setPicturePaused(false);
@@ -107,11 +109,12 @@ class TrekImages extends Component<{
     this.setCurrentImageSet(-1);
     this.setFrontOrBackCamera(RNCamera.Constants.Type.back)
     this.setCameraZoom(0);
-    this.setVideoPaused(false);
+    this.setVideoPaused(true);
     this.setAudioMuted(false);
     this.setShowVideoControls(true);
     this.setCurrentVideoPos(0);
     this.setVideoDuration(0);
+    this.setWaitingForSave(false);
 
     switch(cmd){
       case 'camera':
@@ -125,15 +128,6 @@ class TrekImages extends Component<{
     }
     this.props.navigation.setParams({ deleteImage: this.deleteCurrentImage });
 
-  //   this._panResponder = PanResponder.create({
-  //     onStartShouldSetPanResponder: (evt, gestureState) => true,
-  //     onStartShouldSetPanResponderCapture: (evt, gestureState) => true,
-  //     onMoveShouldSetPanResponder: (evt, gestureState) => true,
-  //     onMoveShouldSetPanResponderCapture: (evt, gestureState) => true,
-  //     onPanResponderTerminationRequest: (evt, gestureState) => true,
-  //     onShouldBlockNativeResponder: (evt, gestureState) => false,
-  //     onPanResponderMove: (evt, gestureState) => { this.handleSwipe(evt, gestureState); },
-  //   });  
   }
 
   componentWillUnmount() {
@@ -143,33 +137,70 @@ class TrekImages extends Component<{
     this.setDisplayingImage(false);
     this.setVideoPaused(true);
     this.currentImageSet = undefined;
+    this.showStatusBar();
+  }
+
+  hideStatusBar= () => {
+    requestAnimationFrame(() => {
+      StatusBar.setHidden(true, "none")
+    })
   }
   
-  // handleSwipe = (evt, gestureState) => {
-  //   // Add the gesture detection.
-  //   const velocityThreshold = 0.4;
-  //   const directionalOffsetThreshold = 80;
-  //   const swipeDirection = getGestureType(gestureState, velocityThreshold, directionalOffsetThreshold);
+  showStatusBar= () => {
+    requestAnimationFrame(() => {
+      StatusBar.setHidden(false, "none")
+    })
+  }
+  
+  cancelHideControlsTimer = () => {
+    if (this.timeoutID !== undefined) {
+      window.clearTimeout(this.timeoutID);
+      this.timeoutID = undefined;
+    }
+  }
 
-  //   switch(swipeDirection){
-  //     case 'SWIPE_LEFT':
-  //       if (this.haveNextImage()) {
-  //         this.nextImage();
-  //       }
-  //       break;
-  //     case 'SWIPE_RIGHT':
-  //       if (this.havePrevImage()) {
-  //         this.prevImage();
-  //       }
-  //       break;
-  //     default:
-  //   }
-  // }
+  setHideControlsTimer = () => {
+    this.cancelHideControlsTimer();
+    this.timeoutID = window.setTimeout(() => {
+      this.setShowVideoControls(false);
+    }, 3000);
+  }
 
+  hideHeader= () => {
+    this.props.navigation.setParams({cmd: 'hide'});
+  }
+  
+  showHeader= () => {
+    this.props.navigation.setParams({cmd: this.mode});
+  }
+  
+  setHeaderNotVisible = () => {
+    this.headerVisible = false;
+    this.hideHeader();
+  }
+
+  setHeaderVisible = () => {
+    this.headerVisible = true;
+    this.showHeader();
+  }
+
+  setHeaderVisibility = (visible : boolean) => {
+    if (visible === true){
+      this.setHeaderVisible();
+    } else {
+      this.setHeaderNotVisible();
+    }
+  }
+
+  @action
+  setWaitingForSave = (status: boolean) => {
+    this.waitingForSave = status;
+  }
   // set the value of the openCamera property
   @action
   setCameraIsOpen = (status: boolean) => {
     this.cameraIsOpen = status;
+    this.setHeaderVisibility(!status);
   }
 
   // open the camera component
@@ -180,6 +211,7 @@ class TrekImages extends Component<{
 
   // close the camera component
   closeCamera = () => {
+    this.setCameraIsOpen(false);
     this.props.navigation.dispatch(goBack);
   }
 
@@ -270,6 +302,14 @@ class TrekImages extends Component<{
   @action
   setVideoPaused = (status: boolean) => {
     this.videoPaused = status;
+    this.setHeaderVisibility(this.videoPaused);
+    if (!this.videoPaused){
+      this.setHideControlsTimer();
+    }
+    else {
+      this.setShowVideoControls(true);
+      this.cancelHideControlsTimer();
+    }
   }
 
   // set the value of the audioMuted property
@@ -292,31 +332,43 @@ class TrekImages extends Component<{
   @action
   setShowVideoControls = (status: boolean) => {
     this.showVideoControls = status;
-    if (!this.showVideoControls) {
-      this.props.navigation.setParams({cmd: 'hide'});
-    }
-    else {
-      this.props.navigation.setParams({cmd: this.mode});
-    }
+    this.cancelHideControlsTimer();
   }
 
   // the user touched the video display screen
   toggleShowVideoContols = () => {
-    this.setShowVideoControls(!this.showVideoControls);
+    if (this.currentImage.type === IMAGE_TYPE_VIDEO) {
+      if (!this.showVideoControls){
+        this.setShowVideoControls(true);
+        this.setHideControlsTimer();
+      } 
+      else {
+        if (this.videoPaused){
+          this.setHeaderVisibility(!this.headerVisible);
+        }
+        else {
+          this.setShowVideoControls(false);
+        }
+      }
+    }
+    else {
+      this.setShowVideoControls(!this.showVideoControls);
+      this.setHeaderVisibility(this.showVideoControls);
+    }
   }
 
   // respond to onLoad video event
   videoLoaded = (data) => {
+    if (this.videoPlayerRef) { this.videoPlayerRef.seek(0); }
     this.setVideoDuration(data.duration);
     this.videoDurationStr = this.props.utilsSvc.timeFromSeconds(data.duration);
     this.setVideoPaused(true);
-    if (this.videoPlayerRef) { this.videoPlayerRef.seek(0); }
   }
 
   // respond to onEnd video event
   videoEnded = () => {
-    this.setVideoPaused(true);
     if(this.videoPlayerRef) { this.videoPlayerRef.seek(0); }
+    this.setVideoPaused(true);
   }
 
   // update the value of the video position
@@ -451,15 +503,16 @@ class TrekImages extends Component<{
   }
 
   handlePicture = (data: any, type: TrekImageType, loc: TrekPoint) => {
-    // Alert.alert('Picture URI', data.uri)
+    this.setWaitingForSave(true);
     CameraRoll.saveToCameraRoll(data.uri)
     .then((uri) => {
       this.tInfo.addTrekImage(uri, data.deviceOrientation, type, loc.l, this.imageTime);
+      this.setWaitingForSave(false);
       this.props.toastSvc.toastOpen({tType: 'Info', content: IMAGE_TYPE_INFO[type].name + ' saved'});
       this.resumeCameraPreview();
     })
-    .catch((error) => {
-      alert(error)
+    .catch((_error) => {
+      this.setWaitingForSave(false);
       this.props.toastSvc.toastOpen({tType: 'Error',content: 'Error saving ' + IMAGE_TYPE_INFO[type].name, time: 3000});
       this.resumeCameraPreview();
     })
@@ -504,13 +557,13 @@ class TrekImages extends Component<{
   render () {
     const tInfo = this.tInfo;
     tInfo.setUpdateMap(false);
-    const {  mediumTextColor, trekLogGreen, trekLogRed } = this.props.uiTheme.palette;
+    const {  mediumTextColor, trekLogGreen, trekLogRed, darkBackground } = this.props.uiTheme.palette;
     const noPrev = !this.havePrevImage();
     const noNext = !this.haveNextImage();
     const imageSelectorWidth = 50;
     const cameraControlButtonSize = 72;
     const cameraControlIconSize = 48;
-    const controlsColor = "rgba(211,211,211,.6)";
+    const controlsColor = "rgba(242,242,242,.8)";
     const iWidth = Dimensions.get('window').width;
     const iHeight = Dimensions.get('window').height;
     
@@ -564,7 +617,7 @@ class TrekImages extends Component<{
         height: cameraControlButtonSize + 4,
         justifyContent: "center",
         alignItems: "center",
-        backgroundColor: "rgba(255,255,255,.0)", 
+        backgroundColor: "rgba(255,255,255,.4)", 
         borderRadius: (cameraControlButtonSize + 4)/2,
       },
       cameraControlButtonStyle: {
@@ -572,10 +625,10 @@ class TrekImages extends Component<{
         height: cameraControlButtonSize,
         justifyContent: "center",
         alignItems: "center",
-        backgroundColor: "rgba(0,0,0,.5)", 
+        backgroundColor: "rgba(0,0,0,.2)", 
         borderWidth: 1,
         borderStyle: "solid",
-        borderColor: "rgba(0,51,153,.6)",
+        borderColor: lowTextColor, //"rgba(0,51,153,.6)",
         borderRadius: cameraControlButtonSize/2,
       },
       imageSelectorArea: {
@@ -603,7 +656,7 @@ class TrekImages extends Component<{
         alignItems: "center",
       },
       imageSelectorIconStyle: {
-        backgroundColor: "rgba(0,0,0,.6)", 
+        backgroundColor: "rgba(0,0,0,.2)", 
         borderRadius: imageSelectorWidth/2,
       },
       imageBackground: {
@@ -651,7 +704,7 @@ class TrekImages extends Component<{
     })
 
     const CameraControl = ({icon, onPress, iSize = cameraControlIconSize, color = controlsColor, 
-                            shStyle = {} as any, ccStyle = {} as any}) => {
+                            shStyle = {}, ccStyle = {}}) => {
       return (  
         <View style={[styles.cameraControlShadow, shStyle]}>
           <View style={[styles.cameraControlButtonStyle, ccStyle]}>
@@ -668,6 +721,12 @@ class TrekImages extends Component<{
 
     return (
       <View style={styles.container}>
+        {(this.waitingForSave) &&
+          <Waiting 
+            msg={' Saving ' + IMAGE_TYPE_INFO[this.imageType].name + '... '}
+            bgColor={darkBackground}
+          />
+        }
         {(this.cameraIsOpen) &&
             <View style={[styles.container]}>
             <RNCamera
@@ -677,7 +736,7 @@ class TrekImages extends Component<{
               zoom={this.cameraZoom}
               flashMode={RNCamera.Constants.FlashMode.off}
               permissionDialogTitle={'Permission to use camera'}
-              permissionDialogMessage={'We need your permission to use your camera phone'}
+              permissionDialogMessage={'We need your permission to use your phone\'s camera'}
             />
             {(!this.videoRecording && !this.picturePaused) &&
               <TouchableWithoutFeedback
@@ -688,12 +747,12 @@ class TrekImages extends Component<{
             }
             <View style={styles.cameraControls}>
               {this.picturePaused &&
-                <CameraControl icon={"Delete"} color={trekLogRed} shStyle={{backgroundColor: "rgba(255,255,255,.4)"}}
+                <CameraControl icon={"Delete"} color={trekLogRed} 
                               onPress={this.picturePaused ? this.resumeCameraPreview : this.closeCamera}/>
               }
               {this.picturePaused &&
                 <CameraControl icon={"CheckMark"} color={trekLogGreen} 
-                        shStyle={{backgroundColor: "rgba(255,255,255,.4)"}} onPress={this.keepThisImage}/>
+                              onPress={this.keepThisImage}/>
               }
               {(!this.videoRecording && !this.picturePaused) &&
                 <CameraControl icon={"CameraSwitch"} onPress={this.toggleFrontOrBackCamera}/>
@@ -711,6 +770,7 @@ class TrekImages extends Component<{
                   <Slider
                     style={{flex: 1}}
                     step={.01}
+                    maximumTrackTintColor="rgba(255, 255, 102, .8)"
                     maximumValue={1}
                     onValueChange={this.setCameraZoom}
                     value={this.cameraZoom}
@@ -745,18 +805,20 @@ class TrekImages extends Component<{
                     </ImageZoom>
                   }
                   {(this.currentImage.type === IMAGE_TYPE_VIDEO) &&
+// @ts-ignore
                       <Video source={{uri: this.currentImage.uri}}      
                         ref={(ref) => { this.videoPlayerRef = ref }}    // Store reference
                         onLoad={this.videoLoaded} 
                         onEnd={this.videoEnded}
                         onProgress={this.newVideoPos}
                         onSeek={this.newVideoPos}
+                        reportBandwidth={false}
                         // onError={this.videoError}               // Callback when video cannot be loaded
                         paused={this.videoPaused}
                         onTouchEnd={this.toggleShowVideoContols}
                         muted={this.audioMuted}
                         resizeMode="cover"
-                        progressUpdateInterval={1000}
+                        progressUpdateInterval={1500}
                         style={{flex: 1}} 
                       />
                   }
@@ -782,6 +844,7 @@ class TrekImages extends Component<{
                         <Slider
                           style={{flex: 1}}
                           step={1}
+                          maximumTrackTintColor="rgba(255, 255, 102, .8)"
                           maximumValue={this.videoDuration}
                           onValueChange={this.setNewVideoPos}
                           value={this.currentVideoPos}
@@ -790,7 +853,8 @@ class TrekImages extends Component<{
                       </View>
                     </View>
                   }
-                  {((this.currentImage.type !== IMAGE_TYPE_VIDEO) || this.videoPaused) && 
+                  {(((this.currentImage.type !== IMAGE_TYPE_VIDEO) || this.videoPaused)
+                      && this.showVideoControls) && 
                     <View style={styles.imageSelectorArea}>
                       {!noPrev &&
                         <View style={styles.imageSelectorPrev}>

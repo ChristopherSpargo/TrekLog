@@ -207,10 +207,11 @@ class Goals extends Component<{
   render() {
 
     const { mediumTextColor, disabledTextColor, dividerColor, highlightedItemColor,
-            pageBackground, highTextColor, secondaryColor, primaryLighter } = this.props.uiTheme.palette;
+            pageBackground, highTextColor, secondaryColor } = this.props.uiTheme.palette;
     const { cardLayout } = this.props.uiTheme;
             const displayList = this.gS.displayList && this.gS.displayList.length > 0;
-    const ribbonIconSize = 30;
+    const ribbonIconSize = 40;
+    const ribbonLabelTextSize = 16;
 
     const styles=StyleSheet.create({
       container: { ... StyleSheet.absoluteFillObject, backgroundColor: pageBackground },
@@ -237,6 +238,7 @@ class Goals extends Component<{
       goalDate: {
         color: mediumTextColor,
         paddingRight: 15,
+        paddingLeft: 5,
         fontSize: 16
       },
       goalText: {
@@ -253,7 +255,7 @@ class Goals extends Component<{
         width: ribbonIconSize + 5,
         marginBottom: 10,
         marginTop: -4,
-        fontSize: 12,
+        fontSize: ribbonLabelTextSize,
         fontWeight: "200",
         color: highTextColor,
         textAlign: "center",
@@ -280,7 +282,7 @@ class Goals extends Component<{
         fontWeight: "bold",
       },
       speedDialTrigger: {
-        backgroundColor: primaryLighter,
+        backgroundColor: 'white',
       },
       divider: {
         flex: 1,
@@ -350,14 +352,16 @@ class Goals extends Component<{
                               <View>
                                 <SpeedDial
                                   icon="DotsVertical"
+                                  iconColor={mediumTextColor}
                                   items={mapActions}
                                   sdIndex={index}
                                   selectFn={this.speedDialAction}
                                   style={styles.speedDialTrigger}
                                   horizontal={true}
                                   menuColor='transparent'
+                                  itemIconsStyle={{backgroundColor: secondaryColor}}
+                                  itemIconsColor="white"
                                   iconSize="Small"
-                                  itemSize="Small"
                                 />
                               </View>
                             </View>

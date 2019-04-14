@@ -99,12 +99,16 @@ class TrekDisplay extends Component<{
       if (this.selectedMarker >= 0) {
         if (this.markerRefs) { this.markerRefs[this.selectedMarker].showCallout(); }
         if (this.mode === 'Interval') {
-          this.mapViewRef.fitToCoordinates(this.props.selectedPath,
-                  {edgePadding: {top: 200, right: 250, bottom: 200, left: 100}, animated: false});
+          if (this.mapViewRef) { 
+            this.mapViewRef.fitToCoordinates(this.props.selectedPath,
+                    {edgePadding: {top: 200, right: 250, bottom: 200, left: 100}, animated: false});
+          }
         } 
         else {
-          this.mapViewRef.animateCamera({center: this.props.intervalMarkers[this.selectedMarker]}, 
+          if (this.mapViewRef) { 
+            this.mapViewRef.animateCamera({center: this.props.intervalMarkers[this.selectedMarker]}, 
                                         {duration: 300});
+          }
         }
       }
     }
@@ -149,29 +153,37 @@ class TrekDisplay extends Component<{
     // this.currCamera.center.latitude = point.l.a;
     // this.currCamera.center.longitude = point.l.o;
     // this.currCamera.zoom = TREK_ZOOM_CURRENT;
-    this.currRegion.latitude        = point.l.a;
-    this.currRegion.longitude       = point.l.o;
-    this.currRegion.latitudeDelta   = 0.015;
-    this.currRegion.longitudeDelta  = 0.01211;
-}
+    if (point){
+      this.currRegion.latitude        = point.l.a;
+      this.currRegion.longitude       = point.l.o;
+      this.currRegion.latitudeDelta   = 0.015;
+      this.currRegion.longitudeDelta  = 0.01211;
+    }
+  }
 
   // change the focus or zoom level on the map
   layoutMap = ( path: LatLng[]) => {
     switch(this.mode){
       case 'All':
-        this.mapViewRef.fitToCoordinates(path,
-                                         {edgePadding: {top: 50, right: 250, bottom: 50, left: 50}, 
-                                         animated: false});
+        if (this.mapViewRef) { 
+          this.mapViewRef.fitToCoordinates(path,
+                                          {edgePadding: {top: 50, right: 250, bottom: 50, left: 50}, 
+                                          animated: false});
+        }
         break;
       case 'Interval':
-        this.mapViewRef.fitToCoordinates(path,
-                                         {edgePadding: {top: 200, right: 250, bottom: 200, left: 100}, 
-                                         animated: false});
+        if (this.mapViewRef) { 
+          this.mapViewRef.fitToCoordinates(path,
+                                          {edgePadding: {top: 200, right: 250, bottom: 200, left: 100}, 
+                                          animated: false});
+        }
         break;
       case 'NewAll':        
       case 'Current':
       case 'Start':
-        this.mapViewRef.animateToRegion(this.props.utilsSvc.copyObj(this.currRegion), 10);
+        if (this.mapViewRef) { 
+          this.mapViewRef.animateToRegion(this.props.utilsSvc.copyObj(this.currRegion), 10);
+        }
         // this.mapViewRef.animateToRegion(Object.assign({}, this.currRegion, 10));
       // this.mapViewRef.animateCamera(this.currCamera, {duration: 100});
         if (this.mode === 'NewAll'){
@@ -364,7 +376,7 @@ class TrekDisplay extends Component<{
         alignItems: "center",
       },
       imageSelectorIconStyle: {
-        backgroundColor: "rgba(0,0,0,.3)", 
+        backgroundColor: "rgba(0,0,0,.2)", 
         borderRadius: imageSelectorWidth/2,
       },
     })
@@ -440,11 +452,6 @@ class TrekDisplay extends Component<{
                        [ {icon: 'Orbit', label: 'Satellite', value: 'hybrid'},
                           {icon: 'Landscape', label: 'Terrain', value: 'terrain'},
                           {icon: 'Highway', label: 'Standard', value: 'standard'}];
-
-    // const  zoomActions : SpeedDialItem[] = this.props.selectedPath  ? undefined
-    //                     : [ {icon: 'ZoomIn', label: 'Start', value: 'Start'},
-    //                         {icon: 'ZoomIn', label: tInfo.timerOn ? 'Current' : 'End', value: 'Current'},
-    //                         {icon: 'ZoomOut', label: 'All', value: 'All'}];
 
     // in Current mode, keep camera centered on current trek position
     // if (numPts > 0 && (this.mode === 'Current')) {
@@ -551,7 +558,6 @@ class TrekDisplay extends Component<{
         {(numPts > 0) &&
           <SpeedDial
             bottom={this.props.bottom + 5}
-            // items={zoomActions}
             icon={triggerIcon}
             triggerValue={this.props.speedDialValue}
             selectFn={this.props.changeZoomFn}
@@ -578,6 +584,7 @@ class TrekDisplay extends Component<{
             style={styles.speedDialTrigger}
             horizontal={true}
             iconSize="Large"
+            itemSize="Big"
           />
         }
         {showPrev &&
@@ -585,7 +592,7 @@ class TrekDisplay extends Component<{
             <IconButton 
               iconSize={imageSelectorWidth}
               icon="ChevronLeft"
-              color="lightgrey"
+              color="rgba(242,242,242,.8)"
               iconStyle={styles.imageSelectorIconStyle}
               onPressFn={this.callPrevFn}
             />
@@ -596,7 +603,7 @@ class TrekDisplay extends Component<{
             <IconButton
               iconSize={imageSelectorWidth}
               icon="ChevronRight"
-              color="lightgrey"
+              color="rgba(242,242,242,.8)"
               iconStyle={styles.imageSelectorIconStyle}
               onPressFn={this.callNextFn}
             />

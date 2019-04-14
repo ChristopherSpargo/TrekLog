@@ -1,5 +1,5 @@
 import React, { Component } from 'react';
-import { View, Text, StyleSheet, TouchableNativeFeedback } from 'react-native';
+import { View, StyleSheet, TouchableNativeFeedback } from 'react-native';
 import { observable, action } from 'mobx';
 import { observer, inject } from 'mobx-react';
 
@@ -7,12 +7,14 @@ import { SPEED_DIAL_Z_INDEX } from './App';
 import SlideUpView from './SlideUpComponent';
 import SlideLeftView from './SlideLeftComponent';
 import SvgIcon from './SvgIconComponent';
+import IconButton from './IconButtonComponent';
 import { APP_ICONS } from './SvgImages';
 
 export interface SpeedDialItem  {
   label: string,
   icon: string,
-  value: string
+  value: string,
+  bColor ?: string
 }
 
 @inject('uiTheme')
@@ -29,9 +31,12 @@ class SpeedDial extends Component<{
   style ?: any,
   menuColor ?: string,        // background color for the slideout menu
   items ?: SpeedDialItem[],
+  itemIconsStyle ?: any,       // style for the menu item icons
+  itemIconsColor ?: string,   // fill color for the menu item icons
   sdIndex ?: number,          // value to include with any argument to selectFn
   selectFn : Function,
   horizontal ?: boolean,      // true if slide-out goes to left, false if goes up
+  autoClose ?: number,        // milliseconds to wait before closing
   uiTheme ?: any
 }, {} > {
 
@@ -80,7 +85,7 @@ class SpeedDial extends Component<{
     if(status === true){
       this.openTimerID = window.setTimeout(() => {
         this.setOpen(false);
-      }, 3000); // automatically close after a while if not closed
+      }, this.props.autoClose || 3000); // automatically close after a while if not closed
     }
     else {
       if(this.openTimerID !== undefined){
@@ -106,7 +111,7 @@ class SpeedDial extends Component<{
 
     const triggerIconSize = this.props.iconSize === "Small" ? 24 : 30;
     const triggerIconArea = this.props.iconSize === "Small" ? 40 : 56;
-    const SD_ITEM_SIZE = this.props.itemSize === "Small" ? 54 : 65;
+    const SD_ITEM_SIZE = this.props.itemSize === "Big" ? 65 : 54;
     const SD_TRIGGER_HEIGHT = this.props.triggerHeight || 56;
     const SD_MENU_WIDTH = this.props.iconSize === "Small" ? 46 : 60;
     const {mediumTextColor, textOnPrimaryColor, secondaryColor, primaryColor,
@@ -251,21 +256,21 @@ class SpeedDial extends Component<{
               afterCloseFn={this.setNotVisible}
               >
               {this.props.items.map((item, index) =>
-                  <TouchableNativeFeedback
-                    key={item.label}
-                    background={TouchableNativeFeedback.SelectableBackgroundBorderless()}
-                    onPress={this.itemSelected.bind(this, item.value)}>
-                    <View style={[styles.vBar, (index === 0) ? styles.firstVItem : {},
-                                              (index === this.props.items.length-1) ? styles.lastVItem : {}]}>
-                      <SvgIcon
-                        style={styles.itemIcon}
-                        size={itemIconSize}
-                        fill={primaryColor}
-                        paths={APP_ICONS[item.icon]}
-                      />
-                      <Text style={styles.label}>{item.label}</Text>
-                    </View>
-                  </TouchableNativeFeedback>
+                <View key={item.label}
+                      style={[styles.vBar, (index === 0) ? styles.firstVItem : {},
+                                          (index === this.props.items.length-1) ? styles.lastVItem : {}]}>
+                  <IconButton 
+                    iconSize={itemIconSize}
+                    icon={item.icon}
+                    iconStyle={[styles.itemIcon, this.props.itemIconsStyle || {}, 
+                                item.bColor ? {borderColor: item.bColor} : {}]}
+                    color={this.props.itemIconsColor || primaryColor}
+                    onPressFn={this.itemSelected}
+                    onPressArg={item.value}
+                    label={item.label}
+                    labelStyle={styles.label}
+                  />
+                </View>
                 )
               }
             </SlideUpView>
@@ -283,21 +288,23 @@ class SpeedDial extends Component<{
               >
               <View style={{flexDirection: "row"}}>
                 {this.props.items.map((item, index) =>
-                    <TouchableNativeFeedback
-                      key={item.label}
-                      background={TouchableNativeFeedback.SelectableBackgroundBorderless()}
-                      onPress={this.itemSelected.bind(this, item.value)}>
-                      <View style={[styles.hBar, (index === 0) ? styles.firstHItem : {},
-                                                (index === this.props.items.length-1) ? styles.lastHItem : {}]}>
-                        <SvgIcon
-                          style={styles.itemIcon}
-                          size={itemIconSize}
-                          fill={primaryColor}
-                          paths={APP_ICONS[item.icon]}
-                        />
-                        <Text style={styles.label}>{item.label}</Text>
-                      </View>
-                    </TouchableNativeFeedback>
+                  <View key={item.label}
+                        style={[styles.hBar, (index === 0) ? styles.firstHItem : {},
+                                            (index === this.props.items.length-1) ? styles.lastHItem : {}]}>
+                    <IconButton 
+                      iconSize={itemIconSize}
+                      icon={item.icon}
+                      // style={navItem}
+                      iconStyle={[styles.itemIcon, this.props.itemIconsStyle || {}, 
+                                  item.bColor ? {borderColor: item.bColor} : {}]}
+                      color={this.props.itemIconsColor || primaryColor}
+                      // raised
+                      onPressFn={this.itemSelected}
+                      onPressArg={item.value}
+                      label={item.label}
+                      labelStyle={styles.label}
+                    />
+                  </View>
                   )
                 }
               </View>

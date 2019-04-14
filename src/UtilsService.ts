@@ -727,13 +727,17 @@ export class UtilsSvc {
 
   // use the Google Elevations API to return a list of elevations that occur along the given path
   getPathElevations = (path: LatLng[], samples : number) => {
-    let query = '?path=';
+    let singlePt = path.length === 1;
+    let query = singlePt ? '?locations=' : '?path=';
 
     path.forEach((point, indx) => {
       query += indx === 0 ? '' : '|';
       query += point.latitude + ',' + point.longitude;
     })
-    query += '&samples=' + samples + '&key=' + GOOGLE_MAPS_API_KEY;
+    if(!singlePt){
+      query += '&samples=' + samples;
+    }
+    query += '&key=' + GOOGLE_MAPS_API_KEY;
     return fetch(ELEVATION_API_URL + query)
     .then(response => response.json())  
     .catch((err) => err)
@@ -1084,12 +1088,12 @@ export class UtilsSvc {
     let cals = 0;
     if (hills === 'Unknown' || hills === 'Flat') { hills = 'Level'; }
     let hIndex = ['Level', 'Moderate', 'Difficult', 'Extreme'].indexOf(hills);
-    let currMET, newMET, currDurationSum = 0;
-    let currPt : TrekPoint, startTime = 0;
-    let metTable;
-    let speedIndex;
+    let currMET : number, newMET : number, currDurationSum : number = 0;
+    let currPt : TrekPoint, startTime : number = 0;
+    let metTable : number[][];
+    let speedIndex : number;
     let numPts = pointList.length;
-    let tWt;
+    let tWt : number;
 
     if (numPts > 0){
       // select the appropriate MET table
@@ -1130,7 +1134,7 @@ export class UtilsSvc {
       cals += currMET * tWt * (currDurationSum / 3600);  // add in final MET calc
     }
     let precision = cals < 10 ? 10 : 1;           // show 1 digit after decimal for small values ( < 10 )
-    return Math.round(cals * precision) / precision;
+    return cals !== 0 ? (Math.round(cals * precision) / precision) : 0;
   }
 
 

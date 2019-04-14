@@ -15,6 +15,7 @@
   "dependencies": {
     "mobx": "^4.9.3",
     "mobx-react": "^5.4.3",
+    "mobx-react-lite": "^1.2.0",
     "react": "16.8.3",
     "react-native": "0.59.2",
     "react-native-camera": "^1.13.1",

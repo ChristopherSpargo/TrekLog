@@ -4,7 +4,7 @@ import { View, StyleSheet, Text, TouchableNativeFeedback } from 'react-native';
 import { observer, inject } from 'mobx-react';
 
 import { TrekInfo } from './TrekInfoModel';
-import { HEADER_HEIGHT, HEADER_ICON_SIZE, HEADER_TEXT_COLOR } from './App';
+import { HEADER_HEIGHT, HEADER_ICON_SIZE } from './App';
 import SvgIcon from './SvgIconComponent';
 import { APP_ICONS } from './SvgImages';
 import IconButton from './IconButtonComponent';
@@ -20,13 +20,16 @@ class TrekLogHeader extends Component<{
   headerRightFn ?: Function,
   headerRightLabel ?: string,
   logo ?: boolean,                // true if show TrekLog logo
+  use ?: string,                  // show specified use in header
+  backgroundColor ?: string,
+  position ?: string,             // set to absolute or not (relative)
   uiTheme ?: any,
   trekInfo ?: TrekInfo,
   navigation ?: any
 }, {} > {
 
   render() {
-    const {  navIconColor, headerBackgroundColor } = this.props.uiTheme.palette;
+    const {  navIconColor, headerBackgroundColor, headerTextColor } = this.props.uiTheme.palette;
     const { navIcon, navItem } = this.props.uiTheme;
     const iconName = this.props.icon || this.props.trekInfo.type;
     const backFn = this.props.backButtonFn !== undefined;
@@ -36,6 +39,8 @@ class TrekLogHeader extends Component<{
     const headerButtonAreaSize = HEADER_ICON_SIZE + 20;
     const iconAraSize = HEADER_ICON_SIZE + 8;
     const iconWithLogoSize = HEADER_ICON_SIZE + 6;
+    const bgColor = this.props.backgroundColor || headerBackgroundColor;
+    const useIconSize = 18;
 
     const styles = StyleSheet.create({
       header: {
@@ -43,8 +48,15 @@ class TrekLogHeader extends Component<{
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "flex-start",
-        backgroundColor: headerBackgroundColor,
+        backgroundColor: bgColor,
         elevation: 4,
+      },
+      posAbsolute: {
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        elevation: 0,
       },
       iconArea: {
         width: iconAraSize,
@@ -63,7 +75,7 @@ class TrekLogHeader extends Component<{
       text: {
         fontSize: 22,
         fontWeight: "300",
-        color: HEADER_TEXT_COLOR,
+        color: headerTextColor,
         marginRight: 8,
         marginLeft: textML,
       },
@@ -99,10 +111,27 @@ class TrekLogHeader extends Component<{
         justifyContent: "center", 
         alignItems: "center",
       },
+      useArea: {
+        flexDirection: "row",
+        alignItems: "flex-end",
+        marginRight: 16,
+        height: HEADER_HEIGHT,
+      },
+      useIcon: {
+        width: useIconSize,
+        height: useIconSize,
+        marginRight: 4,
+        marginBottom: 3,
+        backgroundColor: "transparent"
+      },
+      useText: {
+        fontSize: 18,
+        color: headerTextColor,
+      },
     })
 
     return (
-     <View style={styles.header}>
+     <View style={[styles.header, this.props.position === 'absolute' ? styles.posAbsolute : {}]}>
       {backFn &&
         <TouchableNativeFeedback 
             background={TouchableNativeFeedback.SelectableBackgroundBorderless()}
@@ -112,7 +141,7 @@ class TrekLogHeader extends Component<{
             <SvgIcon 
                 size={32}
                 widthAdj={0}
-                fill={HEADER_TEXT_COLOR}
+                fill={headerTextColor}
                 paths={APP_ICONS.ArrowBack}
             />
           </View>
@@ -151,6 +180,17 @@ class TrekLogHeader extends Component<{
               // labelStyle={[navLabel, {marginTop: -4, fontSize: 13}]}
               onPressFn={this.props.headerRightFn}
             />
+          </View>
+        }
+        { this.props.use &&
+          <View style={styles.useArea}>
+            <SvgIcon
+              style={styles.useIcon}
+              size={useIconSize}
+              paths={APP_ICONS.AccountCircle}
+              fill={headerTextColor}
+            />
+            <Text style={styles.useText}>{this.props.use}</Text>
           </View>
         }
       </View>

@@ -13,7 +13,7 @@ import TrekDisplay from './TrekDisplayComponent';
 import NumbersBar from './NumbersBarComponent'
 import { TrekInfo, TrekObj, DIST_UNIT_LONG_NAMES, SHORT_TO_LONG_DIST_NAMES,
          NumericRange, TrekPoint } from './TrekInfoModel';
-import { CONTROLS_HEIGHT, HEADER_ICON_SIZE, HEADER_TEXT_COLOR, NAV_ICON_SIZE, INVISIBLE_Z_INDEX, INTERVAL_GRAPH_Z_INDEX } from './App';
+import { CONTROLS_HEIGHT, HEADER_ICON_SIZE, NAV_ICON_SIZE, INVISIBLE_Z_INDEX, INTERVAL_GRAPH_Z_INDEX } from './App';
 import Waiting from './WaitingComponent';
 import TrekLimitsForm, {LimitsObj} from './TrekLimitsComponent';
 import { M_PER_MILE, UtilsSvc } from './UtilsService';
@@ -62,17 +62,19 @@ export interface IntervalData {
 
 const goBack = NavigationActions.back() ;
 
-@inject('trekInfo')
+@inject('trekInfo', 'uiTheme')
 @observer
 export class TrekTypeHeader extends Component<{
   icon ?: string,
   titleText : string,
   trekInfo ?: TrekInfo,
+  uiTheme ?: any,
   navigation ?: any
 }, {} > {
 
   render() {
     const iconName = this.props.icon || this.props.trekInfo.type;
+    const { headerTextColor } = this.props.uiTheme.palette;
     const styles = StyleSheet.create({
       header: {
         flexDirection: "row",
@@ -88,7 +90,7 @@ export class TrekTypeHeader extends Component<{
       text: {
         fontSize: 22,
         fontWeight: "300",
-        color: HEADER_TEXT_COLOR,
+        color: headerTextColor,
         marginHorizontal: 8
       }
     })
@@ -100,7 +102,7 @@ export class TrekTypeHeader extends Component<{
             style={styles.icon}
             size={HEADER_ICON_SIZE}
             paths={APP_ICONS[iconName]}
-            fill={HEADER_TEXT_COLOR}
+            fill={headerTextColor}
           />
       }
       <Text style={styles.text}>{this.props.titleText}</Text>
@@ -817,6 +819,7 @@ class SelectedTrek extends Component<{
         case "Calories":
           barItem.value = intData.cals[i];
           barItem.label1 = intData.cals[i].toString();
+          if(isNaN(intData.cals[i])){ alert(JSON.stringify(intData.segPoints[i]))}
           break;
         default:
           barItem.value = 0;
@@ -1092,7 +1095,7 @@ class SelectedTrek extends Component<{
       }
     })
 
-    const borderTop = (ints || this.statsOpen) ? {borderTopColor: highTextColor} : roundedTop;
+    const borderTop = (ints || this.statsOpen) ? {borderTopColor: highTextColor} : {};
 
     return (
       <View style={styles.container}>

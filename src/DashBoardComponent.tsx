@@ -13,7 +13,6 @@ import { TIME_FRAME_DISPLAY_NAMES } from './ReviewComponent';
 import TreksPieChart from './TreksPieChartComponent';
 import { FilterSvc } from './FilterService';
 import SvgButton from './SvgButtonComponent';
-import SvgIcon from './SvgIconComponent';
 import { APP_ICONS } from './SvgImages';
 import SlideUpView from './SlideUpComponent';
 
@@ -160,6 +159,7 @@ class DashBoard extends Component<{
       this.defDtMax = 'N/A';
       this.defDtMin = 'N/A';
     }
+    this.fS.setFoundType(this.totalCounts(this.tInfo.typeSelections) !== 0);
     this.setDataReady(true);
   }
 
@@ -268,14 +268,12 @@ class DashBoard extends Component<{
 
     const haveTreks = !this.fS.filteredTreksEmpty();
     const typeIconAreaSize = 55;
-    const summaryHeight = 125;
-    const statTitleIconSize = 20;
+    const summaryHeight = 141;
+    const statTitleIconSize = 24;
     const noSelection = this.tInfo.typeSelections === 0;
-    const { roundedTop} = this.props.uiTheme;
-    const { highTextColor, pageBackground, secondaryColor,
-            trekLogBlue, disabledTextColor, dividerColor, linkActive,
-            } = this.props.uiTheme.palette;
-    const filterButtonAreaSize = 46;
+    const { highTextColor, pageBackground, trekLogBlue, disabledTextColor,
+            mediumTextColor } = this.props.uiTheme.palette;
+
     let data = [];
     // Build the data object for the PieChart
     TREK_TYPE_CHOICES.forEach((type) =>{
@@ -289,17 +287,6 @@ class DashBoard extends Component<{
     const styles = StyleSheet.create({
       container: {
         flexDirection: "column",
-      },
-      summaryArea: {
-        flexDirection: "column",
-        left: 0,
-        right: 0,
-        bottom: 0,
-        height: summaryHeight,
-        overflow: "hidden",
-        backgroundColor: pageBackground,
-        justifyContent: "center",
-        zIndex: this.zValue,
       },
       timeFrameArea: {
         flexDirection: "row",
@@ -318,10 +305,14 @@ class DashBoard extends Component<{
         fontStyle: "italic",
         color: disabledTextColor,
       },
+      userText: {
+        fontSize: 22,
+        color: highTextColor,
+      },
       statTitleIcon: {
         width: statTitleIconSize,
         height: statTitleIconSize,
-        marginRight: 6,
+        marginRight: 4,
         backgroundColor: "transparent"
       },
       noMatches: {
@@ -367,10 +358,6 @@ class DashBoard extends Component<{
         justifyContent: "center",
         backgroundColor: "transparent",
       },
-      filterButtonArea: {
-        position: "absolute",
-        right: 5,
-      },
       dateInputText: {
         color: highTextColor,
         fontSize: 22,
@@ -380,38 +367,31 @@ class DashBoard extends Component<{
         color: highTextColor,
       },
       timeFrameName:{
-        // marginLeft: 10,
         fontSize: 18,
         fontWeight: "bold",
         color: highTextColor,
       },
-      button: {
-        color: "white",
-        fontSize: 14,
-      },
-      divider: {
-        flex: 1,
-        marginRight: 5,
-        marginLeft: 30,
-        borderBottomWidth: 1,
-        borderStyle: "solid",
-        borderColor: dividerColor,
-      },
-      filterButton: {
-        minHeight: filterButtonAreaSize,
-        minWidth: filterButtonAreaSize,
-        borderWidth: 1,
-        borderColor: linkActive,
-        borderStyle: "solid",
-        borderRadius: filterButtonAreaSize / 2,
-        padding: 10,
+      summaryArea: {
+        flexDirection: "column",
+        left: 0,
+        right: 0,
+        bottom: 0,
+        height: summaryHeight,
+        overflow: "hidden",
+        backgroundColor: pageBackground,
+        justifyContent: "center",
+        zIndex: this.zValue,
       },
       shortStats: {
+        borderTopWidth: 1,
+        borderColor: mediumTextColor,
+        borderStyle: "solid",
         alignItems: "center",
         justifyContent: "center",
+        paddingBottom: 3,
       },
       statPair: {
-        height: summaryHeight/3,
+        height: (summaryHeight - 3) / 3,
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "center",
@@ -423,7 +403,7 @@ class DashBoard extends Component<{
         justifyContent: "center",
       },
       shortStatValue: {
-        fontSize: 28,
+        fontSize: 30,
         fontWeight: "300",
         color: highTextColor,
       },
@@ -441,17 +421,6 @@ class DashBoard extends Component<{
         {(!haveTreks && !this.tInfo.resObj && this.fS.filterRuns) &&
           <View style={{height: 205}}>
             <Text style={styles.noMatches}>Nothing To Display for {this.tInfo.user}</Text>
-          </View>
-        }
-        {(haveTreks && this.fS.filterRuns) &&
-          <View style={[styles.rowCenter, {height: 15}]}>
-            <SvgIcon
-              style={styles.statTitleIcon}
-              size={statTitleIconSize}
-              paths={APP_ICONS.AccountCircle}
-              fill={secondaryColor}
-            />
-            <Text style={styles.statHeading1}>{this.tInfo.user}</Text>
           </View>
         }
         {(haveTreks && this.fS.filterRuns) &&
@@ -552,7 +521,7 @@ class DashBoard extends Component<{
             beforeOpenFn={this.setVisible}
             afterCloseFn={this.setNotVisible}
           >
-            <View style={[roundedTop, styles.shortStats]}>
+            <View style={styles.shortStats}>
               <View style={styles.statPair}>
                 <Text style={[styles.shortStatValue]}>{this.formattedTime()}</Text>
               </View>

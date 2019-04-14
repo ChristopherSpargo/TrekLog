@@ -1,5 +1,5 @@
 import { Alert } from 'react-native';
-import BackgroundGeolocation, { ConfigureOptions, } from 'react-native-mauron85-background-geolocation';
+import BackgroundGeolocation, { ConfigureOptions, Location } from 'react-native-mauron85-background-geolocation';
 
 import { TrekInfo } from './TrekInfoModel'
 import { StorageSvc } from './StorageService';
@@ -164,7 +164,7 @@ export class LocationSvc {
   // get the current location
   getCurrentLocation = (gotLocation: Function, gclOptions) => {
     BackgroundGeolocation.getCurrentLocation(location => {
-      gotLocation(location);
+      gotLocation(location );
       }, () => {
         // setTimeout(() => {
         //   Alert.alert('Error obtaining current location', JSON.stringify(error));

@@ -10,6 +10,7 @@ import { ModalModel } from './ModalModel';
 import { ToastModel } from './ToastModel';
 import TrekLogHeader from './TreklogHeaderComponent';
 import SummaryScreen from './SummaryScreenComponent';
+import ShowConditions from './ShowConditionsComponent';
 import LogTrek from './LogTrekComponent';
 import LogTrekMap from './LogTrekMapComponent';
 import Settings from './SettingsComponent';
@@ -48,7 +49,7 @@ export const primaryColor = "#388e3c";
 export const primaryDarker = "#00600f";
 export const secondaryColor = "#9c27b0";
 export const pageBackground = "white";
-export const controlsBackground = "white";
+export const controlsBackground = "#fbfbfb";
 export const disabledTextColor = "rgba(0,0,0,.38)";
 export const dividerColor = "rgba(0,0,0,.12)";
 export const lowTextColor = "rgba(0,0,0,.48)";
@@ -59,14 +60,14 @@ export const FAB_SIZE = 56;
 export const HEADER_ICON_SIZE = 24;
 export const HEADER_HEIGHT = 56;
 export const CONTROLS_HEIGHT = 90;
-export const NAV_ITEM_SIZE = CONTROLS_HEIGHT - 40;
-export const NAV_ICON_SIZE = 24;
+export const NAV_ITEM_SIZE = CONTROLS_HEIGHT - 35;
+export const NAV_ITEM_PADDING = 13;
+export const NAV_ICON_SIZE = 28;
 export const TREKLOG_LOG_KEY = '#Treklog#';
 export const TREKLOG_USERS_KEY = '#Users';
 export const TREKLOG_SETTINGS_KEY = '#Settings#';
 export const SETTINGS_KEY_REGEX = /^#Settings#/i;
 export const TREKLOG_GOALS_KEY = '#GOALS#';
-export const navItemAreaSize = CONTROLS_HEIGHT - 40;
 export const FOOTER_BUTTON_HEIGHT = 45;
 export const INVISIBLE_Z_INDEX = -1;
 export const INITIAL_POS_MARKER_Z_INDEX = 1;
@@ -120,6 +121,10 @@ export const uiTheme = {
       warningColor: "firebrick",
       pageBackground: pageBackground,
       controlsBackground: controlsBackground,
+      darkBackground: "rgba(0,0,0,.7)",
+      lightBackground: "rgba(255,255,255,.7)",
+      textOnDark: "white",
+      textOnLight: mediumTextColor,
       linkActive: linkActive,
       navIconColor: mediumTextColor,
       listIconColor: highTextColor,
@@ -158,8 +163,8 @@ export const uiTheme = {
     borderTopWidth: 1,
     borderRightWidth: 1,
     borderLeftWidth: 1,
-    borderTopRightRadius: 6,
-    borderTopLeftRadius: 6,
+    borderTopRightRadius: 8,
+    borderTopLeftRadius: 8,
     borderColor: mediumTextColor,
   },
   controlsArea: {
@@ -176,20 +181,20 @@ export const uiTheme = {
     borderLeftWidth: 1,
     borderRightWidth: 1,
     borderStyle: "solid",
-    borderTopRightRadius: 0,
-    borderTopLeftRadius: 0,
+    borderTopRightRadius: 8,
+    borderTopLeftRadius: 8,
     borderColor: mediumTextColor,
-    zIndex: CONFIRM_Z_INDEX,
+    zIndex: CONTROLS_Z_INDEX,
   },
   navItem: {
-    minHight: navItemAreaSize,
-    minWidth: navItemAreaSize,
+    minHight: NAV_ITEM_SIZE,
+    minWidth: NAV_ITEM_SIZE,
     backgroundColor: "white",
     borderWidth: 1,
     borderColor: dividerColor,
     borderStyle: "solid",
-    borderRadius: navItemAreaSize / 2,
-    padding: 11,
+    borderRadius: NAV_ITEM_SIZE / 2,
+    padding: NAV_ITEM_PADDING,
   },
   navIcon: {
     backgroundColor: "transparent",
@@ -228,7 +233,8 @@ const NavStack = createStackNavigator(
     GoalEditor: GoalEditor,
     GoalDetail: GoalDetail,
     ExtraFilters: ExtraFilters,
-    Images: TrekImages
+    Images: TrekImages,
+    Conditions: ShowConditions
   },
   {
     initialRouteName: "Log",
@@ -238,19 +244,29 @@ const NavStack = createStackNavigator(
   }
 );
 
-export const HEADER_TEXT_COLOR = uiTheme.palette.headerTextColor;
+const modalSvc = new ModalModel();
+export const ModalSvcContext = React.createContext(modalSvc);
+export const UiThemeContext = React.createContext(uiTheme);
+const utilsSvc = new UtilsSvc();
+export const UtilsSvcContext = React.createContext(utilsSvc);
+const storageSvc = new StorageSvc(utilsSvc);
+export const StorageSvcContext = React.createContext(storageSvc);
+const toastSvc = new ToastModel();
+export const ToastSvcContext = React.createContext(toastSvc);
+const trekInfo = new TrekInfo(utilsSvc, storageSvc, modalSvc);
+export const TrekInfoContext = React.createContext(trekInfo);
+const weatherSvc = new WeatherSvc(toastSvc);
+export const WeatherSvcContext = React.createContext(weatherSvc);
+const locationSvc = new LocationSvc( trekInfo, storageSvc);
+export const LocationSvcContext = React.createContext(locationSvc);
+const loggingSvc = new LoggingSvc(utilsSvc, trekInfo, locationSvc, modalSvc, toastSvc);
+export const LoggingSvcContext = React.createContext(loggingSvc);
+const goalsSvc = new GoalsSvc(utilsSvc, trekInfo, toastSvc, storageSvc);
+export const GoalsSvcContext = React.createContext(goalsSvc);
+const filterSvc = new FilterSvc(utilsSvc, trekInfo, toastSvc);
+export const FilterSvcContext = React.createContext(filterSvc);
 
 class TrekLog extends React.Component {
-  utilsSvc = new UtilsSvc();
-  modalSvc = new ModalModel();
-  toastSvc = new ToastModel();
-  weatherSvc = new WeatherSvc(this.toastSvc);
-  storageSvc = new StorageSvc(this.utilsSvc);
-  trekInfo = new TrekInfo(this.utilsSvc, this.storageSvc, this.modalSvc);
-  locationSvc = new LocationSvc( this.trekInfo, this.storageSvc);
-  loggingSvc = new LoggingSvc(this.utilsSvc, this.trekInfo, this.locationSvc, this.modalSvc, this.toastSvc);
-  goalsSvc = new GoalsSvc(this.utilsSvc, this.trekInfo, this.toastSvc, this.storageSvc);
-  filterSvc = new FilterSvc(this.utilsSvc, this.trekInfo, this.toastSvc);
 
   componentDidMount() {
 
@@ -272,16 +288,16 @@ class TrekLog extends React.Component {
     return (
         <Provider 
           uiTheme={uiTheme}
-          trekInfo={this.trekInfo}
-          modalSvc={this.modalSvc}
-          toastSvc={this.toastSvc}
-          utilsSvc={this.utilsSvc}
-          filterSvc={this.filterSvc}
-          goalsSvc={this.goalsSvc}
-          weatherSvc={this.weatherSvc}
-          storageSvc={this.storageSvc}
-          locationSvc={this.locationSvc}
-          loggingSvc={this.loggingSvc}
+          trekInfo={trekInfo}
+          modalSvc={modalSvc}
+          toastSvc={toastSvc}
+          utilsSvc={utilsSvc}
+          filterSvc={filterSvc}
+          goalsSvc={goalsSvc}
+          weatherSvc={weatherSvc}
+          storageSvc={storageSvc}
+          locationSvc={locationSvc}
+          loggingSvc={loggingSvc}
         >
           <View style={styles.container}>
             <NavStack/>

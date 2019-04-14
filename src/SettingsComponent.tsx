@@ -1,5 +1,5 @@
 import React, { Component } from 'react'
-import { View, StyleSheet, Text, TextInput, ScrollView, Keyboard, 
+import { View, StyleSheet, Text, ScrollView, Keyboard, 
           TouchableNativeFeedback } from 'react-native'
 import { observable, action } from 'mobx'
 import { observer, inject } from 'mobx-react'
@@ -310,7 +310,9 @@ class Settings extends Component<{
           this.updateTrekInfo(saveObj);
           this.setOriginalSettings(this.getSaveObj());
           setTimeout(() => {
-            this.props.toastSvc.toastOpen({tType: "Success", content: "Settings updated."});
+            if(!this.enterUser){
+              this.props.toastSvc.toastOpen({tType: "Success", content: "Settings updated."});
+            }
             resolve('OK');      
           }, 400);
         })
@@ -391,6 +393,7 @@ class Settings extends Component<{
     const {infoConfirmColor, infoConfirmTextColor} = this.props.uiTheme.palette;
 
     if (value === NEW_USER) {
+      this.setNewUser('New');
       this.setEnterUser(true);
     }
     else {
@@ -422,11 +425,11 @@ class Settings extends Component<{
     }
   }
 
-  @action
   finishSetUser = (value: string) => {
     this.updateChangingUser(true);
     this.setUser(value);
     this.saveUsersList();
+    this.setEnterUser(false);
     this.getUsersSettings()
     .then(() =>{
       this.updateTrekInfo(this.originalSettings);
@@ -504,6 +507,7 @@ class Settings extends Component<{
         content: "Delete settings and treks for " + this.user + "?", 
         cancelText: 'CANCEL', deleteText: 'DELETE'})
       .then(() => {
+        this.updateChangingUser(true);
         this.deleteUser(this.user)
         .then(() => {
           this.changeUser(this.user !== '' ? this.user : NEW_USER);
@@ -533,18 +537,18 @@ class Settings extends Component<{
   // Add a new name to the list of users 
   addNewUser = () => {
     requestAnimationFrame(() => {
-      //remove leading and trailing blanks
-      let name =  this.newUser.replace(/^ */g, "")
-      name =  name.replace(/ *$/g, "")
+      let name =  this.newUser;
       if (name !== ''){
-        if (this.users.users.indexOf(name) === -1){
-          this.setEnterUser(false);
+        if (name !== 'New' && this.users.users.indexOf(name) === -1){
           this.users.users.push(name);
-          this.saveUsersList();
-          this.changeUser(name);
+          this.saveUsersList()
+          .then(() => {
+            this.props.toastSvc.toastOpen({tType: "Success", content: "Successfully added use " + name + "."});
+            this.changeUser(name);
+          })
         }
         else {
-          this.props.toastSvc.toastOpen({tType: "Error", content: "User " + name + " already exists."});
+          this.props.toastSvc.toastOpen({tType: "Error", content: "Use " + name + " already exists."});
         }
         this.setNewUser('');
       }
@@ -651,7 +655,7 @@ class Settings extends Component<{
 
   // open the RadioPicker to change user (use)
   openRadioPicker = () => {
-    let names = ['New Use'];
+    let names = ['New'];
     let values = [NEW_USER];
 
     let selNames = names.concat(this.users.users);
@@ -824,7 +828,8 @@ class Settings extends Component<{
                                description="Specify a user or use for the treks"
                 />
                 <View style={styles.inputRow}>     
-                  <Text style={{color: highTextColor, fontSize: 18, width: 150}}>{this.user}</Text>
+                  <Text style={{color: highTextColor, fontSize: 18, width: 150}}>
+                    {this.enterUser ? "New" : this.user}</Text>
                   <IconButton 
                     iconSize={userSelectIconSize}
                     icon="AccountCheckOutline"
@@ -850,29 +855,27 @@ class Settings extends Component<{
                 </View>
                 {this.enterUser &&
                   <View style={styles.rowLayout}>
-                    <TextInput
+                    <TextInputField
                       style={[styles.textInputItem, styles.inputTextStyle]}
-                      onChangeText={(text) => this.setNewUser(text)}
-                      underlineColorAndroid={mediumTextColor}
-                      autoFocus={true}
-                      value={this.newUser}
+                      onChangeFn={(text : string) => this.setNewUser(text)}
+                      kbType='default'
+                      placeholderValue={this.newUser}
+                      autoFocus
                     /> 
                     <View style={styles.addIconArea}>
                       <TouchableNativeFeedback
-                          // background={TouchableNativeFeedback.SelectableBackgroundBorderless()}
-                          onPress={this.cancelNewUser}
-                        >
-                          <View style={styles.userActionButton}>
-                            <Text style={[styles.button, {color: cancelColor}]}>CANCEL</Text>
-                          </View>
+                        onPress={this.cancelNewUser}
+                      >
+                        <View style={styles.userActionButton}>
+                          <Text style={[styles.button, {color: cancelColor}]}>CANCEL</Text>
+                        </View>
                       </TouchableNativeFeedback>
                       <TouchableNativeFeedback
-                          // background={TouchableNativeFeedback.SelectableBackgroundBorderless()}
-                          onPress={this.addNewUser}
-                        >
-                          <View style={styles.userActionButton}>
-                            <Text style={[styles.button, {color: okChoiceColor}]}>ADD</Text>
-                          </View>
+                        onPress={this.addNewUser}
+                      >
+                        <View style={styles.userActionButton}>
+                          <Text style={[styles.button, {color: okChoiceColor}]}>ADD</Text>
+                        </View>
                       </TouchableNativeFeedback>
                     </View>
                   </View>

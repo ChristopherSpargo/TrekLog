@@ -138,16 +138,16 @@ export class StorageSvc {
   verifyDataVersion = (t: TrekObj) : boolean => {
     let upgraded = false;
     // for(let i=0; i<t.pointList.length; i++){
-    //   if(t.pointList[i].s === undefined){
+    //   if(t.pointList[i].t === undefined){
     //     upgraded = true;
     //     if( i > 0){
-    //       t.pointList[i].s = t.pointList[i-1].s;
+    //       t.pointList[i].t = t.pointList[i-1].t;
     //     }
-    //     else t.pointList[i].s = 0;
+    //     else t.pointList[i].t = 0;
     //   }
     // }
 
-    if(t.calories === undefined){ t.dataVersion = '4'; }
+    if(t.calories === undefined){ t.dataVersion = '4.3'; }
     if (t.dataVersion !== CURR_DATA_VERSION){
       let dv = t.dataVersion;
       t.dataVersion = CURR_DATA_VERSION;
@@ -194,6 +194,8 @@ export class StorageSvc {
   // convert version 4.3 trek to version 4.4
   upgradeFrom4_3 = (t: TrekObj) => {
     t.calories = this.utilsSvc.computeCalories(t.pointList, t.type, t.hills, t.weight, t.packWeight);
+    // alert(t.type + '\n' + t.weight + '\n'  + t.packWeight + '\n' + t.date + '\n' + t.calories )
+    if(isNaN(t.calories)) { t.calories = 0; }
   }
 
   convertTrekToDB = (trek: TrekObj) => {

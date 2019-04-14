@@ -3,7 +3,7 @@ import { View, StyleSheet, Text } from 'react-native';
 import { observer, inject } from 'mobx-react'
 import { NavigationActions } from 'react-navigation';
 
-import { CONTROLS_HEIGHT } from './App';
+import { NAV_ICON_SIZE } from './App';
 import { TrekInfo, ALL_SELECT_BITS } from './TrekInfoModel';
 import IconButton from './IconButtonComponent';
 import DashBoard from './DashBoardComponent';
@@ -29,23 +29,23 @@ class SummaryScreen extends Component<{
 
   tInfo = this.props.trekInfo;
   fS = this.props.filterSvc;
-  dashBoardRef;
   activeNav = '';
 
   static navigationOptions = ({ navigation }) => {
+    const params = navigation.state.params || {};
+
     return {
       header: <TrekLogHeader titleText="Summary"
                              icon="*"
                              backButtonFn={() =>  navigation.dispatch(goBack)}
-              />
+                             use={params.use}
+              />,
     };
-  };  
-
+  }  
   _didFocusSubscription;
   
   constructor(props) {
     super(props);
-    this.dashBoardRef = React.createRef();
     this._didFocusSubscription = props.navigation.addListener('didFocus', () => this.init());
   }
 
@@ -60,6 +60,7 @@ class SummaryScreen extends Component<{
   init = () => {
     let typeSels;
 
+    this.props.navigation.setParams({use: this.tInfo.user});
     this.tInfo.updateDashboard = true;
     typeSels = this.tInfo.typeSelections;
     this.tInfo.setTypeSelections(ALL_SELECT_BITS);
@@ -93,28 +94,14 @@ class SummaryScreen extends Component<{
 
     const { disabledTextColor, pageBackground, navIconColor } = this.props.uiTheme.palette;
     const { controlsArea, navItem, navIcon } = this.props.uiTheme;
-    const navIconSize = 24;
+    const navIconSize = NAV_ICON_SIZE;
     const extraFilters = this.fS.extraFilterSet();
 
     const styles = StyleSheet.create({
       container: { ... StyleSheet.absoluteFillObject, backgroundColor: pageBackground },
-      caAdjust: {
-        height: CONTROLS_HEIGHT,
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-around",
-        backgroundColor: controlsArea.backgroundColor,
-        borderTopWidth: 1,
-        borderStyle: "solid",
-        borderTopRightRadius: 0,
-        borderTopLeftRadius: 0,
-        borderColor: controlsArea.borderColor,
-        borderLeftWidth: 0,
-        borderRightWidth: 0,
-      },
       sloganArea: {
         alignItems: "center",
-        marginBottom: 15,
+        marginBottom: 12,
         marginTop: 20,
       },
       slogan: {
@@ -124,10 +111,6 @@ class SummaryScreen extends Component<{
       },
       dashboardArea: {
         flex: 1,
-        // position: "absolute",
-        // bottom: CONTROLS_HEIGHT,
-        // left: 0,
-        // right: 0,
       }
     });
 
@@ -145,11 +128,10 @@ class SummaryScreen extends Component<{
               <DashBoard
                 navigation={this.props.navigation}
                 trekCount={this.props.trekInfo.trekCount}
-                ref={this.dashBoardRef} 
               />
             </View>
           }
-          <View style={[styles.caAdjust]}>
+          <View style={controlsArea}>
             <IconButton 
               iconSize={navIconSize}
               icon={extraFilters ? "FilterRemove" : "Filter"}
@@ -162,7 +144,7 @@ class SummaryScreen extends Component<{
             />
             <IconButton 
               iconSize={navIconSize}
-              icon="ViewList"
+              icon="ChartBar"
               style={navItem}
               iconStyle={navIcon}
               color={navIconColor}

@@ -360,7 +360,7 @@ class ReviewTreks extends Component<
     const statusBarHt = 15;
     const sortControlsHt = 30;
     const areaHt = height - (statusBarHt + pageTitleSpacing + HEADER_HEIGHT + pageTitleHt + CONTROLS_HEIGHT);
-    const { cardLayout, controlsArea, roundedTop, navIcon, navItem } = this.props.uiTheme;
+    const { cardLayout, controlsArea, navIcon, navItem } = this.props.uiTheme;
     const {
       highTextColor,
       disabledTextColor,
@@ -533,10 +533,10 @@ class ReviewTreks extends Component<
         )}
         {(!this.fS.dataReady || this.deletingTrek) && <Waiting />}
         {!gotTreks && (
-          <View style={[controlsArea, roundedTop]}>
+          <View style={controlsArea}>
             <IconButton
               iconSize={NAV_ICON_SIZE}
-              icon="Filter"
+              icon={this.fS.extraFilterSet() ? "FilterRemove" : "Filter"}
               style={navItem}
               iconStyle={navIcon}
               color={navIconColor}
@@ -547,7 +547,7 @@ class ReviewTreks extends Component<
           </View>
         )}
         {gotTreks && (
-          <View style={[controlsArea, roundedTop]}>
+          <View style={controlsArea}>
             <IconButton
               iconSize={NAV_ICON_SIZE}
               icon="Delete"

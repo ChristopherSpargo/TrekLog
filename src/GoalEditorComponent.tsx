@@ -205,7 +205,7 @@ class GoalEditor extends Component<{
 
     const { mediumTextColor, pageBackground, trekLogBlue, highTextColor, dividerColor,
             navIconColor, highlightedItemColor, primaryColor } = this.props.uiTheme.palette;
-    const { cardLayout, controlsArea, roundedTop, navItem, navIcon } = this.props.uiTheme;
+    const { cardLayout, controlsArea, navItem, navIcon } = this.props.uiTheme;
     const validGoal = this.gS.validGoal(); 
     const editNew = this.gS.goalEditMode === 'New'
     const CAMetricUnits = this.gS.goalActivity === "Burn" ? CABurnGoalMetricUnitsArray : CAGoalMetricUnitsArray;
@@ -612,7 +612,7 @@ class GoalEditor extends Component<{
           </ScrollView>
         </View>    
         {!this.keyboardOpen && 
-          <View style={[controlsArea, roundedTop]}>
+          <View style={controlsArea}>
             <IconButton 
               iconSize={NAV_ICON_SIZE}
               icon="ArrowBack"
