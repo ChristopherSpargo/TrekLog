@@ -1,7 +1,9 @@
 import React from 'react';
 import { Animated } from 'react-native';
+import { observer } from 'mobx-react'
 
-export class FadeInView extends React.Component<{ 
+@observer
+export class ExpandView extends React.Component<{ 
   startValue ?: number,
   endValue ?: number,
   bgColor ?: string,
@@ -14,7 +16,18 @@ export class FadeInView extends React.Component<{
     fadeAnim: new Animated.Value(this.props.startValue)  // Initial value for opacity   
   }
 
+  componentDidMount() {
+    requestAnimationFrame(() => {
+      this.open();
+    })
+  }
+
+  componentWillUnmount() {
+    this.close();
+  }
+
   componentDidUpdate(prev){
+    // alert(this.props.open)
     if (prev.open !== this.props.open){
       this.props.open ? this.open() : this.close();
     }
@@ -24,10 +37,10 @@ export class FadeInView extends React.Component<{
     Animated.timing(                  // Animate over time
       this.state.fadeAnim,            // The animated value to drive
       {
-        toValue: this.props.endValue, // Animate to final opacity
-        duration: this.props.duration,                // Make it take a while
-        useNativeDriver: true,
-      }       
+        toValue: this.props.endValue, // Animate to final Y position
+        duration: this.props.duration, 
+        useNativeDriver: true,         
+      }
     ).start();                        // Starts the animation
   }
 
@@ -35,8 +48,8 @@ export class FadeInView extends React.Component<{
     Animated.timing(                  // Animate over time
       this.state.fadeAnim,            // The animated value to drive
       {
-        toValue: this.props.startValue,    // Animate to starting opacity 
-        duration: this.props.duration,                // Make it take a while
+        toValue: this.props.startValue,    // Animate to starting Y position
+        duration: 10,            
         useNativeDriver: true,         
       }
     ).start();                        // Starts the animation
@@ -49,7 +62,7 @@ export class FadeInView extends React.Component<{
         style={{
           ...this.props.style,
           backgroundColor: this.props.bgColor,
-          opacity: fadeAnim         // Bind scaleY to animated value
+          transform: [{translateY: fadeAnim}]         // Bind translateY to animated value
         }}
       >
         {this.props.children}
@@ -58,4 +71,4 @@ export class FadeInView extends React.Component<{
   }
 }
 
-export default FadeInView;
+export default ExpandView;

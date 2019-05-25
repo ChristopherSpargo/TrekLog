@@ -8,6 +8,7 @@ import RadioGroup from './RadioGroupComponent';
 import SlideUpView from './SlideUpComponent';
 import { CONTROLS_HEIGHT } from './App';
 import SvgIcon from './SvgIconComponent';
+import { TrekInfo } from './TrekInfoModel';
 
 export interface LimitsObj {
   headingIcon   ?: string,    // icon for the header
@@ -24,14 +25,14 @@ export interface LimitsObj {
 
 // dialog used for single value string input
 
-@inject('uiTheme')
+@inject('uiTheme', 'trekInfo')
 @observer
 class TrekLimitsForm extends React.Component<{   
-  bottom        ?: number,    // bottom offset for form area
   open        : boolean,    // true if component is open
   done       ?: string,    // 'Close' if call close function, 'Dismiss' if call dismiss function
   limits      : LimitsObj,  // object with limits form config info
   uiTheme     ?: any,
+  trekInfo    ?: TrekInfo,
 }, {} > {
 
   @observable value;
@@ -130,16 +131,16 @@ class TrekLimitsForm extends React.Component<{
   render() {
 
     const { highTextColor, dividerColor, mediumTextColor, headerBackgroundColor, textOnPrimaryColor,
-             } = this.props.uiTheme.palette;
-    const { cardLayout } = this.props.uiTheme;
+            pageBackground, disabledTextColor } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
+    const { cardLayout, roundedTop } = this.props.uiTheme;
     const pHolder = this.props.limits.placeholderValue;
-    const formBottom = this.props.bottom !== undefined ? this.props.bottom : CONTROLS_HEIGHT;
+    const formHt = 165 + CONTROLS_HEIGHT;
 
     const styles = StyleSheet.create({
       container: { ... StyleSheet.absoluteFillObject },
       formArea: {
         position: "absolute",
-        bottom: formBottom,
+        bottom: 0,
         left: 0,
         right: 0,
         zIndex: this.zValue,
@@ -153,7 +154,8 @@ class TrekLimitsForm extends React.Component<{
         paddingLeft: 0,
         paddingRight: 0,
         borderBottomWidth: 0,
-        minHeight: 145,
+        minHeight: formHt,
+        backgroundColor: pageBackground,
       },
       header: {
         paddingLeft: 10,
@@ -195,6 +197,7 @@ class TrekLimitsForm extends React.Component<{
         fontWeight: "300",
         textAlign: "center",
         fontSize: 18,
+        color: highTextColor,
       },      
       numberInput: {
         width: 75,
@@ -216,8 +219,8 @@ class TrekLimitsForm extends React.Component<{
               beforeOpenFn={this.setVisible}
               afterCloseFn={this.setNotVisible}
               >
-              <View style={[cardLayout, styles.cardCustom]}>
-                <View style={styles.header}>
+              <View style={[cardLayout, styles.cardCustom, roundedTop]}>
+                <View style={[styles.header, roundedTop]}>
                   {this.props.limits.headingIcon &&
                     <SvgIcon 
                       style={{marginRight: 4, backgroundColor: 'transparent'}}
@@ -235,6 +238,7 @@ class TrekLimitsForm extends React.Component<{
                       <TextInput
                           style={[styles.textInputItem, styles.numberInput]}
                           onChangeText={(text) => this.setValue(text)}
+                          placeholderTextColor={disabledTextColor}
                           placeholder={pHolder}
                           value={this.value}
                           underlineColorAndroid={mediumTextColor}

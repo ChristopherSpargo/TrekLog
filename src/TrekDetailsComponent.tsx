@@ -1,5 +1,6 @@
 import React, { Component } from 'react';
-import { View, Text, StyleSheet, TouchableNativeFeedback } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
+import { RectButton } from 'react-native-gesture-handler'
 import { observer, inject } from 'mobx-react';
 import { action, observable } from 'mobx';
 
@@ -132,7 +133,7 @@ export class TrekDetails extends Component<{
     this.showStepsPerMin = !this.showStepsPerMin;
   }
 
-  // toggle between displaying total calories and net calories
+  // toggle between displaying total calories and calories/min
   @action
   toggleShowTotalCalories = () => {
     this.showTotalCalories = !this.showTotalCalories;
@@ -151,28 +152,27 @@ export class TrekDetails extends Component<{
 
   // process a touch on a switchable value, allow touch feedback first
   callSwitchFn = (id: string) => {
-    requestAnimationFrame(() => {     // allow touch feedback
-      switch(id) {
-        case 'Dist':
-          if (this.props.switchSysFn) { this.props.switchSysFn(); }
-          break;
-        case 'Speed':
-          this.toggleAvgSpeedorTimeDisplay();
-          break;
-        case 'Steps':
-          this.toggleShowStepsPerMin();
-          break;
-        case 'Cals':
-          this.toggleShowTotalCalories();
-          break;
-        default:
-      }
-    })
+    switch(id) {
+      case 'Dist':
+        if (this.props.switchSysFn) { this.props.switchSysFn(); }
+        break;
+      case 'Speed':
+        this.toggleAvgSpeedorTimeDisplay();
+        break;
+      case 'Steps':
+        this.toggleShowStepsPerMin();
+        break;
+      case 'Cals':
+        this.toggleShowTotalCalories();
+        break;
+      default:
+    }
   }
 
   render() {
     const { highTextColor, dividerColor, mediumTextColor, trekLogBlue, listIconColor, secondaryColor,
-            pageBackground, disabledTextColor, highlightedItemColor } = this.props.uiTheme.palette;
+            pageBackground, disabledTextColor, highlightedItemColor, rippleColor
+          } = this.props.uiTheme.palette[this.tInfo.colorTheme];
     const tInfo = this.props.trekInfo;
     const uSvc = this.props.utilsSvc;
     const selectable = this.props.selectable;
@@ -187,7 +187,7 @@ export class TrekDetails extends Component<{
     const speedLabel = showSpeed ? 'Average Speed' : 'Average Pace';
     const stepsLabel = (this.showStepsPerMin) ? (STEP_NAMES[tInfo.type] + ' Rate')
                                               : PLURAL_STEP_NAMES[tInfo.type];
-    const calsLabel  = (this.showTotalCalories) ? 'Calories' : 'Net Calories';
+    const calsLabel  = (this.showTotalCalories) ? 'Calories' : 'Calories/Min';
     const carIconSize = 14;
 
 
@@ -200,13 +200,11 @@ export class TrekDetails extends Component<{
         flexDirection: "column",
         justifyContent: "flex-start",
         paddingTop: 0,
-        // height: areaHt,
       },
       sortButton: {
         paddingLeft: 15,
         minHeight: sortButtonHeight,
         flexDirection: "row",
-        justifyContent: "space-between",
         alignItems: "center",
         backgroundColor: pageBackground,
       },
@@ -243,7 +241,9 @@ export class TrekDetails extends Component<{
         color: highTextColor,
       },
       sortButtonArea: {
+        minHeight: sortButtonHeight,
         minWidth: 80,
+        justifyContent: "center",
         alignItems: "flex-end",
       },
       sortButtonValue: {
@@ -311,8 +311,9 @@ export class TrekDetails extends Component<{
           <View style={[styles.divider, dividerCheck.indexOf(sortVal) !== -1 ? styles.bcTrans : {}]}/>
           {canSelect &&
             <View style={[styles.sortButton, sortVal === sortType ? styles.sortHighlight : {}]}>
-              <TouchableNativeFeedback
-                background={TouchableNativeFeedback.SelectableBackgroundBorderless()}
+              <RectButton
+                rippleColor={rippleColor}
+                style={{flex: 1}}
                 onPress={() => this.callSelectFn(sortType)}
               >
                 <View style={styles.sortButtonTrigger}>
@@ -324,27 +325,26 @@ export class TrekDetails extends Component<{
                   />
                   <Text style={styles.sortButtonText}>{label}</Text>
                   {(this.tInfo.drivingACar && sortType === 'Cals') && 
-                        <SvgIcon
-                          style={styles.carIcon}
-                          size={carIconSize}
-                          paths={APP_ICONS.Car}
-                          fill={secondaryColor}
-                        />
-                      }
-                  
+                    <SvgIcon
+                      style={styles.carIcon}
+                      size={carIconSize}
+                      paths={APP_ICONS.Car}
+                      fill={secondaryColor}
+                    />
+                  }
                 </View>
-              </TouchableNativeFeedback>
+              </RectButton>
               {selValue &&
-                <TouchableNativeFeedback
-                  background={TouchableNativeFeedback.SelectableBackgroundBorderless()}
+                <RectButton
+                  rippleColor={rippleColor}
                   onPress={() => this.callSwitchFn(sortType)}>
                     <View style={styles.sortButtonArea}>
                       <Text style={[styles.sortButtonValue, styles.selectable]}>{valueFn()}</Text>
                     </View>
-                </TouchableNativeFeedback>
+                </RectButton>
               }
               {!selValue && 
-                <View>
+                <View style={styles.sortButtonArea}>
                   <Text style={styles.sortButtonValue}>{valueFn()}</Text>
                 </View>
               }
@@ -362,13 +362,13 @@ export class TrekDetails extends Component<{
                 <Text style={styles.sortButtonText}>{label}</Text>
               </View>
               {selValue &&
-                <TouchableNativeFeedback
-                  background={TouchableNativeFeedback.SelectableBackgroundBorderless()}
+                <RectButton
+                  rippleColor={rippleColor}
                   onPress={() => this.callSwitchFn(sortType)}>
                     <View style={styles.sortButtonArea}>
                       <Text style={[styles.sortButtonValue, styles.selectable]}>{valueFn()}</Text>
                     </View>
-                </TouchableNativeFeedback>
+                </RectButton>
               }
               {!selValue && 
                 <View>

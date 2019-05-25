@@ -39,6 +39,7 @@ export interface BarData  {
   label2: string,     // line 2 (if any) of bar label
   type?: string,      // type of trek this is for
   icon?: string,      // icon to show if different types in graph
+  images?: boolean,   // true if trek has any images
   indicator: string,   // label shown below bars, like an X axis, that also indicates which bar is in focus 
                       // (currently Trek date - blue and bold if focused, black and normal if not) 
   indicatorFill: string, // color for indicator text
@@ -308,9 +309,7 @@ export class FilterSvc {
   setTypeSels = (value: number) => {
     this.trekInfo.setUpdateGraph(true);
     this.trekInfo.setTypeSelections(value );
-    requestAnimationFrame(() => {
-      this.filterTreks();      
-    })
+    this.filterTreks();      
   }
 
 
@@ -524,10 +523,8 @@ export class FilterSvc {
   // toggle the sort by date property
   @action
   toggleSortByDate = () => {
-    requestAnimationFrame(() => {
-      this.setSortByDate(!this.sortByDate);
-      this.setSortDirection(this.sortDirection);
-    })
+    this.setSortByDate(!this.sortByDate);
+    this.setSortDirection(this.sortDirection);
   }
 
   // set the sortDirection filter property and process the existing filteredTreks
@@ -544,7 +541,7 @@ export class FilterSvc {
 
   @action
   setDataReady = (value: boolean) => {
-    this.dataReady = value;
+    this.dataReady = value && this.trekInfo.dataReady;
   }
 
   setFilteredTreks = (list: number[]) => {
@@ -935,6 +932,7 @@ export class FilterSvc {
       let barItem : BarData = {} as BarData;
       barItem.type = t.type;
       barItem.icon = t.type;      // show type icon above bars
+      barItem.images = t.trekImages !== undefined;
       switch(this.show){
         case "Dist":
           let d = this.utilsSvc.getRoundedDist(t.trekDist, this.trekInfo.distUnits(), true);

@@ -1,6 +1,7 @@
 import React, { Component } from 'react';
 import { View, StyleSheet, Text } from 'react-native';
-import { observer, inject } from 'mobx-react'
+import { observer, inject } from 'mobx-react';
+import { observable, action } from 'mobx';
 import { NavigationActions } from 'react-navigation';
 
 import { NAV_ICON_SIZE } from './App';
@@ -8,40 +9,32 @@ import { TrekInfo, ALL_SELECT_BITS } from './TrekInfoModel';
 import IconButton from './IconButtonComponent';
 import DashBoard from './DashBoardComponent';
 import { ToastModel } from './ToastModel';
-import { StorageSvc } from './StorageService';
 import { LocationSvc } from './LocationService';
 import { FilterSvc } from './FilterService';
 import TrekLogHeader from './TreklogHeaderComponent';
+import { GroupSvc } from './GroupService';
+import RadioPicker from './RadioPickerComponent';
 
 const goBack = NavigationActions.back() ;
 
-@inject('trekInfo', 'uiTheme', 'toastSvc', 'storageSvc', 'locationSvc', 'filterSvc')
+@inject('trekInfo', 'uiTheme', 'toastSvc', 'locationSvc', 'filterSvc', 'groupSvc')
 @observer
 class SummaryScreen extends Component<{
   navigation ?: any,
   toastSvc ?: ToastModel,
-  storageSvc ?: StorageSvc,
   locationSvc ?: LocationSvc,
   filterSvc ?: FilterSvc,
   trekInfo ?: TrekInfo,
+  groupSvc ?: GroupSvc,
   uiTheme ?: any
 }, {} > {
+
+  @observable radioPickerOpen;
 
   tInfo = this.props.trekInfo;
   fS = this.props.filterSvc;
   activeNav = '';
 
-  static navigationOptions = ({ navigation }) => {
-    const params = navigation.state.params || {};
-
-    return {
-      header: <TrekLogHeader titleText="Summary"
-                             icon="*"
-                             backButtonFn={() =>  navigation.dispatch(goBack)}
-                             use={params.use}
-              />,
-    };
-  }  
   _didFocusSubscription;
   
   constructor(props) {
@@ -60,13 +53,18 @@ class SummaryScreen extends Component<{
   init = () => {
     let typeSels;
 
-    this.props.navigation.setParams({use: this.tInfo.user});
     this.tInfo.updateDashboard = true;
     typeSels = this.tInfo.typeSelections;
     this.tInfo.setTypeSelections(ALL_SELECT_BITS);
     this.fS.filterAndSort();
     this.tInfo.setTypeSelections(typeSels);
     this.tInfo.clearTrek();
+  }
+
+
+  // call the colorTheme swap function and then reset the header params
+  swapColorTheme = () => {
+    this.tInfo.swapColorTheme();
   }
 
   setActiveNav = (val) => {
@@ -90,10 +88,32 @@ class SummaryScreen extends Component<{
     })
   }
 
+  // set the open status of the radioPicker component
+  @action
+  setRadioPickerOpen = (status: boolean) => {
+    this.radioPickerOpen = status;
+  }
+
+  // change the current group
+  getDifferentGroup = () => {
+    this.props.groupSvc.getGroupSelection(this.setRadioPickerOpen, this.tInfo.group, 'Select A Group')
+    .then((newGroup) => {
+      this.props.trekInfo.setTrekLogGroupProperties(newGroup)
+      .then((result) => {
+        if(result === 'OK'){
+          this.props.navigation.setParams({use: this.tInfo.group});
+        }
+      })
+    })
+    .catch(() =>{ 
+    })
+  }
+
   render() {
 
-    const { disabledTextColor, pageBackground, navIconColor } = this.props.uiTheme.palette;
-    const { controlsArea, navItem, navIcon } = this.props.uiTheme;
+    const { disabledTextColor, pageBackground, navIconColor, navItemBorderColor, headerTextColor,
+            highTextColor } = this.props.uiTheme.palette[this.tInfo.colorTheme];
+    const { controlsArea, navItem, navIcon, cardLayout, pageTitle } = this.props.uiTheme;
     const navIconSize = NAV_ICON_SIZE;
     const extraFilters = this.fS.extraFilterSet();
 
@@ -115,14 +135,27 @@ class SummaryScreen extends Component<{
     });
 
     return (
-      
       <View style={styles.container}>
       {this.tInfo.appReady && 
-        <View style={[styles.container, {justifyContent: "space-between"}]}>
-          <View style={styles.sloganArea}>
+        <View style={[styles.container]}>
+        <TrekLogHeader titleText="Summary"
+                              icon="*"
+                              backButtonFn={() =>  this.props.navigation.dispatch(goBack)}
+                              headerRightIcon="YinYang"
+                              headerRightIconColor={headerTextColor}
+                              headerRightButtonStyle={{marginTop: 10}}
+                              headerRightFn={this.swapColorTheme}
+                              group={this.tInfo.group}
+                              setGroupFn={this.getDifferentGroup}
+        />
+          <RadioPicker pickerOpen={this.radioPickerOpen}/>
+          <View style={[cardLayout, { paddingBottom: 0 }]}>
+            <Text style={[pageTitle, {color: highTextColor}]}>Activity Summary</Text>
+          </View>
+          {/* <View style={styles.sloganArea}>
             <Text style={styles.slogan}>"Information is strength ...</Text>
             <Text style={styles.slogan}>... Live strong, Live long "</Text>
-          </View>
+          </View> */}
           {this.props.trekInfo.dataReady && 
             <View style={styles.dashboardArea}>
               <DashBoard
@@ -136,6 +169,7 @@ class SummaryScreen extends Component<{
               iconSize={navIconSize}
               icon={extraFilters ? "FilterRemove" : "Filter"}
               style={navItem}
+              borderColor={navItemBorderColor}
               iconStyle={navIcon}
               color={navIconColor}
               raised
@@ -146,6 +180,7 @@ class SummaryScreen extends Component<{
               iconSize={navIconSize}
               icon="ChartBar"
               style={navItem}
+              borderColor={navItemBorderColor}
               iconStyle={navIcon}
               color={navIconColor}
               raised

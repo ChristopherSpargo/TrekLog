@@ -1,7 +1,7 @@
 import React from 'react';
 import { Component } from 'react';
 import { View, StyleSheet, Text, Image, Alert, Dimensions, 
-          CameraRoll, Slider, TouchableWithoutFeedback, StatusBar } from 'react-native';
+         Slider, TouchableWithoutFeedback, StatusBar } from 'react-native';
 import { RNCamera } from 'react-native-camera';
 import { observer, inject } from 'mobx-react';
 import { observable, action } from 'mobx';
@@ -16,12 +16,14 @@ import IconButton from './IconButtonComponent';
 import { ModalModel } from './ModalModel';
 import TrekLogHeader from './TreklogHeaderComponent';
 import { ToastModel } from './ToastModel';
-import { lowTextColor } from './App';
 import Waiting from './WaitingComponent';
+import { semitransBlack_2, semitransWhite_8, semitransBlack_5, semitransBlack_9, 
+       } from './App';
+import { StorageSvc } from './StorageService';
 
 const goBack = NavigationActions.back() ;
 
-@inject('trekInfo', 'uiTheme', 'utilsSvc', 'modalSvc', 'toastSvc')
+@inject('trekInfo', 'uiTheme', 'utilsSvc', 'modalSvc', 'toastSvc', 'storageSvc')
 @observer
 class TrekImages extends Component<{
   uiTheme ?: any,
@@ -29,6 +31,7 @@ class TrekImages extends Component<{
   modalSvc ?: ModalModel,
   trekInfo ?: TrekInfo,
   toastSvc ?: ToastModel,
+  storageSvc ?: StorageSvc,
   navigation ?: any
 }, {} > {
 
@@ -39,17 +42,28 @@ class TrekImages extends Component<{
     switch (cmd) {
       case 'show':
         return {
-          header: <TrekLogHeader titleText={params.title || ''}
+          header: <TrekLogHeader titleText={params.title || ' '}
                                       icon={params.icon || ''}
                                       headerRightIcon="Delete"
-                                      backgroundColor="rgba(0,0,0,.2)"
+                                      headerRightIconColor="white"
+                                      backgroundColor="rgba(0,0,0,.4)"
+                                      textColor="white"
                                       position="absolute"
                                       headerRightFn={params.deleteImage}
                                       backButtonFn={() =>  navigation.dispatch(goBack)}
                   />
         }
       case 'camera':
-      case 'hide':
+      return {
+        header: <TrekLogHeader titleText={params.title || ' '}
+                                    icon="*"
+                                    backgroundColor="rgba(0,0,0,.4)"
+                                    textColor="white"
+                                    position="absolute"
+                                    backButtonFn={() =>  navigation.dispatch(goBack)}
+                />
+      }
+    case 'hide':
       default:
         return {
           header: null
@@ -101,7 +115,7 @@ class TrekImages extends Component<{
     let cmd = this.props.navigation.getParam('cmd');
 
     this.mode = cmd;
-    this.hideStatusBar();
+    // this.hideStatusBar();
     this.setCameraIsOpen(false);
     this.setVideoRecording(false);
     this.setPicturePaused(false);
@@ -137,7 +151,7 @@ class TrekImages extends Component<{
     this.setDisplayingImage(false);
     this.setVideoPaused(true);
     this.currentImageSet = undefined;
-    this.showStatusBar();
+    // this.showStatusBar();
   }
 
   hideStatusBar= () => {
@@ -200,7 +214,7 @@ class TrekImages extends Component<{
   @action
   setCameraIsOpen = (status: boolean) => {
     this.cameraIsOpen = status;
-    this.setHeaderVisibility(!status);
+    // this.setHeaderVisibility(!status);
   }
 
   // open the camera component
@@ -249,6 +263,12 @@ class TrekImages extends Component<{
     this.cameraZoom = value;
   }
 
+  // set the value of the currentImage property
+  @action
+  setCurrentImage = (image: TrekImage) => {
+    this.currentImage = image;
+  }
+
   // set the value of the currentImageObject property
   @action
   setCurrentImageSet = (index: number) => {
@@ -265,13 +285,15 @@ class TrekImages extends Component<{
   setCurrentImageIndex = (val: number) => {
     this.currentImageIndex = val;
     if(this.currentImageSet){
-      this.currentImage = this.currentImageSet.images[val];
-      let imageType = IMAGE_TYPE_INFO[this.currentImage.type].name;
-      let title = imageType;
-      if (this.currentImage.time){
-        title += ' at ' +  this.props.utilsSvc.formatTime(this.currentImage.time);
+      let ci : TrekImage = {} as TrekImage;
+      Object.assign(ci, this.currentImageSet.images[val]);
+      if(/TrekLog/g.test(ci.uri)) {
+        ci.uri = 'file://' + ci.uri;
       }
+      this.setCurrentImage(ci);
+      let title = this.tInfo.formatImageTitle(this.currentImageSetIndex, val);
       this.props.navigation.setParams({title: title});
+      title = this.tInfo.formatImageTitle(this.currentImageSetIndex, val, true);
       this.setImageBackgroundTextTimeout(title + ' is missing');
     }
   }
@@ -338,14 +360,15 @@ class TrekImages extends Component<{
   // the user touched the video display screen
   toggleShowVideoContols = () => {
     if (this.currentImage.type === IMAGE_TYPE_VIDEO) {
-      if (!this.showVideoControls){
-        this.setShowVideoControls(true);
-        this.setHideControlsTimer();
-      } 
+      if (this.videoPaused){
+        this.setHeaderVisibility(!this.headerVisible);
+        this.setShowVideoControls(!this.showVideoControls);
+      }
       else {
-        if (this.videoPaused){
-          this.setHeaderVisibility(!this.headerVisible);
-        }
+        if (!this.showVideoControls){
+          this.setShowVideoControls(true);
+          this.setHideControlsTimer();
+        } 
         else {
           this.setShowVideoControls(false);
         }
@@ -456,6 +479,7 @@ class TrekImages extends Component<{
   startVideoRecording = async () => {
       if (this.camera) {
         this.setVideoRecording(true);
+        this.setHeaderNotVisible();
         const options = {quality: RNCamera.Constants.VideoQuality["1080p"]};
         this.imageType = IMAGE_TYPE_VIDEO;
         this.imageTime = new Date().getTime();
@@ -463,11 +487,11 @@ class TrekImages extends Component<{
         .then((data) => {
           this.cameraData = data;
           this.setPicturePaused(true);
-          // this.handlePicture(this.cameraData, IMAGE_TYPE_VIDEO, this.tInfo.lastPoint());
-          // this.closeCamera();
+          this.setHeaderVisible();
         })
         .catch((err) => {
           Alert.alert('Video Error', err);
+          this.setHeaderVisible();
         })
       }
   };
@@ -504,16 +528,17 @@ class TrekImages extends Component<{
 
   handlePicture = (data: any, type: TrekImageType, loc: TrekPoint) => {
     this.setWaitingForSave(true);
-    CameraRoll.saveToCameraRoll(data.uri)
+    this.props.storageSvc.saveTrekLogPicture(data.uri)
     .then((uri) => {
       this.tInfo.addTrekImage(uri, data.deviceOrientation, type, loc.l, this.imageTime);
       this.setWaitingForSave(false);
       this.props.toastSvc.toastOpen({tType: 'Info', content: IMAGE_TYPE_INFO[type].name + ' saved'});
       this.resumeCameraPreview();
     })
-    .catch((_error) => {
+    .catch((error) => {
       this.setWaitingForSave(false);
-      this.props.toastSvc.toastOpen({tType: 'Error',content: 'Error saving ' + IMAGE_TYPE_INFO[type].name, time: 3000});
+      this.props.toastSvc.toastOpen({tType: 'Error',content: 'Error saving ' + 
+                                            IMAGE_TYPE_INFO[type].name + ': ' + error, time: 3000});
       this.resumeCameraPreview();
     })
   }
@@ -557,15 +582,18 @@ class TrekImages extends Component<{
   render () {
     const tInfo = this.tInfo;
     tInfo.setUpdateMap(false);
-    const {  mediumTextColor, trekLogGreen, trekLogRed, darkBackground } = this.props.uiTheme.palette;
+    const { trekLogGreen, trekLogRed,
+          } = this.props.uiTheme.palette[this.tInfo.colorTheme];
+    const { navIcon } = this.props.uiTheme;
     const noPrev = !this.havePrevImage();
     const noNext = !this.haveNextImage();
     const imageSelectorWidth = 50;
     const cameraControlButtonSize = 72;
     const cameraControlIconSize = 48;
-    const controlsColor = "rgba(242,242,242,.8)";
+    const controlsColor = semitransWhite_8;
     const iWidth = Dimensions.get('window').width;
     const iHeight = Dimensions.get('window').height;
+    const buttonBorderColor = semitransBlack_5;
     
     const styles = StyleSheet.create({
       container: { ... StyleSheet.absoluteFillObject },
@@ -612,23 +640,15 @@ class TrekImages extends Component<{
         justifyContent: 'space-between', 
         alignItems: 'center', 
       },
-      cameraControlShadow: {
-        width: cameraControlButtonSize + 4,
-        height: cameraControlButtonSize + 4,
-        justifyContent: "center",
-        alignItems: "center",
-        backgroundColor: "rgba(255,255,255,.4)", 
-        borderRadius: (cameraControlButtonSize + 4)/2,
-      },
       cameraControlButtonStyle: {
         width: cameraControlButtonSize,
         height: cameraControlButtonSize,
         justifyContent: "center",
         alignItems: "center",
-        backgroundColor: "rgba(0,0,0,.2)", 
+        backgroundColor: semitransBlack_2, 
         borderWidth: 1,
         borderStyle: "solid",
-        borderColor: lowTextColor, //"rgba(0,51,153,.6)",
+        borderColor: buttonBorderColor,
         borderRadius: cameraControlButtonSize/2,
       },
       imageSelectorArea: {
@@ -644,6 +664,7 @@ class TrekImages extends Component<{
         left: 10,
         width: imageSelectorWidth,
         height: imageSelectorWidth,
+        borderRadius: imageSelectorWidth/2,
         justifyContent: "center",
         alignItems: "center",
       },
@@ -652,12 +673,15 @@ class TrekImages extends Component<{
         right: 10,
         width: imageSelectorWidth,
         height: imageSelectorWidth,
+        borderRadius: imageSelectorWidth/2,
         justifyContent: "center",
         alignItems: "center",
       },
-      imageSelectorIconStyle: {
-        backgroundColor: "rgba(0,0,0,.2)", 
+      imageSelectorStyle: {
+        backgroundColor: semitransBlack_2, 
         borderRadius: imageSelectorWidth/2,
+        borderStyle: "solid",
+        borderWidth: 1,
       },
       imageBackground: {
         position: "absolute",
@@ -669,7 +693,7 @@ class TrekImages extends Component<{
         alignItems: "center",
       },
       imageBackgroundMsg: {
-        color: mediumTextColor,
+        color: semitransBlack_9,
         fontSize: 18,
       },
       videoControlsArea: {
@@ -695,7 +719,7 @@ class TrekImages extends Component<{
         flexDirection: "row",
         alignItems: "center",
         paddingHorizontal: 5,
-        backgroundColor: "rgba(0,0,0,.5)",
+        backgroundColor: semitransBlack_5,
       },
       sliderText: {
         fontSize: 14,
@@ -703,19 +727,17 @@ class TrekImages extends Component<{
       },
     })
 
-    const CameraControl = ({icon, onPress, iSize = cameraControlIconSize, color = controlsColor, 
-                            shStyle = {}, ccStyle = {}}) => {
+    const CameraControl = ({icon, onPress, iSize = cameraControlIconSize, color = controlsColor}) => {
       return (  
-        <View style={[styles.cameraControlShadow, shStyle]}>
-          <View style={[styles.cameraControlButtonStyle, ccStyle]}>
             <IconButton 
               iconSize={iSize}
+              style={styles.cameraControlButtonStyle}
               icon={icon}
+              iconStyle={navIcon}
+              buttonSize={cameraControlButtonSize + 5}
               color={color}
               onPressFn={onPress}
             />
-          </View>
-        </View>
       )
     }
 
@@ -724,7 +746,6 @@ class TrekImages extends Component<{
         {(this.waitingForSave) &&
           <Waiting 
             msg={' Saving ' + IMAGE_TYPE_INFO[this.imageType].name + '... '}
-            bgColor={darkBackground}
           />
         }
         {(this.cameraIsOpen) &&
@@ -860,9 +881,11 @@ class TrekImages extends Component<{
                         <View style={styles.imageSelectorPrev}>
                           <IconButton 
                             iconSize={imageSelectorWidth}
+                            style={styles.imageSelectorStyle}
+                            borderColor={buttonBorderColor}
                             icon="ChevronLeft"
                             color={controlsColor}
-                            iconStyle={styles.imageSelectorIconStyle}
+                            iconStyle={navIcon}
                             onPressFn={this.prevImage}
                           />
                         </View>
@@ -871,9 +894,11 @@ class TrekImages extends Component<{
                         <View style={styles.imageSelectorNext}>
                           <IconButton
                             iconSize={imageSelectorWidth}
+                            style={styles.imageSelectorStyle}
+                            borderColor={buttonBorderColor}
                             icon="ChevronRight"
                             color={controlsColor}
-                            iconStyle={styles.imageSelectorIconStyle}
+                            iconStyle={navIcon}
                             onPressFn={this.nextImage}
                           />
                         </View>

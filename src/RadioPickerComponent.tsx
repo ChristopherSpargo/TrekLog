@@ -6,50 +6,58 @@ import {
   Text,
   ScrollView,
   TouchableNativeFeedback,
-  TouchableWithoutFeedback,
   Dimensions
 } from "react-native";
+// import { RectButton, TouchableWithoutFeedback, TouchableNativeFeedback,
+//          ScrollView } from 'react-native-gesture-handler';
 
 import {
   CONFIRM_Z_INDEX,
   BACKDROP_Z_INDEX,
-  pageBackground,
   ModalSvcContext,
+  TrekInfoContext,
   UiThemeContext
 } from "./App";
 import { APP_ICONS } from "./SvgImages";
 import RadioGroup from "./RadioGroupComponent";
 import SvgIcon from "./SvgIconComponent";
 import { ModalModel } from "./ModalModel";
+import { TrekInfo } from './TrekInfoModel';
 
 // dialog used for item selection from a list
 
-function RadioPicker() {
+function RadioPicker({pickerOpen}) {
   const modalSvc: ModalModel = useContext(ModalSvcContext);
   const uiTheme: any = useContext(UiThemeContext);
-  const [selection, setSelection] = useState("");
+  const trekInfo: TrekInfo = useContext(TrekInfoContext);
   const mData = modalSvc.rpData;
+  const [selection, setSelection] = useState();
 
   const { height } = Dimensions.get("window");
   const {
     highTextColor,
     dividerColor,
     mediumTextColor,
+    contrastingMask_3,
+    pageBackground,
+    rippleColor,
     primaryColor
-  } = uiTheme.palette;
-  const { cardLayout, footerButton, footerButtonText } = uiTheme;
+  } = uiTheme.palette[trekInfo.colorTheme];
+  const { cardLayout, roundedTop, roundedBottom, footerButton, footerButtonText } = uiTheme;
   const headerHeight = 50;
 
   const styles = StyleSheet.create({
     container: { ...StyleSheet.absoluteFillObject },
     formArea: {
-      marginVertical: 40,
-      marginHorizontal: 20
+      marginTop: 60,
+      marginBottom: 40,
+      marginHorizontal: 20,
+      backgroundColor: "transparent",
     },
     background: {
       ...StyleSheet.absoluteFillObject,
       zIndex: BACKDROP_Z_INDEX,
-      backgroundColor: "rgba(0,0,0,.4)"
+      backgroundColor: contrastingMask_3
     },
     cardCustom: {
       marginTop: 0,
@@ -59,9 +67,9 @@ function RadioPicker() {
       paddingBottom: 0,
       paddingLeft: 0,
       paddingRight: 0,
-      borderWidth: 0,
       maxHeight: height - 100,
-      zIndex: CONFIRM_Z_INDEX
+      zIndex: CONFIRM_Z_INDEX,
+      backgroundColor: pageBackground,
     },
     header: {
       flexDirection: "row",
@@ -98,7 +106,6 @@ function RadioPicker() {
     footer: {
       height: headerHeight,
       flexDirection: "row",
-      justifyContent: "space-around",
       alignItems: "center",
       borderStyle: "solid",
       borderTopColor: dividerColor,
@@ -109,12 +116,13 @@ function RadioPicker() {
       paddingVertical: 5,
       backgroundColor: pageBackground,
       paddingRight: 15,
-      paddingLeft: 30
+      paddingLeft: 30,
     },
     rgLabel: {
       color: highTextColor,
       fontSize: 20,
       paddingLeft: 30,
+      paddingRight: 30,
       flex: 1
     }
   });
@@ -132,6 +140,7 @@ function RadioPicker() {
       modalSvc
         .closeRadioPicker(400)
         .then(() => {
+          setSelection('');     // clear the local selection so it will be updated from mData in useEffect
           modalSvc.rpData.resolve(result);
         })
         .catch(() => {});
@@ -140,11 +149,12 @@ function RadioPicker() {
 
   // call the reject method
   function dismiss() {
-    setSelection("");   // clear the local selection so it will be updated from mData in useEffect
+    // setSelection(mData.selection);   
     setTimeout(() => {
       modalSvc
         .closeRadioPicker(400)
         .then(() => {
+          setSelection('');     // clear the local selection so it will be updated from mData in useEffect
           modalSvc.rpData.reject("CANCEL");
         })
         .catch(() => {});
@@ -153,13 +163,13 @@ function RadioPicker() {
 
   return useObserver(() => (
     <View style={styles.container}>
-      {modalSvc.radioPickerOpen && (
+      {(pickerOpen && mData.selectionNames.length) &&
         <View style={styles.container}>
-          <TouchableWithoutFeedback onPress={dismiss}>
+          {/* <TouchableWithoutFeedback onPress={dismiss}> */}
             <View style={styles.background}>
               <View style={styles.formArea}>
-                <View style={[cardLayout, styles.cardCustom]}>
-                  <View style={styles.header}>
+                <View style={[cardLayout, styles.cardCustom, roundedTop, roundedBottom]}>
+                  <View style={[styles.header, roundedTop]}>
                     {mData.headingIcon && (
                       <SvgIcon
                         style={{
@@ -176,7 +186,7 @@ function RadioPicker() {
                   </View>
                   <ScrollView>
                     <View style={styles.body}>
-                      {mData.selectionNames !== undefined && (
+                      {/* {mData.selectionNames !== undefined && ( */}
                         <RadioGroup
                           onChangeFn={setSelection}
                           selected={selection}
@@ -190,12 +200,12 @@ function RadioPicker() {
                           itemHeight={40}
                           radioFirst
                         />
-                      )}
+                      {/* )} */}
                     </View>
                   </ScrollView>
-                  <View style={styles.footer}>
+                  <View style={[styles.footer, roundedBottom]}>
                     <TouchableNativeFeedback
-                      background={TouchableNativeFeedback.SelectableBackgroundBorderless()}
+                      background={TouchableNativeFeedback.Ripple(rippleColor, true)}
                       onPress={dismiss}
                     >
                       <View style={[footerButton, { height: headerHeight }]}>
@@ -207,7 +217,7 @@ function RadioPicker() {
                       </View>
                     </TouchableNativeFeedback>
                     <TouchableNativeFeedback
-                      background={TouchableNativeFeedback.SelectableBackgroundBorderless()}
+                      background={TouchableNativeFeedback.Ripple(rippleColor, true)}
                       onPress={close}
                     >
                       <View style={[footerButton, { height: headerHeight }]}>
@@ -222,9 +232,9 @@ function RadioPicker() {
                 </View>
               </View>
             </View>
-          </TouchableWithoutFeedback>
+          {/* </TouchableWithoutFeedback> */}
         </View>
-      )}
+      }
     </View>
   ))
 }

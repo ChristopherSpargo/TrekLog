@@ -1,6 +1,7 @@
 import React, { Component } from 'react'
-import { View, StyleSheet, Text, ScrollView, TouchableNativeFeedback } from 'react-native'
-import { action } from 'mobx'
+import { View, StyleSheet, Text, ScrollView } from 'react-native'
+import { RectButton } from 'react-native-gesture-handler'
+import { action, observable } from 'mobx'
 import { observer, inject } from 'mobx-react'
 import { NavigationActions } from 'react-navigation';
 
@@ -11,20 +12,21 @@ import { UtilsSvc } from './UtilsService';
 import { ModalModel } from './ModalModel';
 import Waiting from './WaitingComponent';
 import { GoalsSvc } from './GoalsService';
-import { StorageSvc } from './StorageService';
 import { GoalDisplayObj } from './GoalsService';
 import { APP_ICONS } from './SvgImages';
 import SvgIcon from './SvgIconComponent';
 import SpeedDial, { SpeedDialItem } from './SpeedDialComponent';
 import TrekLogHeader from './TreklogHeaderComponent';
+import FadeInView from './FadeInComponent';
+import SlideDownView from './SlideDownComponent';
+import { SCROLL_DOWN_DURATION, FADE_IN_DURATION } from './App';
 
 const goBack = NavigationActions.back() ;
 
-@inject('trekInfo', 'toastSvc', 'uiTheme', 'utilsSvc', 'modalSvc', 'goalsSvc', 'storageSvc')
+@inject('trekInfo', 'toastSvc', 'uiTheme', 'utilsSvc', 'modalSvc', 'goalsSvc')
 @observer
 class Goals extends Component<{ 
   utilsSvc ?: UtilsSvc,
-  storageSvc ?: StorageSvc,
   goalsSvc ?: GoalsSvc,
   navigation ?: any
   uiTheme ?: any,
@@ -33,16 +35,8 @@ class Goals extends Component<{
   trekInfo ?: TrekInfo         // object with all non-gps information about the Trek
 }, {} > {
 
-  static navigationOptions = ({ navigation }) => {
-
-    return {
-      header: <TrekLogHeader titleText={navigation.getParam('title','Scanning...')}
-                             icon="*"
-                             backButtonFn={() =>  navigation.dispatch(goBack)}
-              />
-    };
-  };
-
+  @observable openGoals;
+  @observable headerTitle;
 
   selectedGoal = -1;             // index of currently selected goal list item (-1 if none)
   
@@ -51,6 +45,30 @@ class Goals extends Component<{
   uSvc = this.props.utilsSvc;
   APGIndex = -1;
 
+  _didFocusSubscription;
+  _willBlurSubscription;
+
+  constructor(props) {
+    super(props);
+    this.setHeaderTitle("Scanning...");
+    this._didFocusSubscription = props.navigation.addListener(
+      "didFocus",
+      () => {
+        this.setOpenGoals(true)
+      }
+    );
+  }
+
+  componentDidMount() {
+    requestAnimationFrame(() => {
+      this.setOpenGoals(true);
+    })
+    this._willBlurSubscription = this.props.navigation.addListener(
+      "willBlur",
+      () =>
+        this.setOpenGoals(false)
+    );
+  }
 
   componentWillMount() {
     // read the User's GoalsList from the database
@@ -65,7 +83,8 @@ class Goals extends Component<{
         this.gS.afterProcessGoals();
         this.gS.setDisplayList(gl);
         this.setSelectedGoal(0);
-        this.gS.updateDataReady(true);          
+        this.gS.updateDataReady(true);  
+        this.setOpenGoals(false);        
       }
       else {
       // Goals List is there but empty
@@ -83,6 +102,8 @@ class Goals extends Component<{
   }
 
   componentWillUnmount() {
+    this._didFocusSubscription && this._didFocusSubscription.remove();
+    this._willBlurSubscription && this._willBlurSubscription.remove();
     this.gS.removeAfterProcessGoalsFn(this.APGIndex - 1);
     this.gS.clearDisplayList();
     this.gS.updateDataReady(false);
@@ -92,12 +113,22 @@ class Goals extends Component<{
   setTitleParam = (titleMsg?: string) => {
     if(this.gS.goalList && (this.gS.goalList.length > 0)) {
       let plural = this.gS.goalList.length === 1 ? '' : 's';
-      this.props.navigation.setParams({title: 
-        titleMsg || (this.gS.goalList.length + ' Goal' + plural)});
+      this.setHeaderTitle(titleMsg || (this.gS.goalList.length + ' Goal' + plural));
     }
     else {
-      this.props.navigation.setParams({title: "No Goals"});
+      this.setHeaderTitle("No Goals");
     }
+  }
+
+  // Set the title in the header
+  @action
+  setHeaderTitle = (title: string) => {
+    this.headerTitle = title;
+  };
+
+  @action
+  setOpenGoals = (status: boolean) => {
+    this.openGoals = status;
   }
 
   // Format the storage key for this user's goals
@@ -126,9 +157,13 @@ class Goals extends Component<{
       content: "Delete goal of:", bigContent: '"' + this.gS.formatGoalStatement(g) + '"', 
       cancelText: 'CANCEL', deleteText: 'DELETE'})
     .then(() => {
+      this.setOpenGoals(false);
       this.removeGoalListEntry(index);
       this.gS.saveGoalList();
       this.setTitleParam();
+      requestAnimationFrame(() => {
+        this.setOpenGoals(true);
+      })
     })
     .catch(() => {
     });
@@ -137,7 +172,7 @@ class Goals extends Component<{
   // delete the selected goal from the list
   @action
   resetGoal = (index: number) => {
-    const {infoConfirmColor, infoConfirmTextColor} = this.props.uiTheme.palette;
+    const {infoConfirmColor, infoConfirmTextColor} = this.props.uiTheme.palette[this.tI.colorTheme];
     let g = this.gS.goalList[index];
 
     this.props.modalSvc.simpleOpen({heading: "Reset Goal", headingIcon: "History",
@@ -157,11 +192,13 @@ class Goals extends Component<{
     this.gS.setEditObjFields(this.gS.goalList[index]);
     this.gS.editGoalIndex = index;
     this.gS.setGoalEditMode('Edit');
+    // this.setOpenGoals(false);        
     this.props.navigation.navigate('GoalEditor', {title: 'Edit Goal'});
   }
 
   // Show the details of the given GoalDisplayObj
   showGoalDetails = (gdo: GoalDisplayObj) => {
+    // this.setOpenGoals(false);        
     this.props.navigation.navigate('GoalDetail', {title: this.gS.formatGoalStatement(gdo.goal), detailObj: gdo});
   }
 
@@ -170,6 +207,7 @@ class Goals extends Component<{
     this.gS.setNewDITGoalObj('');
     this.gS.editGoalIndex = -1;
     this.gS.setGoalEditMode('New');
+    // this.setOpenGoals(false);        
     this.props.navigation.navigate('GoalEditor', {title: 'New Goal', onAddFn: this.setTitleParam});
   }
 
@@ -206,12 +244,15 @@ class Goals extends Component<{
 
   render() {
 
-    const { mediumTextColor, disabledTextColor, dividerColor, highlightedItemColor,
-            pageBackground, highTextColor, secondaryColor } = this.props.uiTheme.palette;
-    const { cardLayout } = this.props.uiTheme;
+    const { mediumTextColor, disabledTextColor, dividerColor, highlightedItemColor, disabledHeaderTextColor,
+            pageBackground, highTextColor, secondaryColor, rippleColor, textOnSecondaryColor
+          } = this.props.uiTheme.palette[this.tI.colorTheme];
+    const { cardLayout, pageTitle } = this.props.uiTheme;
             const displayList = this.gS.displayList && this.gS.displayList.length > 0;
     const ribbonIconSize = 40;
     const ribbonLabelTextSize = 16;
+    const startOffset = -110 * (this.gS.displayList ? this.gS.displayList.length : 0);
+    const fadeDuration = 200 * (this.gS.displayList ? this.gS.displayList.length : 0);
 
     const styles=StyleSheet.create({
       container: { ... StyleSheet.absoluteFillObject, backgroundColor: pageBackground },
@@ -276,13 +317,8 @@ class Goals extends Component<{
         top: 0,
         bottom: 0,
       },
-      pageTitle: {
-        fontSize: 20,
-        color: highTextColor,
-        fontWeight: "bold",
-      },
       speedDialTrigger: {
-        backgroundColor: 'white',
+        backgroundColor: pageBackground,
       },
       divider: {
         flex: 1,
@@ -306,10 +342,17 @@ class Goals extends Component<{
               style={styles.addGoalFab}
               icon="Plus"
             />
+        <TrekLogHeader
+          titleText={this.headerTitle}
+          icon="*"
+          backButtonFn={() => this.props.navigation.dispatch(goBack)}
+          group={this.tI.group || "None"}
+          groupTextColor={disabledHeaderTextColor}
+      />
         {this.gS.dataReady &&
           <View style={styles.itemsArea}>
             <View style={[cardLayout, {marginBottom: 0, paddingBottom: 15}]}>
-              <Text style={styles.pageTitle}>Status of Goals</Text>
+              <Text style={[pageTitle, {color: highTextColor}]}>Status of Goals</Text>
             </View>
             <ScrollView>
               {!displayList && 
@@ -320,36 +363,37 @@ class Goals extends Component<{
               {displayList && 
                 <View style={{paddingBottom: 85}}>
                   {this.gS.displayList.map((dlItem, index) => (
-                    <View key={index}>
-                      <View style={[cardLayout, styles.cardCustom, 
-                                  this.selectedGoal === index ? styles.goalHighlight : {}]}>
-                        <TouchableNativeFeedback
-                          background={TouchableNativeFeedback.SelectableBackgroundBorderless()}
-                          onPress={this.showSelectedGoal.bind(this, index)}
-                        >
-                          <View>
-                            <View style={styles.rowLayout}>
-                              <SvgIcon 
-                                paths={APP_ICONS.Ribbon}
-                                size={ribbonIconSize}
-                                fill="url(#grad)"
-                                fillPct={this.gS.computeProgress(dlItem)}
-                                // stroke={"#e6c300"}
-                                stroke={highTextColor}
-                                strokeWidth={.5}
-                                style={styles.ribbonArea}
-                              />
-                              <Text style={styles.goalText}>{this.gS.formatGoalStatement(dlItem.goal)}</Text>
-                            </View>
-                            <View style={[styles.rowLayout,
-                                          {alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10}]}>
-                              <View>
-                                <Text style={styles.progressLabel}>
-                                  {Math.round(this.gS.computeProgress(dlItem) * 100) + '%'}
-                                </Text>
-                                <Text style={styles.goalDate}>{"Set: " + this.uSvc.dateFromSortDate(dlItem.goal.dateSet)}</Text>
+                    <FadeInView startValue={0.1} key={index} endValue={1} open={this.openGoals} 
+                        duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                      <SlideDownView startValue={-110} endValue={0} open={this.openGoals} 
+                          duration={SCROLL_DOWN_DURATION} style={{overflow: "hidden"}}>
+                        <View style={[cardLayout, styles.cardCustom, {overflow: "hidden"},
+                                    this.selectedGoal === index ? styles.goalHighlight : {}]}>
+                          <RectButton
+                            rippleColor={rippleColor}
+                            onPress={this.showSelectedGoal.bind(this, index)}
+                          >
+                            <View>
+                              <View style={styles.rowLayout}>
+                                <SvgIcon 
+                                  paths={APP_ICONS.Ribbon}
+                                  size={ribbonIconSize}
+                                  fill="url(#grad)"
+                                  fillPct={this.gS.computeProgress(dlItem)}
+                                  stroke={highTextColor}
+                                  strokeWidth={.5}
+                                  style={styles.ribbonArea}
+                                />
+                                <Text style={styles.goalText}>{this.gS.formatGoalStatement(dlItem.goal)}</Text>
                               </View>
-                              <View>
+                              <View style={[styles.rowLayout,
+                                            {alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10}]}>
+                                <View>
+                                  <Text style={styles.progressLabel}>
+                                    {Math.round(this.gS.computeProgress(dlItem) * 100) + '%'}
+                                  </Text>
+                                  <Text style={styles.goalDate}>{"Set: " + this.uSvc.dateFromSortDate(dlItem.goal.dateSet)}</Text>
+                                </View>
                                 <SpeedDial
                                   icon="DotsVertical"
                                   iconColor={mediumTextColor}
@@ -358,18 +402,18 @@ class Goals extends Component<{
                                   selectFn={this.speedDialAction}
                                   style={styles.speedDialTrigger}
                                   horizontal={true}
-                                  menuColor='transparent'
+                                  menuColor="transparent"
                                   itemIconsStyle={{backgroundColor: secondaryColor}}
-                                  itemIconsColor="white"
+                                  itemIconsColor={textOnSecondaryColor}
                                   iconSize="Small"
                                 />
                               </View>
                             </View>
-                          </View>
-                        </TouchableNativeFeedback>
-                      </View>
-                      <View style={styles.divider}/>
-                    </View>
+                          </RectButton>
+                        </View>
+                        <View style={styles.divider}/>
+                      </SlideDownView>
+                    </FadeInView>       
                     ))
                   }
                 </View>

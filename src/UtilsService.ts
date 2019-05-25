@@ -1,5 +1,6 @@
 import { LaLo, TrekPoint, TrekType, TrekTimeInterval, MeasurementSystemType, SMALL_DIST_UNITS,
-         ElevationData, TREK_TYPE_WALK, TREK_TYPE_RUN, TREK_TYPE_BIKE, TREK_TYPE_HIKE } from './TrekInfoModel'
+         ElevationData, TREK_TYPE_WALK, TREK_TYPE_RUN, TREK_TYPE_BIKE, TREK_TYPE_HIKE, 
+         NumericRange, TrekObj } from './TrekInfoModel'
 import { LatLng } from 'react-native-maps';
 import { ELEVATION_API_URL, GOOGLE_MAPS_API_KEY, MAX_ELEVATION_SAMPLES_PER_REQUEST } from './AppInfo'
 
@@ -139,7 +140,6 @@ export const HIKING_WITH_PACK_MET_D     = 7.8;
 export const DRIVING_A_CAR_MET          = 2.5;
 
 export const ACTIVITY_SPEEDS = [
-  0                          ,
   STROLLING_SPEED            ,
   VERY_SLOW_WALK_SPEED       ,
   SLOW_WALK_SPEED            ,
@@ -154,8 +154,7 @@ export const ACTIVITY_SPEEDS = [
   MODERATE_BIKING_SPEED || MEDIUM_SPRINT_SPEED, 
   VIGOROUS_BIKING_SPEED || FAST_SPRINT_SPEED,
   RACE_BIKING_SPEED          ,
-  DRIVING_A_CAR_SPEED        ,
-  100000
+  DRIVING_A_CAR_SPEED        
 ]
 
 export const WALKING_METS = [
@@ -174,7 +173,7 @@ export const WALKING_METS = [
   [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET],
   [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET],
   [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET], 
-  [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET], 
+  [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET]
 ]
 
 export const WALKING_ACTIVITIES_BY_SPEED = [
@@ -198,7 +197,7 @@ export const RUNNING_METS = [
   [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET],
   [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET],
   [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET], 
-  [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET], 
+  [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET] 
 ]
 
 export const RUNNING_ACTIVITIES_BY_SPEED = [
@@ -222,7 +221,7 @@ export const BIKING_METS = [
   [MODERATE_BIKING_MET, MODERATE_BIKING_MET_M, MODERATE_BIKING_MET_D, MODERATE_BIKING_MET_E],
   [VIGOROUS_BIKING_MET, VIGOROUS_BIKING_MET_M, VIGOROUS_BIKING_MET_D, VIGOROUS_BIKING_MET_E],
   [RACE_BIKING_MET, RACE_BIKING_MET_M, RACE_BIKING_MET_D, RACE_BIKING_MET_E],
-  [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET],
+  [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET]
 ]
 
 export const BIKING_ACTIVITIES_BY_SPEED = [
@@ -246,7 +245,7 @@ export const HIKING_METS = [
   [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET],
   [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET],
   [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET],
-  [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET],
+  [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET]
 ]
 
 export const HIKING_ACTIVITIES_BY_SPEED = [
@@ -270,7 +269,7 @@ export const HIKING_WITH_PACK_METS = [
   [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET],
   [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET],
   [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET],
-  [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET],
+  [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET]
 ]
 
 
@@ -322,6 +321,12 @@ export class UtilsSvc {
     return d;
   }
 
+  // compute the implied speed between the 2 given points
+  // return meters/second
+  computeImpliedSpeed = (p1: TrekPoint, p2: TrekPoint) : number => {
+    return this.calcDistLaLo(p1.l, p2.l) / Math.abs(p1.t - p2.t);
+  }
+
   // Converts numeric degrees to radians
   toRad(Value: number) 
   {
@@ -332,6 +337,13 @@ export class UtilsSvc {
   pointWithinSegment = (p1: LaLo, p2: LaLo, pct: number) : LaLo => {
     return ({a: p1.a + pct * (p2.a - p1.a), o: p1.o + pct * (p2.o - p1.o)});
   }
+
+  // remove any leading '0' of a less than one value
+  // also change N/A to 0
+  zeroSuppressedValue = (val: string) => {
+    let s = val.replace(/^N\/A/ig,'0 ');
+    return s.replace(/^0\./g,'.');
+  } 
 
   // Capitalize the first letter in every word of the given string
   capitalizeWords = (str: string) : string => {
@@ -345,7 +357,7 @@ export class UtilsSvc {
 
   // Return the duration formatted as HH:MM:SS
   formatDuration = (duration: number) : string => {
-    if ( (duration === undefined) || (duration === 0) ) { return 'N/A'; }
+    if ( (duration === undefined) || (duration === 0) ) { return '00:00'; }
     let s = Math.trunc(duration % 60);
     let m = Math.trunc(duration / 60) % 60;
     let h = Math.trunc(duration / 3600);
@@ -815,7 +827,7 @@ export class UtilsSvc {
       this.getPathElevations(path, samples)     // compose and send request to Elevation API
       .then((res : any) => {
         if (res.status !== 'OK') { 
-          alert(res.status + '|' + path.length + '|' + samples);
+          // alert(res.status + '|' + path.length + '|' + samples);
           reject(res.status);         // some problem reported from Elevation API
         }
         res.results.forEach((point) => {
@@ -823,6 +835,7 @@ export class UtilsSvc {
         })
         resolve('OK');
       })
+      .catch((err) => reject(err))
     })
 }
 
@@ -850,21 +863,6 @@ export class UtilsSvc {
     if (gPct < .045) { return 'Moderate'; }
     if (gPct < .065) { return 'Difficult'; }
     return 'Extreme';
-  }
-
-
-  // just get the current location to save time starting a trek
-  getGeolocationPos = () => {
-
-    return new Promise((resolve, reject) => {
-      navigator.geolocation.getCurrentPosition(
-      (pos) => {resolve({latitude: pos.coords.latitude, longitude: pos.coords.longitude})}, 
-      (err) => {reject(err)}, 
-      { enableHighAccuracy: true, 
-        maximumAge        : 0, 
-        timeout           : 30000
-      });
-    })
   }
 
   // return a TimeFrame object that represents the given selection
@@ -918,16 +916,96 @@ export class UtilsSvc {
       }
   }
 
+  // find the max and min of an array of numbers
+  // return a NumericRange object
+  getNumericRange = (list : number[]) : NumericRange => {
+    let range : NumericRange = {max: 0, min: 0, range: 0};
+
+    if (list.length){
+      range.max = -5000;
+      range.min = 100000;
+      list.forEach((val) => {
+        if (val > range.max){ range.max = val; }
+        if (val < range.min){ range.min = val; }
+      })
+      range.range = range.max - range.min;
+    }
+    return range;
+  }
+
+  // given a TrekObj, define an array of item values at each point in the trek and
+  // an array of ranges for the items
+  defineTrekValueRanges = (trek: TrekObj, item: string) : 
+                          {items: {value: number, duration: number}[], ranges: number[], dataRange: NumericRange}  => {
+    let itemRanges = [];
+    let itemList : {value: number, duration: number}[] = [];
+    let valueRange : NumericRange = {max: -5000, min: 100000, range: 0};
+    let points = trek.pointList;
+    let lastPtIndex = points.length - 1;
+
+    switch (item) {
+      case 'speed':
+        // get speeds at every point
+        for(let i=0; i<=lastPtIndex; i++) {
+          let val = points[i].s;
+          if (val > valueRange.max){ valueRange.max = val; }
+          if (val < valueRange.min){ valueRange.min = val; }
+            itemList.push({value: val,
+                         duration: (i === lastPtIndex ? trek.duration : points[i + 1].t) - points[i].t});
+        };
+        break;
+      case 'calories':
+        // get calories burned/minute at every point
+        let metTable = this.getMETTable(trek.type, trek.packWeight)
+        let hIndex = this.getHillsIndex(trek.hills);
+        let speedIndex, currMET, calRate;
+        let weight = trek.weight;
+        let pWt = trek.packWeight || 0;
+        for(let i=0; i<trek.pointList.length; i++) {
+          calRate = 0;
+          speedIndex = this.findRangeIndex(points[i].s, ACTIVITY_SPEEDS);
+          if (speedIndex !== -1) {
+            currMET = metTable[speedIndex][hIndex];
+            calRate = currMET * (weight + (currMET === DRIVING_A_CAR_MET ? 0 : pWt)) / 60;
+          }
+          if (calRate > valueRange.max){ valueRange.max = calRate; }
+          if (calRate < valueRange.min){ valueRange.min = calRate; }
+          itemList.push({value: calRate, 
+                         duration: (i === lastPtIndex ? trek.duration : points[i + 1].t) - points[i].t});
+        };
+        break;
+      default:
+        return {items: [], ranges: [], dataRange: {max: 0, min: 0, range: 0}};
+    }
+    
+    // now determine some ranges for the data in the itemList
+    valueRange.range = valueRange.max - valueRange.min;
+    let nRanges = valueRange.range >= 15 ? 5 : 3;
+    let rSize = valueRange.range / nRanges;
+    let precision = valueRange.range < 1 ? 100 : (valueRange.range > 10 ? 1 : 10);
+    let rTop = Math.round((valueRange.min + rSize) * precision) / precision;
+    for(let i=1; i<nRanges; i++) {
+      itemRanges.push(rTop);
+      rTop = Math.round((valueRange.min + (rSize * (i+1))) * precision) / precision;
+    }
+
+    return {items: itemList, ranges: itemRanges, dataRange: valueRange};
+  } 
+
   // given a value and a list of numbers (sorted ascending) return the index of
   // the interval of the 2 numbers the value falls between
-  // return -1 if invalid list or value out of range
+  // return 0 if value is less than first list item
+  // return list.length if value is greater or equal to the last list item
+  // return -1 if invalid value (undefined)
   findRangeIndex = (val: number, list: number[]) : number => {
+    if(val === undefined || val === null) {
+      alert("Invalid Speed:\n" + val)
+      return -1;}
     let lLen = list.length;
-    if ((lLen < 2) || (val < list[0])) { return -1; }
-    for (let i=1; i<lLen; i++) {
-      if (val < list[i]) { return (i - 1); }
+    for (let i=0; i<lLen; i++) {
+      if (val < list[i]) { return (i); }
     }
-    return -1;
+    return lLen;
   }
 
   // divide given TrekPoint list into intervals based on the given time in seconds
@@ -1063,17 +1141,44 @@ export class UtilsSvc {
     return false;
   }
 
-  // convert the given calorie value to net calories
-  // return: net calorie value 
+  // convert the given calorie value to calories/min
+  // return: net calorie value per minute
   // params:
   //  cals -        total calories
-  //  weight -      weight that was used to compute cals
   //  time -        duration that was used to compute cals
-  cvtToNetCalories = (cals: number, weight: number, time: number) : number => {
-    let net = cals - (weight * RESTING_CAL_PER_KG_PER_SEC * time);
-    if (net < 0) { net = 0; }
+  getCaloriesPerMin = (cals: number, time: number) : number => {
+    // let net = cals - (weight * RESTING_CAL_PER_KG_PER_SEC * time);
+    let net = cals * 60 / time;
+    // if (net < 0) { net = 0; }
     let precision = net < 10 ? 10 : 1;
     return Math.round(net * precision) / precision;
+  }
+
+  getMETTable = (tType: TrekType, bpweight = 0) => {
+      // select the appropriate MET table
+      switch (tType) {
+        case TREK_TYPE_WALK:
+          return WALKING_METS;
+          break;
+        case TREK_TYPE_RUN:
+          return RUNNING_METS;
+          break;
+        case TREK_TYPE_BIKE:
+          return BIKING_METS;
+          break;
+        case TREK_TYPE_HIKE:
+          // must distinguish between hiking with pack and not (bpweight is 0 if not)
+          return (bpweight ? HIKING_WITH_PACK_METS : HIKING_METS);
+          break;
+        default:
+          return WALKING_METS;
+      }
+  }
+
+  // return the index of the hilliness array for the given hills value
+  getHillsIndex = (hills: string) : number => {
+    if (hills === undefined || hills === 'Unknown' || hills === 'Flat') { return 0; }
+    return ['Level', 'Moderate', 'Difficult', 'Extreme'].indexOf(hills);
   }
 
   // examine point list and compute calories as speed changes, sum calories
@@ -1086,9 +1191,8 @@ export class UtilsSvc {
   computeCalories = (pointList: TrekPoint[],
     tType: TrekType, hills: string, weight: number, bpweight = 0): number => {
     let cals = 0;
-    if (hills === 'Unknown' || hills === 'Flat') { hills = 'Level'; }
-    let hIndex = ['Level', 'Moderate', 'Difficult', 'Extreme'].indexOf(hills);
-    let currMET : number, newMET : number, currDurationSum : number = 0;
+    let hIndex = this.getHillsIndex(hills);
+    let currMET : number = 0, newMET : number, currDurationSum : number = 0;
     let currPt : TrekPoint, startTime : number = 0;
     let metTable : number[][];
     let speedIndex : number;
@@ -1096,38 +1200,26 @@ export class UtilsSvc {
     let tWt : number;
 
     if (numPts > 0){
-      // select the appropriate MET table
-      switch (tType) {
-        case TREK_TYPE_WALK:
-          metTable = WALKING_METS;
-          break;
-        case TREK_TYPE_RUN:
-          metTable = RUNNING_METS;
-          break;
-        case TREK_TYPE_BIKE:
-          metTable = BIKING_METS;
-          break;
-        case TREK_TYPE_HIKE:
-          // must distinguish between hiking with pack and not (bpweight is 0 if not)
-          metTable = bpweight ? HIKING_WITH_PACK_METS : HIKING_METS;
-          break;
-        default:
-      }
+      metTable = this.getMETTable(tType, bpweight);
       speedIndex = this.findRangeIndex(pointList[0].s, ACTIVITY_SPEEDS);
-      currMET = metTable[speedIndex][hIndex];
+      if(speedIndex !== -1){
+        currMET = metTable[speedIndex][hIndex];
+      }
       startTime = pointList[0].t;
       for (let i = 1; i < numPts; i++) {
         currPt = pointList[i];
         currDurationSum = currPt.t - startTime;
         speedIndex = this.findRangeIndex(currPt.s, ACTIVITY_SPEEDS);
-        newMET = metTable[speedIndex][hIndex];
-        if ((newMET !== currMET) && ((currMET !== DRIVING_A_CAR_MET) || (currPt.s === 0))){
-          // MET has changed
-          tWt = weight + (currMET === DRIVING_A_CAR_MET ? 0 : bpweight);
-          cals += currMET * tWt * (currDurationSum / 3600);
-          currMET = newMET;
-          startTime = currPt.t;
-          currDurationSum = 0;  // if this is the last point, the time has already been counted 
+        if (speedIndex !== -1) {
+          newMET = metTable[speedIndex][hIndex];
+          if ((newMET !== currMET) && ((currMET !== DRIVING_A_CAR_MET) || (currPt.s === 0))){
+            // MET has changed
+            tWt = weight + (currMET === DRIVING_A_CAR_MET ? 0 : bpweight);
+            cals += currMET * tWt * (currDurationSum / 3600);
+            currMET = newMET;
+            startTime = currPt.t;
+            currDurationSum = 0;  // if this is the last point, the time has already been counted 
+          }
         }
       }
       tWt = weight + (currMET === DRIVING_A_CAR_MET ? 0 : bpweight);
@@ -1137,5 +1229,9 @@ export class UtilsSvc {
     return cals !== 0 ? (Math.round(cals * precision) / precision) : 0;
   }
 
+  // round the given value to 4 significant digits
+  fourSigDigits = (val: number) : number => {
+    return Math.round(val * 10000) / 10000;
+  }
 
 }

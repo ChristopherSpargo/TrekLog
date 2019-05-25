@@ -11,7 +11,8 @@ import { TrekInfo, TrekType, MeasurementSystemType, DEFAULT_STRIDE_LENGTHS, STRI
 import RadioGroup from './RadioGroupComponent';
 import TrekTypeSelect from './TrekTypeSelectComponent';
 import { ToastModel } from './ToastModel';
-import { CONTROLS_HEIGHT } from './App';
+import { CONTROLS_HEIGHT, COLOR_THEME_LIGHT, COLOR_THEME_DARK, ThemeType,
+         SCROLL_DOWN_DURATION, FADE_IN_DURATION } from './App';
 import { UtilsSvc, LB_PER_KG, CM_PER_INCH } from './UtilsService';
 import { ModalModel } from './ModalModel';
 import Waiting from './WaitingComponent';
@@ -22,34 +23,14 @@ import { APP_ICONS } from './SvgImages';
 import TextInputField from './TextInputFieldComponent';
 import TrekLogHeader from './TreklogHeaderComponent';
 import IconButton from './IconButtonComponent';
-
-export interface WeightObj {
-  date: string,       // a short (8-char) sortDate
-  weight: number
-}
-
-export interface SettingsObj {
-  user:         string,
-  type:         TrekType,
-  measurementSystem: MeasurementSystemType,
-  height:       number,
-  strideLengths: TrekTypeDataNumeric,
-  weights:       WeightObj[],
-  packWeight:   number,
-}
-
-export interface UsersObj {
-  users: string[],
-  lastUser: string,
-}
-
-export const NO_USER = '#no#';
-export const NEW_USER = '#new#';
-const DEFAULT_WEIGHT = 150 / LB_PER_KG;
+import RadioPicker from './RadioPickerComponent';
+import FadeInView from './FadeInComponent';
+import SlideDownView from './SlideDownComponent';
+import { GroupSvc, NEW_GROUP, DEFAULT_WEIGHT, SettingsObj, WeightObj } from './GroupService';
 
 const goBack = NavigationActions.back() ;
 
-@inject('trekInfo', 'toastSvc', 'uiTheme', 'utilsSvc', 'modalSvc', 'storageSvc')
+@inject('trekInfo', 'toastSvc', 'uiTheme', 'utilsSvc', 'modalSvc', 'storageSvc', 'groupSvc')
 @observer
 class Settings extends Component<{ 
   utilsSvc ?: UtilsSvc,
@@ -58,42 +39,37 @@ class Settings extends Component<{
   uiTheme ?: any,
   modalSvc ?: ModalModel,
   toastSvc ?: ToastModel,
+  groupSvc ?: GroupSvc
   trekInfo ?: TrekInfo         // object with all non-gps information about the Trek
 }, {} > {
 
-  static navigationOptions = ({ navigation }) => {
-    return {
-      header: <TrekLogHeader titleText="Settings"
-                             icon="*"
-                             backButtonFn={() =>  navigation.dispatch(goBack)}
-              />
-    };
-};  
-
   @observable dataReady;
-  @observable changingUser;
-  @observable user;
+  @observable radioPickerOpen;
+  @observable changingGroup;
+  @observable group;
   @observable defaultType : TrekType;
   @observable system : MeasurementSystemType;
+  @observable theme : ThemeType;
   @observable weightStr;
   @observable heightStr;
   @observable packWeightStr;
   @observable strideLengthStr;
-  @observable newUser;
-  @observable enterUser;
+  @observable newGroup;
+  @observable enterGroup;
   @observable keyboardOpen;
   @observable originalSettings : SettingsObj;
+  @observable openItems;
   
-  users: UsersObj = {users: [], lastUser: ''};
-  todayShortDate = this.props.utilsSvc.formatShortSortDate();
+  uSvc = this.props.utilsSvc;
+  todayShortDate = this.uSvc.formatShortSortDate();
   heightNum = 0;
   weightNum = 0;
   weightDate = '';
   weights : WeightObj[] = [];
   packWeightNum = 0;
   strideLengths : TrekTypeDataNumeric;
-
   activeNav = '';             // used by BottomNavigation component
+  oldTheme : ThemeType;
 
   keyboardDidShowListener;
   keyboardDidHideListener;
@@ -104,28 +80,18 @@ class Settings extends Component<{
   }
 
   componentWillMount() {
-    // read the Users object from the database
-    this.props.storageSvc.fetchUserList()
-    .then((result : any) => {
-      this.users = JSON.parse(result) as UsersObj;
-      if (this.users.users.length){
-        this.changeUser(this.props.trekInfo.user)
-      }
-      else {
-        this.users = {users: [], lastUser: ''};
-        this.setDefaultSettings();
-        this.updateDataReady(true);
-        this.props.toastSvc.toastOpen({tType: "Error", content: "Please create a user."});
-        this.changeUser(NEW_USER);
-      }
-    })
+    // read the Groups object from the database
+    this.setOriginalSettings(undefined);
+    this.setOpenItems(false);        
+    this.props.groupSvc.readGroups()
+    .then((groups) => {
+        this.oldTheme = groups.theme;
+        this.changeGroup(this.props.trekInfo.group)
+      })
     .catch(() => {
-      // Failed to read users
-      this.users = {users: [], lastUser: ''};
-      this.setDefaultSettings();
-      this.updateDataReady(true);
-      this.props.toastSvc.toastOpen({tType: "Error", content: "Please create a user."});
-      this.changeUser(NEW_USER);
+      // Failed to read groups or list empty
+      this.setNoGroups();
+      // this.setOpenItems(true);
     })
 
   }
@@ -133,7 +99,10 @@ class Settings extends Component<{
   componentDidMount() {
     this.keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', this.keyboardDidShow);
     this.keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', this.keyboardDidHide);
-  }
+      // requestAnimationFrame(() => {
+      //   this.setOpenItems(true);
+      // })
+    }
 
   componentWillUnmount() {
     this.keyboardDidShowListener.remove();
@@ -144,17 +113,19 @@ class Settings extends Component<{
   @action
   initializeObservables = () => {
     this.dataReady = false;
-    this.changingUser = false;
-    this.user = '';
+    this.changingGroup = false;
+    this.group = '';
     this.system = 'Metric';
+    this.theme = this.props.groupSvc.getTheme();
     this.heightStr = '0';
     this.weightStr = '0';
     this.packWeightStr = '0';
     this.strideLengthStr = {Walk: '0', Run: '0', Bike: '0', Hike: '0'};
-    this.newUser = '';
-    this.enterUser = false;
+    this.newGroup = '';
+    this.enterGroup = false;
     this.keyboardOpen = false;
     this.originalSettings = undefined;
+    this.setOpenItems(false);
   }
 
   @action
@@ -170,12 +141,24 @@ class Settings extends Component<{
     this.setKeyboardOpen(false);
   }
   
-  // Get the settings for the current user
-  getUsersSettings = () => {
+  @action
+  setOpenItems = (status: boolean) => {
+    this.openItems = status;
+  }
+
+  // set the groups object to indicate no groups
+  setNoGroups = () => {
+    this.setDefaultSettings();
+    this.updateDataReady(true);
+    this.props.toastSvc.toastOpen({tType: "Error", content: "Please create a group."});
+    this.changeGroup(NEW_GROUP);
+  }
+
+  // Get the settings for the current group
+  getGroupSettings = () => {
     return new Promise((resolve, reject) => {
-      this.props.storageSvc.fetchUserSettings(this.user)
-      .then((result) => {
-        let data = JSON.parse(result);
+      this.props.groupSvc.readGroupSettings(this.group)
+      .then((data : SettingsObj) => {
         this.setSystem(data.measurementSystem === 'US' ? 'Metric' : 'US');  // set to opposite of specified system
         this.heightNum = data.height !== undefined ? data.height : 0;
         this.setHeight(Math.round(data.measurementSystem === 'US' ? (this.heightNum / CM_PER_INCH) : this.heightNum).toString()); 
@@ -189,12 +172,7 @@ class Settings extends Component<{
         if(this.strideLengths.Bike === undefined){ this.strideLengths.Bike = DEFAULT_STRIDE_LENGTHS.Bike;}
         if(this.strideLengths.Hike === undefined){ this.strideLengths.Hike = DEFAULT_STRIDE_LENGTHS.Hike;}
         if (data.weights === undefined) {
-          if (data.weight) {
-            this.weights = [{weight: data.weight, date: this.todayShortDate}];
-          }
-          else {
-            this.weights = [{weight: DEFAULT_WEIGHT, date: this.todayShortDate}];
-          }
+          this.weights = [{weight: DEFAULT_WEIGHT, date: this.todayShortDate}];
         }
         else {
           this.weights = data.weights;
@@ -202,7 +180,7 @@ class Settings extends Component<{
         this.weightDate = this.weights.length ? this.weights[this.weights.length-1].date : this.todayShortDate;
         this.weightNum = this.weights.length ? this.weights[this.weights.length-1].weight : DEFAULT_WEIGHT;
         this.switchSystem(data.measurementSystem) // this will set packWeightStr, weightStr and strideLengthStr values
-        this.setDefaultType(data.type);         // having this earlier in the sequence causes error in weights array
+        this.setDefaultType(data.type);           // having this earlier in the sequence causes error in weights array
         this.setOriginalSettings(this.getSaveObj());     // save original settings
         resolve("ok");
       })
@@ -225,7 +203,7 @@ class Settings extends Component<{
     this.weights = [{weight: this.weightNum, date: this.weightDate}];
     this.packWeightNum = 0;
     this.setPackWeight("0");
-    this.strideLengths = this.props.utilsSvc.copyObj(DEFAULT_STRIDE_LENGTHS) as TrekTypeDataNumeric;
+    this.strideLengths = this.uSvc.copyObj(DEFAULT_STRIDE_LENGTHS) as TrekTypeDataNumeric;
     this.switchSystem('US');
     this.setOriginalSettings({} as SettingsObj);  // default to everything has changed
   }
@@ -239,20 +217,20 @@ class Settings extends Component<{
   getSaveObj = () : SettingsObj => {
     let newWeights = [];
 
-    this.weights[this.weights.length-1].weight = this.weightNum;
+    this.weights[this.weights.length-1].weight = this.uSvc.fourSigDigits(this.weightNum);
     this.weights[this.weights.length-1].date = this.weightDate;
     this.weights.forEach((item) => {
-      newWeights.push({date: item.date, weight: item.weight});
+      newWeights.push({date: item.date, weight: this.uSvc.fourSigDigits(item.weight)});
     })
 
     return {
-      user: this.user,
+      group: this.group,
       type: this.defaultType,
-      height: this.heightNum,
+      height: this.uSvc.fourSigDigits(this.heightNum),
       weights: newWeights,
       measurementSystem: this.system,
-      strideLengths: this.props.utilsSvc.copyObj(this.strideLengths) as TrekTypeDataNumeric,
-      packWeight: this.packWeightNum,
+      strideLengths: this.uSvc.copyObj(this.strideLengths) as TrekTypeDataNumeric,
+      packWeight: this.uSvc.fourSigDigits(this.packWeightNum),
     }
   }
 
@@ -261,56 +239,37 @@ class Settings extends Component<{
     let sNow;
     
     if(sGiven === undefined) { return true; }
+    if(this.theme !== this.oldTheme) { return false; }
     sNow = this.getSaveObj();
-    return this.props.utilsSvc.compareObjects(sNow, sGiven);
+    return this.uSvc.compareObjects(sNow, sGiven);
   }
 
   // Update the current TrekInfoModel settings from the given object
   @action
   updateTrekInfo = (saveObj: SettingsObj) => {
-    let tI = this.props.trekInfo;
-
-    if (this.user !== tI.user) {
-      tI.setDataReady(false);    // indicate need to re-read Treks
-    }
-    tI.defaultTrekType = saveObj.type;
-    tI.type = saveObj.type;
-    tI.updateUser(saveObj.user);
-    tI.updateMeasurementSystem(saveObj.measurementSystem)
-    tI.updateStrideLengths(saveObj.strideLengths);
-    tI.strideLength = saveObj.strideLengths[saveObj.type];
-    tI.weight = saveObj.weights[saveObj.weights.length-1].weight;
-    tI.packWeight = saveObj.packWeight;
+    this.props.trekInfo.setTrekLogGroupProperties(this.group, saveObj);
   }
 
-  // save the list of users to the database
-  saveUsersList = () => {
-
-    return new Promise((resolve, reject) => {
-      this.users.lastUser = this.user;  // note last user for use on restart
-      this.props.storageSvc.storeUserList(this.users)
-      .then(() => {
-        resolve("OK");
-      })
-      .catch(() => {
-        reject("USERS_NOT_SAVED");
-      })
-    })
+  // save the list of groups to the database
+  saveGroupsList = () => {
+    this.oldTheme = this.theme;
+    this.props.groupSvc.setTheme(this.theme);
+    return this.props.groupSvc.saveGroups(this.group);
   }
 
-  // save the list of users and the Settings of the current user to the database
+  // save the list of groups and the Settings of the current group to the database
   saveSettings = () => {
     let saveObj = this.getSaveObj();
 
     return new Promise((resolve, reject) => {
-      this.saveUsersList()
+      this.saveGroupsList()
       .then(() => {
-        this.props.storageSvc.storeUserSettings(this.user, saveObj)
+        this.props.groupSvc.saveGroupSettings(this.group, saveObj)
         .then(() => {
           this.updateTrekInfo(saveObj);
           this.setOriginalSettings(this.getSaveObj());
           setTimeout(() => {
-            if(!this.enterUser){
+            if(!this.enterGroup){
               this.props.toastSvc.toastOpen({tType: "Success", content: "Settings updated."});
             }
             resolve('OK');      
@@ -323,7 +282,7 @@ class Settings extends Component<{
         })          
       })
       .catch ((error) => {
-        this.props.toastSvc.toastOpen({tType: "Error", content: "User list changes NOT saved."});
+        this.props.toastSvc.toastOpen({tType: "Error", content: "Group list changes NOT saved."});
         // Error saving data
         reject(error);
       })          
@@ -336,32 +295,45 @@ class Settings extends Component<{
     this.dataReady = value;
   }
 
-  // update the status of the changingUser property
+  // set the open status of the radioPicker component
   @action
-  updateChangingUser = (value: boolean) => {
-    this.changingUser = value;
+  setRadioPickerOpen = (status: boolean) => {
+    this.radioPickerOpen = status;
   }
 
-  // Update the value of the user property
+  // update the status of the changingGroup property
   @action
-  setUser = (val: string) => {
-    this.user = val;
+  updateChangingGroup = (value: boolean) => {
+    this.changingGroup = value;
+  }
+
+  // Update the value of the group property
+  @action
+  setGroup = (val: string) => {
+    this.group= val;
   }
 
   @action
-  setEnterUser = (status: boolean) => {
-    this.enterUser = status;
+  setEnterGroup = (status: boolean) => {
+    this.enterGroup = status;
   }
 
-  // Update the value of the newUser property
+  // Update the value of the newGroup property
   @action
-  setNewUser = (val: string) => {
-    this.newUser = val;
+  setNewGroup = (val: string) => {
+    this.newGroup = val;
   }
 
   @action
   setDefaultType = (value: TrekType) => {
     this.defaultType = value;
+  }
+
+  // Update the value of the theme property
+  @action
+  setTheme = (val: ThemeType) => {
+    this.theme = val;
+    this.props.trekInfo.setColorTheme(val);
   }
 
   // set the value of the system property
@@ -388,169 +360,129 @@ class Settings extends Component<{
     this.packWeightStr = value;
   }
 
-  // Change to the settings for the given user
-  changeUser = (value: string) => {
-    const {infoConfirmColor, infoConfirmTextColor} = this.props.uiTheme.palette;
+  // Change to the settings for the given group
+  changeGroup = (value: string) => {
+    const {infoConfirmColor, infoConfirmTextColor} = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
 
-    if (value === NEW_USER) {
-      this.setNewUser('New');
-      this.setEnterUser(true);
+    if (value === NEW_GROUP) {
+      this.setNewGroup('New Group Name');
+      this.setEnterGroup(true);
     }
     else {
-      if (this.user !== '' && this.user !== value){
+      if (this.group!== '' && this.group!== value){
         if (!this.compareSettings(this.originalSettings)) {
           this.props.modalSvc.simpleOpen({heading: "Save Settings", headingIcon: "Settings",  
                                           headingStartColor: infoConfirmColor, 
                                           headingTextColor: infoConfirmTextColor, 
-                                          content: "Save changes to settings for "+this.user+"?", 
+                                          content: "Save changes to settings for "+ this.group +"?", 
                                           cancelText: 'DISCARD', okText: 'SAVE'})
           .then(() => {
             this.saveSettings()
             .then(() =>{
-              this.finishSetUser(value);
+              this.finishSetGroup(value);
             })
-            .catch(() => {}) // error saving, user will not change
+            .catch(() => {}) // error saving, group will not change
           })
           .catch(() =>{
-            this.finishSetUser(value);
+            this.finishSetGroup(value);
           })
         }
         else {
-          this.finishSetUser(value);
+          this.finishSetGroup(value);
         }
       }
       else {
-        this.finishSetUser(value);
+        this.finishSetGroup(value);
       }
     }
   }
 
-  finishSetUser = (value: string) => {
-    this.updateChangingUser(true);
-    this.setUser(value);
-    this.saveUsersList();
-    this.setEnterUser(false);
-    this.getUsersSettings()
+  finishSetGroup = (value: string) => {
+    this.updateChangingGroup(true);
+    this.setGroup(value);
+    if (value !== this.props.groupSvc.getLastGroup()){
+      this.saveGroupsList();
+    }
+    this.setEnterGroup(false);
+    this.getGroupSettings()
     .then(() =>{
       this.updateTrekInfo(this.originalSettings);
       this.updateDataReady(true);
-      this.updateChangingUser(false);
+      this.updateChangingGroup(false);
+      requestAnimationFrame(() => {
+        this.setOpenItems(true);
+      })
     })
     .catch(() => {
-      // Failed to read settings for new user
+      // Failed to read settings for new group
       this.setDefaultSettings();
       this.saveSettings();
       this.updateDataReady(true);
-      this.updateChangingUser(false);
+      this.props.toastSvc.toastOpen({tType: 'Info', content: 'Please enter initial settings.', time: 3000});
+      this.updateChangingGroup(false);
+      requestAnimationFrame(() => {
+        this.setOpenItems(true);
+      })
     })
   }
 
-  deleteUser = (name: string) => {
-    let pending : Promise<any>[] = [];
-    let i = this.users.users.indexOf(name);
-
-    return new Promise((resolve, reject) => {
-      if (i !== -1){
-        this.users.users.splice(i,1);
-        if (this.users.users.length > 0){
-          this.setUser(this.users.users[0]);
-        }
-        else {
-          // they deleted the only user
-
-          this.setUser('');
-        }
-
-        // save users list (ignore the result)
-        this.saveUsersList();
-
-        // remove the settings data for the user (ignore the result)
-        this.props.storageSvc.deleteUserSettings(name);
-
-        // now delete all their treks
-        this.props.storageSvc.getAllTrekKeys(name)
-        .then((list : string[]) => {
-          if (list.length){                 // anything to delete?
-            list.forEach((key) => {
-              pending.push(this.props.storageSvc.removeItem(key));
-            });
-            Promise.all(pending)
-            .then(() => {
-              this.props.toastSvc.toastOpen({tType: "Info", content: "Successfully deleted " + name});
-              resolve("OK");
-            })
-            .catch(() => {
-              this.props.toastSvc.toastOpen({tType: "Error", content: "Error deleting treks for " + name});
-              reject("ERROR_DELETING_TREKS");
-            })
-          }
-          else {          // nothing to delete
-            this.props.toastSvc.toastOpen({tType: "Info", content: "Successfully deleted " + name});
-            resolve("OK");
-          }
-        })
-        .catch(() => {
-          this.props.toastSvc.toastOpen({tType: "Error", content: "Error reading treks for " + name});
-          reject("ERROR_READING_TREKS");
-        })
-      }
-      else {
-        reject("NO_SUCH_USER");
-      }
-    })
-  }
-
-  deleteThisUser = () => {
+  // delete group button pressed, confirm action with user
+  deleteThisGroup = () => {
 
     requestAnimationFrame(() => {  // pause for touch effect to show
-      this.props.modalSvc.simpleOpen({heading: "Delete User", headingIcon: "Delete",     
-        content: "Delete settings and treks for " + this.user + "?", 
+      this.props.modalSvc.simpleOpen({heading: "Delete " + this.group, headingIcon: "Delete",     
+        content: "Delete settings and treks for " + this.group+ "?", 
         cancelText: 'CANCEL', deleteText: 'DELETE'})
       .then(() => {
-        this.updateChangingUser(true);
-        this.deleteUser(this.user)
-        .then(() => {
-          this.changeUser(this.user !== '' ? this.user : NEW_USER);
+        this.updateChangingGroup(true);
+        this.props.groupSvc.deleteGroup(this.group)
+        .then((currGroup : string) => {
+          this.props.toastSvc.toastOpen({tType: "Info", content: "Successfully deleted " + this.group});
+          if (currGroup !== this.group){
+            this.changeGroup(currGroup);
+          }
         })
         .catch(() => {
-          this.changeUser(this.user);
+          this.props.toastSvc.toastOpen({tType: "Error", content: "Error deleting treks for " + this.group});
+          this.changeGroup(this.group);
         })
       })
-      .catch(() => {
+      .catch(() => {    // delete aborted
       });
     });
   }
 
-  // abort creating a new user
+  // abort creating a new group
   @action
-  cancelNewUser = () => {
+  cancelNewGroup = () => {
     requestAnimationFrame(() => {
-      if( this.user !== '') { 
-        this.setEnterUser(false); 
+      if( this.group!== '') { 
+        this.setEnterGroup(false); 
       } else {
-        this.props.toastSvc.toastOpen({tType: "Error", content: "Please create a user."});
+        this.props.toastSvc.toastOpen({tType: "Error", content: "Please create a group."});
       }
-      this.setNewUser('');
+      this.setNewGroup('');
     });
   }
 
-  // Add a new name to the list of users 
-  addNewUser = () => {
+  // Add a new name to the list of groups
+  addNewGroup = () => {
     requestAnimationFrame(() => {
-      let name =  this.newUser;
-      if (name !== ''){
-        if (name !== 'New' && this.users.users.indexOf(name) === -1){
-          this.users.users.push(name);
-          this.saveUsersList()
+      let name =  this.newGroup;
+      if (name !== '' && !/[\/ ,.<>?+=\-@!#]/.test(name)){
+        if (name !== 'New' && !this.props.groupSvc.isGroup(name)){
+          this.props.groupSvc.addGroup(name)
           .then(() => {
-            this.props.toastSvc.toastOpen({tType: "Success", content: "Successfully added use " + name + "."});
-            this.changeUser(name);
+            this.props.toastSvc.toastOpen({tType: "Success", content: "Successfully added " + name + "."});
+            this.changeGroup(name);
           })
         }
         else {
-          this.props.toastSvc.toastOpen({tType: "Error", content: "Use " + name + " already exists."});
+          this.props.toastSvc.toastOpen({tType: "Error", content: "Group " + name + " already exists."});
         }
-        this.setNewUser('');
+        this.setNewGroup('');
+      } else {
+        this.props.toastSvc.toastOpen({tType: "Error", content: "Invalid name."});
       }
     });
 }
@@ -588,14 +520,14 @@ class Settings extends Component<{
 
   // set a new value for the weight property
   setNewWeight = (value: string) => {
-    this.weightDate = this.props.utilsSvc.formatShortSortDate();
+    this.weightDate = this.uSvc.formatShortSortDate();
     if (this.weightDate !== this.weights[this.weights.length-1].date){
       this.weights.push({weight: 0, date: this.weightDate})
     }
     this.weightNum = Math.round(parseFloat(value) * 100) / 100;;
     if( !isNaN(this.weightNum) ){
       if(this.system === 'US'){ this.weightNum /= LB_PER_KG };  // store values as kg
-      this.weightNum = Math.round(this.weightNum * 10000) / 10000;
+      this.weightNum = this.uSvc.fourSigDigits(this.weightNum);
     }
     this.setWeight(value);
   }
@@ -605,7 +537,7 @@ class Settings extends Component<{
     this.packWeightNum = Math.round(parseFloat(value) * 100) / 100;;
     if( !isNaN(this.packWeightNum) ){
       if(this.system === 'US'){ this.packWeightNum /= LB_PER_KG };  // store values as kg
-      this.packWeightNum = Math.round(this.packWeightNum * 10000) / 10000;
+      this.packWeightNum = this.uSvc.fourSigDigits(this.packWeightNum);
     }
     this.setPackWeight(value);
   }
@@ -631,7 +563,7 @@ class Settings extends Component<{
     this.heightNum = Math.round(parseFloat(value) * 100) / 100;
     if( !isNaN(this.heightNum) ) {
       if(this.system === 'US'){ this.heightNum *= CM_PER_INCH };  // store values as kg
-      this.heightNum = Math.round(this.heightNum * 10000) / 10000;
+      this.heightNum = this.uSvc.fourSigDigits(this.heightNum);
     }
     this.setHeight(value);
   }
@@ -644,7 +576,7 @@ class Settings extends Component<{
       this.strideLengths[type] = ((this.system === 'US') // keep strideLengths in cm
             ? (parseInt(value,10) * CM_PER_INCH) 
             : parseInt(value, 10)) * STRIDE_CONVERSION_FACTORS[type];
-      this.strideLengths[type] = Math.round(this.strideLengths[type] * 10000) / 10000;
+      this.strideLengths[type] = this.uSvc.fourSigDigits(this.strideLengths[type]);
     }
     else {  // if no value given, just update from strideLengths
       this.strideLengthStr[type] = Math.round(((this.system === 'US') // strideLengths are in cm
@@ -653,18 +585,10 @@ class Settings extends Component<{
     }
   }
 
-  // open the RadioPicker to change user (use)
-  openRadioPicker = () => {
-    let names = ['New'];
-    let values = [NEW_USER];
-
-    let selNames = names.concat(this.users.users);
-    let selValues = values.concat(this.users.users);
-
-    this.props.modalSvc.openRadioPicker({heading: 'Select A Use', selectionNames: selNames,
-                              selectionValues: selValues, selection: this.user})
-    .then((newUser) => {
-      this.changeUser(newUser);
+  getDifferentGroup = () => {
+    this.props.groupSvc.getGroupSelection(this.setRadioPickerOpen, this.group,  'Select A Group', true)
+    .then((newGroup) => {
+      this.changeGroup(newGroup);
     })
     .catch(() =>{ 
     })
@@ -672,15 +596,16 @@ class Settings extends Component<{
 
   render() {
 
-    const hideUpdate = this.changingUser || this.compareSettings(this.originalSettings);
-    const { cardLayout, navItem, navIcon } = this.props.uiTheme;
+    const hideUpdate = this.changingGroup || this.compareSettings(this.originalSettings);
+    const { cardLayout, navItem, navIcon, pageTitle } = this.props.uiTheme;
     const settingIconSize = 24;
-    const cardHeight = 100;
-    const haveUsers = this.users.users.length > 0;
+    const cardHeight = 110;
+    const haveGroups = this.props.groupSvc.groups.groups.length > 0;
     const { highTextColor, mediumTextColor, disabledTextColor, secondaryColor, primaryColor,
-            pageBackground, dangerColor, cancelColor, okChoiceColor, listIconColor } = this.props.uiTheme.palette;
-    const userSelectIconSize = 22;
-    const userSelectButtonSize = 34;
+            pageBackground, dangerColor, cancelColor, dividerColor, rippleColor, navItemBorderColor,
+            okChoiceColor, listIconColor, disabledHeaderTextColor } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
+    const groupSelectIconSize = 26;
+    const groupSelectButtonSize = 40;
 
     
 
@@ -698,18 +623,20 @@ class Settings extends Component<{
       inputRow: {
         flexDirection: "row",
         alignItems: "center",
+        marginTop: 10,
         marginLeft: 30,
       },
       cardCustom: {
         borderBottomWidth: 1,
-        paddingBottom: 0,
+        borderColor: dividerColor,
         marginTop: 0,
         marginBottom: 0,
         minHeight: cardHeight,
       },
       labelText: {
         color: primaryColor,
-        fontSize: 16,
+        marginBottom: 5,
+        fontSize: 18,
       },
       descText: {
         color: mediumTextColor,
@@ -758,15 +685,10 @@ class Settings extends Component<{
         alignItems: "center",
         justifyContent: "flex-end"
       },
-      addIcon: {
-        marginRight: 15,
-        width: 36,
-        height: 36,
-      },
       saveFab: {
         backgroundColor: secondaryColor,
       },
-      userActionButton: {
+      groupActionButton: {
         flex: 1,
         height: 30,
         flexDirection: "row",
@@ -777,23 +699,21 @@ class Settings extends Component<{
         color: "white",
         fontSize: 14
       },
-      pageTitle: {
-        fontSize: 20,
-        color: highTextColor,
-        fontWeight: "bold",
-      },
       settingIcon: {
         width: settingIconSize,
         height: settingIconSize,
         marginRight: 10,
         backgroundColor: "transparent"
       },
-      userSelectButtonStyle: {
-        minHeight: userSelectButtonSize,
-        minWidth: userSelectButtonSize,
-        borderRadius: userSelectButtonSize / 2,
-        padding: 5,
-      }
+      groupSelectButtonStyle: {
+        height: groupSelectButtonSize,
+        width: groupSelectButtonSize,
+        borderRadius: groupSelectButtonSize / 2,
+      },
+      flexWrap: {
+        flexWrap: "wrap",
+        marginRight: 15,
+      },
     })
 
     const SettingHeader = ({icon, label, description}) => {
@@ -802,14 +722,14 @@ class Settings extends Component<{
           <View style={styles.rowStart}>
             <Text style={styles.labelText}>{label}</Text>
           </View>
-          <View style={styles.rowStart}>
+          <View style={[styles.rowStart,{marginRight: 15}]}>
             <SvgIcon
               style={styles.settingIcon}
               size={settingIconSize}
               paths={icon}
               fill={listIconColor}
             />
-            <Text style={styles.descText}>{description}</Text>
+            <Text style={[styles.descText, styles.flexWrap]}>{description}</Text>
           </View>
         </View>
       )
@@ -817,119 +737,180 @@ class Settings extends Component<{
 
     return(
         <View style={styles.container}>
+          <TrekLogHeader
+            icon="*"
+            titleText="Settings"
+            backButtonFn={() =>  this.props.navigation.dispatch(goBack)}
+            group={this.group || "None"}
+            groupTextColor={disabledHeaderTextColor}
+          />
+          <RadioPicker pickerOpen={this.radioPickerOpen}/>
           {this.dataReady &&
           <View style={[styles.container, {paddingBottom: 10}]}>
-            <View style={[cardLayout, { marginBottom: 0, paddingBottom: 15}]}>
-              <Text style={styles.pageTitle}>TrekLog Settings</Text>
+            <View style={[cardLayout, { marginBottom: 0, paddingBottom: 10}]}>
+              <Text style={[pageTitle, {color: highTextColor}]}>TrekLog Settings</Text>
             </View>
             <ScrollView>
-              <View style={[cardLayout, styles.cardCustom]}>
-                <SettingHeader icon={APP_ICONS.AccountCircle} label="Use" 
-                               description="Specify a user or use for the treks"
-                />
-                <View style={styles.inputRow}>     
-                  <Text style={{color: highTextColor, fontSize: 18, width: 150}}>
-                    {this.enterUser ? "New" : this.user}</Text>
-                  <IconButton 
-                    iconSize={userSelectIconSize}
-                    icon="AccountCheckOutline"
-                    style={[navItem, styles.userSelectButtonStyle]}
-                    buttonSize={userSelectButtonSize}
-                    raised
-                    iconStyle={navIcon}
-                    color={secondaryColor}
-                    onPressFn={this.openRadioPicker}
-                  />
-                  {(!this.enterUser && haveUsers) &&
-                    <View style={styles.addIconArea}>
-                      <TouchableNativeFeedback
-                        // background={TouchableNativeFeedback.SelectableBackgroundBorderless()}
-                        onPress={this.deleteThisUser}
-                      >
-                        <View style={[styles.userActionButton, {marginHorizontal: 10}]}>
-                          <Text style={[styles.button, {color: dangerColor}]}>DELETE</Text>
-                        </View>
-                      </TouchableNativeFeedback>
+              <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                        duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                <SlideDownView startValue={-130} endValue={0} open={this.openItems} 
+                          duration={SCROLL_DOWN_DURATION}>
+                  <View style={[cardLayout, styles.cardCustom]}>
+                    <SettingHeader icon={APP_ICONS.YinYang} label="Theme" 
+                                  description="Select the theme to be applied when TrekLog starts.  The theme applies to all groups."
+                    />
+                    <View style={styles.inputRow}>
+                      <RadioGroup 
+                        onChangeFn={this.setTheme}
+                        selected={this.theme}
+                        labels={["Light", "Dark"]}
+                        values={[COLOR_THEME_LIGHT, COLOR_THEME_DARK]}
+                        labelStyle={{color: highTextColor, fontSize: 18}}
+                        justify='start'
+                        inline
+                        itemHeight={30}
+                        radioFirst
+                      />
                     </View>
-                  }
-                </View>
-                {this.enterUser &&
-                  <View style={styles.rowLayout}>
-                    <TextInputField
-                      style={[styles.textInputItem, styles.inputTextStyle]}
-                      onChangeFn={(text : string) => this.setNewUser(text)}
-                      kbType='default'
-                      placeholderValue={this.newUser}
-                      autoFocus
-                    /> 
-                    <View style={styles.addIconArea}>
-                      <TouchableNativeFeedback
-                        onPress={this.cancelNewUser}
-                      >
-                        <View style={styles.userActionButton}>
-                          <Text style={[styles.button, {color: cancelColor}]}>CANCEL</Text>
+                  </View>           
+                </SlideDownView>
+              </FadeInView>       
+              <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                        duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                <SlideDownView startValue={-130} endValue={0} open={this.openItems} 
+                          duration={SCROLL_DOWN_DURATION}>
+                  <View style={[cardLayout, styles.cardCustom]}>
+                    <SettingHeader icon={APP_ICONS.FolderOpenOutline} label="Groups" 
+                      description="Treks are separated into groups. The rest of the settings apply only to this group:"
+                    />
+                    <View style={styles.inputRow}>     
+                      <IconButton 
+                        iconSize={groupSelectIconSize}
+                        icon="FolderOpenOutline"
+                        style={{...navItem, ...styles.groupSelectButtonStyle}}
+                        raised
+                        borderColor={navItemBorderColor}
+                        iconStyle={navIcon}
+                        color={secondaryColor}
+                        onPressFn={this.getDifferentGroup}
+                      />
+                      <Text style={{color: highTextColor, fontSize: 20,marginLeft: 5, width: 150}}>
+                        {this.enterGroup ? "New" : this.group}</Text>
+                      {(!this.enterGroup && haveGroups) &&
+                        <View style={styles.addIconArea}>
+                          <TouchableNativeFeedback
+                            background={TouchableNativeFeedback.Ripple(rippleColor, false)}
+                            onPress={this.deleteThisGroup}
+                          >
+                            <View style={[styles.groupActionButton, {marginHorizontal: 10}]}>
+                              <Text style={[styles.button, {color: dangerColor}]}>DELETE</Text>
+                            </View>
+                          </TouchableNativeFeedback>
                         </View>
-                      </TouchableNativeFeedback>
-                      <TouchableNativeFeedback
-                        onPress={this.addNewUser}
-                      >
-                        <View style={styles.userActionButton}>
-                          <Text style={[styles.button, {color: okChoiceColor}]}>ADD</Text>
-                        </View>
-                      </TouchableNativeFeedback>
+                      }
                     </View>
-                  </View>
-                }
-              </View>  
-              <View style={[cardLayout, styles.cardCustom, {minHeight: cardHeight + 15}]}>
-                <SettingHeader icon={APP_ICONS.BulletedList} label="Type" 
-                               description="Active type when TrekLog starts"
-                />
-                <View style={styles.inputRow}>
-                  <TrekTypeSelect
-                    style={{marginTop: 10, justifyContent: "flex-start"}}
-                    size={40}
-                    selected={TREK_SELECT_BITS[this.defaultType]}
-                    onChangeFn={this.setDefaultType}
-                  />
-                </View>
-              </View>           
-              <View style={[cardLayout, styles.cardCustom]}>
-                <SettingHeader icon={APP_ICONS.CompassMath} label="Measurements" 
-                               description="System to use for weights and distances"
-                />
-                <View style={styles.inputRow}>
-                  <RadioGroup 
-                    onChangeFn={this.switchSystem}
-                    selected={this.system}
-                    labels={["Imperial", "Metric"]}
-                    values={["US", "Metric"]}
-                    labelStyle={{color: highTextColor, fontSize: 18}}
-                    justify='start'
-                    inline
-                    itemHeight={30}
-                    radioFirst
-                  />
-                </View>
-              </View>           
-              <View style={[cardLayout, styles.cardCustom]}>
-                <SettingHeader icon={APP_ICONS.Scale} label="Weight" 
-                               description="Weight for this user"
-                />
-                <View style={styles.inputRow}>
-                  <TextInputField
-                    style={[styles.textInputItem, styles.numberInput, styles.inputTextStyle]}
-                    onChangeFn={this.setNewWeight}
-                    placeholderValue={this.weightStr}
-                  />
-                  <Text style={styles.unitsText}>{WEIGHT_UNIT_CHOICES[this.system]}</Text>
-                  <Text style={styles.onText}>on:</Text>
-                  <Text style={styles.dateText}>{this.props.utilsSvc.dateFromSortDate(this.weightDate)}</Text>
-                </View>
-              </View>           
+                    {this.enterGroup &&
+                      <View style={[styles.rowLayout, {marginLeft: 30}]}>
+                        <View style={{width: 175}}>
+                          <TextInputField
+                            style={[styles.textInputItem, styles.inputTextStyle]}
+                            inputWidth={175}
+                            onChangeFn={(text : string) => this.setNewGroup(text)}
+                            kbType='default'
+                            placeholderValue={this.newGroup}
+                            autoFocus
+                          /> 
+                        </View>
+                        <View style={styles.addIconArea}>
+                          <TouchableNativeFeedback
+                            background={TouchableNativeFeedback.Ripple(rippleColor, false)}
+                            onPress={this.cancelNewGroup}
+                          >
+                            <View style={styles.groupActionButton}>
+                              <Text style={[styles.button, {color: cancelColor}]}>CANCEL</Text>
+                            </View>
+                          </TouchableNativeFeedback>
+                          <TouchableNativeFeedback
+                            background={TouchableNativeFeedback.Ripple(rippleColor, false)}
+                            onPress={this.addNewGroup}
+                          >
+                            <View style={styles.groupActionButton}>
+                              <Text style={[styles.button, {color: okChoiceColor}]}>ADD</Text>
+                            </View>
+                          </TouchableNativeFeedback>
+                        </View>
+                      </View>
+                    }
+                  </View>  
+                </SlideDownView>
+              </FadeInView>       
+              <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                        duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                <SlideDownView startValue={-130} endValue={0} open={this.openItems} 
+                          duration={SCROLL_DOWN_DURATION}>
+                  <View style={[cardLayout, styles.cardCustom, {minHeight: cardHeight + 15}]}>
+                    <SettingHeader icon={APP_ICONS.BulletedList} label="Type" 
+                                  description="Default type to use with this group"
+                    />
+                    <View style={[styles.inputRow, {marginTop: 0}]}>
+                      <TrekTypeSelect
+                        style={{justifyContent: "flex-start"}}
+                        size={50}
+                        selected={TREK_SELECT_BITS[this.defaultType]}
+                        onChangeFn={this.setDefaultType}
+                      />
+                    </View>
+                  </View>           
+                </SlideDownView>
+              </FadeInView>       
+              <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                        duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                <SlideDownView startValue={-130} endValue={0} open={this.openItems} 
+                          duration={SCROLL_DOWN_DURATION}>
+                  <View style={[cardLayout, styles.cardCustom]}>
+                    <SettingHeader icon={APP_ICONS.CompassMath} label="Measurements" 
+                                  description="System to use for weights and distances in this group"
+                    />
+                    <View style={styles.inputRow}>
+                      <RadioGroup 
+                        onChangeFn={this.switchSystem}
+                        selected={this.system}
+                        labels={["Imperial", "Metric"]}
+                        values={["US", "Metric"]}
+                        labelStyle={{color: highTextColor, fontSize: 18}}
+                        justify='start'
+                        inline
+                        itemHeight={30}
+                        radioFirst
+                      />
+                    </View>
+                  </View>           
+                </SlideDownView>
+              </FadeInView>       
+              <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                        duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                <SlideDownView startValue={-130} endValue={0} open={this.openItems} 
+                          duration={SCROLL_DOWN_DURATION}>
+                  <View style={[cardLayout, styles.cardCustom]}>
+                    <SettingHeader icon={APP_ICONS.Scale} label="Weight" 
+                                  description="Weight to use for this group"
+                    />
+                    <View style={styles.inputRow}>
+                      <TextInputField
+                        style={[styles.textInputItem, styles.numberInput, styles.inputTextStyle]}
+                        onChangeFn={this.setNewWeight}
+                        placeholderValue={this.weightStr}
+                      />
+                      <Text style={styles.unitsText}>{WEIGHT_UNIT_CHOICES[this.system]}</Text>
+                      <Text style={styles.onText}>on:</Text>
+                      <Text style={styles.dateText}>{this.uSvc.dateFromSortDate(this.weightDate)}</Text>
+                    </View>
+                  </View>           
+                </SlideDownView>
+              </FadeInView>       
               <View style={[cardLayout, styles.cardCustom]}>
                 <SettingHeader icon={APP_ICONS.WomanGirl} label="Height" 
-                               description="Height for this user"
+                               description="Height to use for this group"
                 />
                 <View style={styles.inputRow}>
                   <TextInputField
@@ -942,7 +923,7 @@ class Settings extends Component<{
               </View>           
               <View style={[cardLayout, styles.cardCustom]}>
                 <SettingHeader icon={APP_ICONS.Walk} label="Walking" 
-                               description="Walking stride length for this user"
+                               description="Walking stride length for this group"
                 />
                 <View style={styles.inputRow}>
                   <TextInputField
@@ -955,7 +936,7 @@ class Settings extends Component<{
               </View>           
               <View style={[cardLayout, styles.cardCustom]}>
                 <SettingHeader icon={APP_ICONS.Run} label="Running" 
-                               description="Running stride length for this user"
+                               description="Running stride length for this group"
                 />
                 <View style={styles.inputRow}>
                   <TextInputField
@@ -968,7 +949,7 @@ class Settings extends Component<{
               </View>           
               <View style={[cardLayout, styles.cardCustom]}>
                 <SettingHeader icon={APP_ICONS.Bike} label="Biking" 
-                               description="Bike tire outer diameter for this user"
+                               description="Bike tire outer diameter for this group"
                 />
                 <View style={styles.inputRow}>
                   <TextInputField
@@ -981,7 +962,7 @@ class Settings extends Component<{
               </View>           
               <View style={[cardLayout, styles.cardCustom]}>
                 <SettingHeader icon={APP_ICONS.Hike} label="Hiking" 
-                               description="Hiking stride length for this user"
+                               description="Hiking stride length for this group"
                 />
                 <View style={styles.inputRow}>
                   <TextInputField
@@ -994,7 +975,7 @@ class Settings extends Component<{
               </View>
               <View style={[cardLayout, styles.cardCustom]}>
                 <SettingHeader icon={APP_ICONS.Sack} label="Backpack" 
-                               description="Default backpack weight for this user"
+                               description="Default backpack weight for this group"
                 />
                 <View style={styles.inputRow}>
                   <TextInputField
@@ -1008,7 +989,7 @@ class Settings extends Component<{
             </ScrollView>
           </View>
           }
-          {(!hideUpdate && !this.keyboardOpen && haveUsers) &&
+          {(!hideUpdate && !this.keyboardOpen && haveGroups) &&
             <SpeedDial 
               selectFn={this.saveSettings}
               bottom={CONTROLS_HEIGHT}
@@ -1016,7 +997,7 @@ class Settings extends Component<{
               icon="CheckMark"
             />
           }
-          {(!this.dataReady || this.changingUser) &&
+          {(!this.dataReady || this.changingGroup) &&
             <Waiting/>
           }
         </View>

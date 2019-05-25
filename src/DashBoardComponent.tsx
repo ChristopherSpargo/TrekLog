@@ -1,5 +1,7 @@
 import React, { Component } from 'react'
-import { View, Text, StyleSheet, TouchableNativeFeedback } from 'react-native'
+import { View, Text, StyleSheet} from 'react-native'
+import { BorderlessButton } from 'react-native-gesture-handler'
+
 import { observable, action } from 'mobx'
 import { observer, inject } from 'mobx-react'
 
@@ -7,7 +9,7 @@ import { TrekInfo, TrekObj, SWITCH_SPEED_AND_TIME,
          TREK_TYPE_CHOICES, TrekType, DIST_UNIT_CHOICES, TREK_SELECT_BITS, ALL_SELECT_BITS,
          TREK_TYPE_BIKE, TREK_TYPE_RUN, TREK_TYPE_WALK, TREK_TYPE_HIKE,
          BIKE_SELECT_BIT, WALK_SELECT_BIT, RUN_SELECT_BIT, HIKE_SELECT_BIT} from './TrekInfoModel'
-import { TREK_TYPE_COLORS_OBJ, HEADER_HEIGHT } from './App'
+import { TREK_TYPE_COLORS_OBJ, HEADER_HEIGHT, NUMBERS_BAR_Z_INDEX, INVISIBLE_Z_INDEX } from './App'
 import { UtilsSvc } from './UtilsService';
 import { TIME_FRAME_DISPLAY_NAMES } from './ReviewComponent';
 import TreksPieChart from './TreksPieChartComponent';
@@ -94,7 +96,7 @@ class DashBoard extends Component<{
     this.showStepsPerMin = false;
     this.showTotalCalories = true;
     this.summaryOpen = false;
-    this.zValue = -1;
+    this.zValue = INVISIBLE_Z_INDEX;
   }
 
   init = () => {
@@ -111,11 +113,11 @@ class DashBoard extends Component<{
   }
 
   setVisible = () => {
-    this.setZValue(6);
+    this.setZValue(NUMBERS_BAR_Z_INDEX);
   }
 
   setNotVisible = () => {
-    this.setZValue(-1);
+    this.setZValue(INVISIBLE_Z_INDEX);
   }
 
   @action
@@ -195,7 +197,7 @@ class DashBoard extends Component<{
     this.durationTally += t.duration;
     cals = t.calories;
     this.TCBcalorieTally += cals;
-    this.NCBcalorieTally += this.uSvc.cvtToNetCalories(cals, t.weight, t.duration);
+    this.NCBcalorieTally += this.uSvc.getCaloriesPerMin(cals, t.duration);
     let sl = t.type !== TREK_TYPE_BIKE ? t.strideLength : 0;
     this.stepTally += this.uSvc.computeStepCount(t.trekDist, sl);
   }
@@ -216,22 +218,23 @@ class DashBoard extends Component<{
   }
 
   formattedTime = () => {
-    return this.uSvc.formatDuration(this.durationTally);
+    return {value: this.uSvc.formatDuration(this.durationTally), units: ''};
   }
 
   formattedCals = () => {
-    let val = this.showTotalCalories ? this.TCBcalorieTally : this.NCBcalorieTally;
+    let val = this.showTotalCalories ? this.TCBcalorieTally : 
+              this.props.utilsSvc.getCaloriesPerMin(this.TCBcalorieTally, this.durationTally);
     let prec = val < 10 ? 10 : 1;
     return {value: (Math.round(val * prec) / prec).toString(),
-            units: (this.showTotalCalories ? ' cals' : ' net cals ')}; 
+            units: ''}; 
   }
 
   formattedSteps = () => {
     if (this.showStepsPerMin) {
-      return {value: Math.round(this.stepTally / (this.durationTally / 60)),
-              units: ' steps/min'};
+      return {value: Math.round(this.stepTally / (this.durationTally / 60)).toString(),
+              units: ''};
     }
-    return {value: this.stepTally.toString(), units: ' steps'};
+    return {value: this.stepTally.toString(), units: ''};
   }
 
   // toggle between displaying time/distance and distance/time
@@ -246,33 +249,32 @@ class DashBoard extends Component<{
     this.showStepsPerMin = !this.showStepsPerMin;
   }
 
-  // toggle between displaying total calories and net calories
+  // toggle between displaying total calories and calories/min
   @action
   toggleShowTotalCalories = () => {
     this.showTotalCalories = !this.showTotalCalories;
   }
 
   setType = (value: TrekType) => {
-    requestAnimationFrame(() =>{
       this.updateTypeSels(value, false);
-    });
   }
 
   toggleType = (value: TrekType) => {
-    requestAnimationFrame(() =>{
       this.updateTypeSels(value, true);
-    });
   }
 
   render() {
 
     const haveTreks = !this.fS.filteredTreksEmpty();
     const typeIconAreaSize = 55;
-    const summaryHeight = 141;
+    const summaryHeight = 200;
     const statTitleIconSize = 24;
     const noSelection = this.tInfo.typeSelections === 0;
-    const { highTextColor, pageBackground, trekLogBlue, disabledTextColor,
-            mediumTextColor } = this.props.uiTheme.palette;
+    const calsLabel = this.showTotalCalories ? 'Calories' : 'Calories/Min';
+    const stepsLabel = this.showStepsPerMin ? 'Steps/Min' : 'Steps';
+    const minItemWidth = 120;
+    const { highTextColor, trekLogBlue, disabledTextColor, mediumTextColor,
+            rippleColor } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
 
     let data = [];
     // Build the data object for the PieChart
@@ -291,7 +293,7 @@ class DashBoard extends Component<{
       timeFrameArea: {
         flexDirection: "row",
         alignItems: "center",
-        justifyContent: "center"
+        justifyContent: "center",
       },
       statHeadingArea: {
         flexDirection: "row",
@@ -327,6 +329,7 @@ class DashBoard extends Component<{
         alignItems: "center",
         paddingHorizontal: 10,
         marginTop: 5,
+        marginBottom: 20,
       },
       typeControls: {
         flexDirection: "column",
@@ -359,7 +362,7 @@ class DashBoard extends Component<{
         backgroundColor: "transparent",
       },
       dateInputText: {
-        color: highTextColor,
+        color: disabledTextColor,
         fontSize: 22,
       },
       toText: {
@@ -367,7 +370,7 @@ class DashBoard extends Component<{
         color: highTextColor,
       },
       timeFrameName:{
-        fontSize: 18,
+        fontSize: 20,
         fontWeight: "bold",
         color: highTextColor,
       },
@@ -378,49 +381,98 @@ class DashBoard extends Component<{
         bottom: 0,
         height: summaryHeight,
         overflow: "hidden",
-        backgroundColor: pageBackground,
+        backgroundColor: "transparent",
         justifyContent: "center",
         zIndex: this.zValue,
       },
       shortStats: {
-        borderTopWidth: 1,
-        borderColor: mediumTextColor,
-        borderStyle: "solid",
-        alignItems: "center",
-        justifyContent: "center",
+        // alignItems: "center",
+        justifyContent: "space-around",
         paddingBottom: 3,
       },
       statPair: {
         height: (summaryHeight - 3) / 3,
         flexDirection: "row",
         alignItems: "center",
-        justifyContent: "center",
+        justifyContent: "space-around",
       },
       shortStat: {
-        flex: 1,
         flexDirection: "row",
         alignItems: "flex-end",
         justifyContent: "center",
       },
       shortStatValue: {
-        fontSize: 30,
+        fontSize: 50,
         fontWeight: "300",
         color: highTextColor,
       },
       shortStatUnits: {
-        fontSize: 20,
+        fontSize: 28,
         marginBottom: 2,
         fontWeight: "300",
         color: trekLogBlue,
       },
+      statItem: {
+        // flex: 1,
+        alignItems: "center",
+        justifyContent: "center",
+      },
+      statLabel: {
+        alignItems: "center",
+        flexDirection: "row",
+        justifyContent: "center",
+        minWidth: minItemWidth,
+        paddingBottom: 5,
+      },
+      statLabelText: {
+        color: mediumTextColor,
+        fontSize: 16,
+      },
+      statValue: {
+        minWidth: minItemWidth,
+        flexDirection: "row",
+        justifyContent: "center",
+        alignItems: "flex-end",
+        borderBottomWidth: 1,
+        borderStyle: "solid",
+        borderColor: disabledTextColor,
+      },
+      statValueText: {
+        color: highTextColor,
+        fontSize: 36,
+      },
+      statUnitsText: {
+        color: highTextColor,
+        marginBottom: 4,
+        fontSize: 24,
+      },
     });
+
+    const StatItem = (props: any) => {
+      return (
+        <View style={styles.statItem}>
+          <BorderlessButton rippleColor={props.switchFn ? rippleColor : "transparent"} 
+                      onPress={props.switchFn ? props.switchFn : undefined}>
+            <View style={styles.statValue}>
+              <Text style={[styles.statValueText, props.valueStyle]}>
+                            {this.props.utilsSvc.zeroSuppressedValue(props.item.value)}</Text>
+              <Text style={styles.statUnitsText}>{props.item.units}</Text>
+            </View>
+            <View style={styles.statLabel}>
+              <Text style={[styles.statLabelText, props.switchFn ? {color: trekLogBlue} : {}]}>
+                                    {props.label}</Text>
+            </View>
+          </BorderlessButton>
+        </View>
+      )
+    }
 
 
     return (
       <View style={styles.container}>
         {(!haveTreks && !this.tInfo.resObj && this.fS.filterRuns) &&
           <View style={{height: 205}}>
-            <Text style={styles.noMatches}>Nothing To Display for {this.tInfo.user}</Text>
+            <Text style={styles.noMatches}>Nothing To Display for {this.tInfo.group}</Text>
           </View>
         }
         {(haveTreks && this.fS.filterRuns) &&
@@ -487,7 +539,7 @@ class DashBoard extends Component<{
               <Text style={styles.timeFrameName}>{TIME_FRAME_DISPLAY_NAMES[this.tInfo.timeframe]}</Text>
             </View>
             {(haveTreks || this.tInfo.timeframe !== 'All') &&
-              <View style={[styles.rowCenter, {paddingBottom: 15}]}>
+              <View style={[styles.rowCenter, {marginBottom: 20}]}>
                 <View style={[styles.rowStart, styles.dateInputArea]}>
                   <Text style={styles.dateInputText}>
                   {this.fS.dateMin === '' ? this.defDtMin : this.fS.dateMin}</Text>
@@ -514,7 +566,7 @@ class DashBoard extends Component<{
         }
         <View style={styles.summaryArea}>
           <SlideUpView 
-            bgColor="#fafafa"
+            bgColor="transparent"
             startValue={summaryHeight}
             endValue={0}
             open={!noSelection && (this.trekTally > 0)}
@@ -523,37 +575,22 @@ class DashBoard extends Component<{
           >
             <View style={styles.shortStats}>
               <View style={styles.statPair}>
-                <Text style={[styles.shortStatValue]}>{this.formattedTime()}</Text>
+                <StatItem item={this.formattedTime()} label='Time'/>
               </View>
               <View style={styles.statPair}>
                 <View style={[styles.shortStat]}>
-                  <Text style={[styles.shortStatValue]}>{this.formattedDist().value}</Text>
-                  <TouchableNativeFeedback
-                      background={TouchableNativeFeedback.SelectableBackgroundBorderless()}
-                      onPress={this.tInfo.switchMeasurementSystem}>
-                    <Text style={[styles.shortStatUnits, {color: trekLogBlue, marginRight: 12}]}>
-                                          {this.formattedDist().units}</Text>
-                  </TouchableNativeFeedback>
+                  <StatItem item={this.formattedDist()} label='Distance'
+                                  switchFn={this.tInfo.switchMeasurementSystem}/>
                 </View>
                 <View style={[styles.shortStat]}>
-                  <Text style={[styles.shortStatValue]}>{this.formattedCals().value}</Text>
-                  <TouchableNativeFeedback
-                      background={TouchableNativeFeedback.SelectableBackgroundBorderless()}
-                      onPress={this.toggleShowTotalCalories}>
-                    <Text style={[styles.shortStatUnits]}>
-                                          {this.formattedCals().units}</Text>
-                  </TouchableNativeFeedback>
+                  <StatItem item={this.formattedCals()} label={calsLabel}
+                                  switchFn={this.toggleShowTotalCalories}/>
                 </View>
               </View>
               <View style={styles.statPair}>
                 <View style={styles.shortStat}>
-                  <Text style={[styles.shortStatValue]}>{this.formattedSteps().value}</Text>
-                  <TouchableNativeFeedback
-                      background={TouchableNativeFeedback.SelectableBackgroundBorderless()}
-                      onPress={this.toggleShowStepsPerMin}>
-                    <Text style={[styles.shortStatUnits]}>
-                                          {this.formattedSteps().units}</Text>
-                  </TouchableNativeFeedback>
+                  <StatItem item={this.formattedSteps()} label={stepsLabel}
+                                  switchFn={this.toggleShowStepsPerMin}/>
                 </View>
               </View>
             </View>

@@ -10,7 +10,7 @@ import { ModalModel } from './ModalModel'
 import { TrekInfo } from './TrekInfoModel';
 import IconButton from './IconButtonComponent';
 
-const MAX_LABEL_LENGTH = 40;
+const MAX_LABEL_LENGTH = 35;
 const MAX_NOTE_LENGTH = 300;
 
 // dialog used for trek label
@@ -78,14 +78,14 @@ class TrekLabelForm extends React.Component<{
 
   @action
   setLabelValue = (val: string) => {
-    if (val.length <= MAX_LABEL_LENGTH) {
+    if (val !== undefined && val.length <= MAX_LABEL_LENGTH) {
       this.labelValue = val;      
     }
   }
 
   @action
   setNoteValue = (val: string) => {
-    if (val.length <= MAX_NOTE_LENGTH) {
+    if (val !== undefined && val.length <= MAX_NOTE_LENGTH) {
       this.noteValue = val;      
     }
   }
@@ -124,9 +124,9 @@ class TrekLabelForm extends React.Component<{
   render() {
 
     const mData = this.props.modalSvc.lfData;
-    const { controlsArea, cardLayout, navItem, navIcon } = this.props.uiTheme;
-    const { highTextColor, dividerColor, mediumTextColor, navIconColor,
-            trekLogBlue } = this.props.uiTheme.palette;
+    const { controlsArea, cardLayout, roundedTop, navItem, navIcon } = this.props.uiTheme;
+    const { highTextColor, dividerColor, mediumTextColor, navIconColor, pageBackground, navItemBorderColor,
+            trekLogBlue, contrastingMask_3 } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
     const defHIcon = mData.headingIcon || "Edit";
     const labelPrompt = "Label:"
     const labelChars = (MAX_LABEL_LENGTH - this.labelValue.length) + " characters left";
@@ -139,7 +139,7 @@ class TrekLabelForm extends React.Component<{
       background: {
         ... StyleSheet.absoluteFillObject,
         zIndex: BACKDROP_Z_INDEX,
-        backgroundColor: "rgba(0,0,0,.4)"
+        backgroundColor: contrastingMask_3,
       },
       formArea: {
         position: "absolute",
@@ -158,10 +158,12 @@ class TrekLabelForm extends React.Component<{
         borderBottomWidth: 0,
         borderTopColor: dividerColor,
         borderTopWidth: 2,
+        backgroundColor: pageBackground,
       },
       caAdjust: {
         borderRightWidth: 0,
         borderLeftWidth: 0,
+        backgroundColor: pageBackground,
       },
       header: {
         paddingLeft: 10,
@@ -224,7 +226,7 @@ class TrekLabelForm extends React.Component<{
           <View style={[styles.container]}>
             <View style={styles.background}>
               <View style={[styles.formArea, this.keyboardOpen ? {bottom: 0} : {}]}>
-                <View style={[cardLayout, styles.cardCustom]}>
+                <View style={[cardLayout, styles.cardCustom, roundedTop]}>
                   <View style={styles.header}>
                     <SvgIcon 
                       style={{marginRight: 6}}
@@ -272,6 +274,7 @@ class TrekLabelForm extends React.Component<{
                       iconSize={navIconSize}
                       icon="ArrowBack"
                       style={navItem}
+                      borderColor={navItemBorderColor}
                       iconStyle={navIcon}
                       color={navIconColor}
                       raised
@@ -283,6 +286,7 @@ class TrekLabelForm extends React.Component<{
                       icon="CheckMark"
                       style={navItem}
                       iconStyle={navIcon}
+                      borderColor={navItemBorderColor}
                       color={navIconColor}
                       raised
                       onPressFn={this.close}

@@ -1,13 +1,15 @@
 import React, { Component } from 'react';
-import { View, StyleSheet, TouchableNativeFeedback } from 'react-native';
-// import Svg, { Path } from 'react-native-svg'
+import { View, StyleSheet } from 'react-native';
+import { BorderlessButton, LongPressGestureHandler, State } from 'react-native-gesture-handler'
 import { observer, inject } from 'mobx-react';
 import SvgIcon from './SvgIconComponent';
+import { TrekInfo } from './TrekInfoModel';
 
-@inject('uiTheme')
+@inject('uiTheme', 'trekInfo')
 @observer
 class SvgButton extends Component<{
   uiTheme ?: any,
+  trekInfo ?: TrekInfo,
   value ?: string,          // value of the current selection
   onPressFn ?:  Function,   // call this when button pressed
   onLongPressFn ?: Function, // call this when botton longPressed
@@ -27,19 +29,18 @@ class SvgButton extends Component<{
 
 
   buttonPressed = () => {
-    requestAnimationFrame(() => {
-      this.props.onPressFn(this.props.value);
-    });
+    this.props.onPressFn(this.props.value);
   }
 
-  buttonLongPressed = () => {
-    requestAnimationFrame(() => {
+  buttonLongPressed = ({ nativeEvent }) => {
+    if (nativeEvent.state === State.ACTIVE) {
       this.props.onLongPressFn(this.props.value);
-    });
+    }
   }
 
   render() {
-    const {  highlightColor, dividerColor } = this.props.uiTheme.palette;
+    const { highlightColor, dividerColor, rippleColor 
+          } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
 
     const areaOffset = this.props.areaOffset === undefined ? 10 : this.props.areaOffset;
     const iconAreaSize = this.props.size || 50;
@@ -58,8 +59,9 @@ class SvgButton extends Component<{
         // borderRadius: 6,
         marginLeft: 6,
         marginRight: 6,
-        backgroundColor: "white",
+        backgroundColor: "transparent",
         borderWidth: this.props.borderWidth !== undefined ? this.props.borderWidth : 1,
+        borderBottomWidth: this.props.borderWidth !== undefined ? this.props.borderWidth : 2,
         borderStyle: "solid",
         borderColor: dividerColor,
       },
@@ -78,22 +80,23 @@ class SvgButton extends Component<{
     const borderHighlight = this.props.highlight ? styles.highlight : {};
     
     return(
-      <TouchableNativeFeedback 
-        background={TouchableNativeFeedback.SelectableBackgroundBorderless()}
-        onLongPress={this.buttonLongPressed}
-        onPress={this.buttonPressed}>
-        <View style={[styles.container, propStyle, borderHighlight]}>
-          <SvgIcon 
-              style={styles.appIcon}
-              size={iconSize}
-              widthAdj={widAdj}
-              xOffset={iconOffset ? iconOffset : undefined}
-              yOffset={iconOffset ? iconOffset : undefined}
-              fill={fillColor}
-              paths={this.props.path}
-          />
-        </View>
-      </TouchableNativeFeedback>
+      <LongPressGestureHandler
+            onHandlerStateChange={this.buttonLongPressed}
+            minDurationMs={400}>
+        <BorderlessButton rippleColor={rippleColor} onPress={this.buttonPressed}>
+          <View style={[styles.container, propStyle, borderHighlight]}>
+            <SvgIcon 
+                style={styles.appIcon}
+                size={iconSize}
+                widthAdj={widAdj}
+                xOffset={iconOffset ? iconOffset : undefined}
+                yOffset={iconOffset ? iconOffset : undefined}
+                fill={fillColor}
+                paths={this.props.path}
+            />
+          </View>
+        </BorderlessButton>
+      </LongPressGestureHandler>        
     )
   }
 

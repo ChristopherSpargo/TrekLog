@@ -1,6 +1,5 @@
 import React, { Component } from 'react';
-import { View, StyleSheet, Text, ScrollView,
-         TouchableNativeFeedback, Keyboard } from 'react-native';
+import { View, StyleSheet, Text, ScrollView, Keyboard } from 'react-native';
 import { NavigationActions } from 'react-navigation';
 import { observable, action } from 'mobx';
 import { observer, inject } from 'mobx-react';
@@ -21,6 +20,7 @@ import SvgIcon from './SvgIconComponent';
 import TextInputField from './TextInputFieldComponent';
 import IconButton from './IconButtonComponent';
 import TrekLogHeader from './TreklogHeaderComponent';
+import { RectButton } from 'react-native-gesture-handler';
 
 const goBack = NavigationActions.back() ;
 
@@ -37,15 +37,6 @@ class GoalEditor extends Component<{
   trekInfo ?: TrekInfo,        // object with all non-gps information about the Trek
   navigation ?: any
 }, {} > {
-
-  static navigationOptions = ({navigation}) => {
-   
-    return {
-      header: <TrekLogHeader titleText={navigation.getParam('title','')}
-                             icon="*"
-              />
-    };
-  }  
 
   keyboardDidShowListener;
   keyboardDidHideListener;
@@ -101,6 +92,7 @@ class GoalEditor extends Component<{
   // Update the value of the category property
   @action
   setGoalCategory = (val: string) => {
+    // this.gS.goalCategory = val;
     this.gS.setNewDITGoalObj(val);
   }
 
@@ -165,7 +157,7 @@ class GoalEditor extends Component<{
     if(afterAdd !== undefined) { afterAdd(); }
 }
 
-  // add the given goal to the list
+  // update the given goal
   @action
   updateGoal = (index: number, goal: GoalObj) => {
     this.gS.goalList[index] = this.props.utilsSvc.copyObj(goal) as GoalObj;
@@ -204,8 +196,9 @@ class GoalEditor extends Component<{
   render() {
 
     const { mediumTextColor, pageBackground, trekLogBlue, highTextColor, dividerColor,
-            navIconColor, highlightedItemColor, primaryColor } = this.props.uiTheme.palette;
-    const { cardLayout, controlsArea, navItem, navIcon } = this.props.uiTheme;
+            navIconColor, highlightedItemColor, primaryColor, rippleColor, navItemBorderColor
+          } = this.props.uiTheme.palette[this.tInfo.colorTheme];
+    const { cardLayout, controlsArea, navItem, navIcon, pageTitle } = this.props.uiTheme;
     const validGoal = this.gS.validGoal(); 
     const editNew = this.gS.goalEditMode === 'New'
     const CAMetricUnits = this.gS.goalActivity === "Burn" ? CABurnGoalMetricUnitsArray : CAGoalMetricUnitsArray;
@@ -216,11 +209,6 @@ class GoalEditor extends Component<{
 
     const styles=StyleSheet.create({
       container: { ... StyleSheet.absoluteFillObject, backgroundColor: pageBackground },
-      rowLayout: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-      },
       rowStart: {
         flexDirection: "row",
         alignItems: "center",
@@ -231,19 +219,10 @@ class GoalEditor extends Component<{
         alignItems: "center",
         justifyContent: "center",
       },
-      rowAround: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-around",
-      },
-      columnLayout: {
-        flexDirection: "column",
-        alignItems: "flex-start",
-        justifyContent: "center",
-      },
       labelText: {
         color: primaryColor,
-        fontSize: 16
+        marginBottom: 5,
+        fontSize: 18
       },
       goalArea: {
         height: 60,
@@ -257,44 +236,14 @@ class GoalEditor extends Component<{
         marginTop: 5,
         fontSize: 20,
       },
-     promptText: {
-        color: highTextColor,
-        fontSize: 18,
-        fontWeight: "bold",
-      },
-      dateLabel: {
-        color: mediumTextColor,
-        marginTop: 5,
-        fontSize: 18
-      },
-      inText: {
-        fontSize: 22,
-        marginLeft: 15,
-        color: mediumTextColor
-      },
       textInputItem: {
         height: 45,
         width: 80,
-        borderWidth: 0,
         marginRight: 5,
       },      
-      longPickField: {
-        height: 45,
-        width: 230,
-        borderWidth: 0,
-        marginRight: 5,
-        color: trekLogBlue,
-      },
       pickField: {
         height: 45,
         width: 145,
-        borderWidth: 0,
-        marginRight: 5,
-        color: trekLogBlue,
-      },
-      shortPickField: {
-        height: 45,
-        width: 130,
         borderWidth: 0,
         marginRight: 5,
         color: trekLogBlue,
@@ -311,27 +260,11 @@ class GoalEditor extends Component<{
         fontWeight: "300",
         fontSize: 24,
       },
-      pageTitle: {
-        fontSize: 20,
-        color: highTextColor,
-        fontWeight: "bold",
-      },
       sortButtonCol: {
         paddingVertical: 10,
         paddingHorizontal: 15,
         minHeight: sortButtonHeight,
         backgroundColor: pageBackground,
-      },
-      sortButtonTrigger: {
-        flex: 1,
-        flexDirection: "row",
-        justifyContent: "flex-start",
-        alignItems: "center",   
-      },
-      trekNote: {
-        flexWrap: "wrap",
-        marginLeft: 30,
-        paddingBottom: 10,
       },
       sortButtonIcon: {
         width: goalIconSize,
@@ -339,24 +272,8 @@ class GoalEditor extends Component<{
         marginRight: 10,
         backgroundColor: "transparent"
       },
-      sortButtonText: {
-        fontSize: 16,
-        marginLeft: 10,
-        color: highTextColor,
-      },
-      bodyText: {
-        fontSize: 16,
-        marginLeft: 10,
-        color: mediumTextColor,
-      },
-      sortButtonValue: {
-        fontSize: 18,
-        color: highTextColor,
-        fontWeight: "bold",
-      },
       radioGrp: {
         marginLeft: 30,
-        // marginTop: 5,
       },
       inputVal: {
         marginLeft: 30,
@@ -394,9 +311,13 @@ class GoalEditor extends Component<{
 
     return(
       <View style={styles.container}>
+        <TrekLogHeader titleText={this.props.navigation.getParam('title','')}
+                             icon="*"
+                             backButtonFn={() =>  this.props.navigation.dispatch(goBack)}
+        />        
         <View style={[styles.container, {bottom: CONTROLS_HEIGHT}]}>
           <View style={[cardLayout, {paddingBottom: 0}]}>
-            <Text style={styles.pageTitle}>{this.getGoalPrompt()}</Text>
+            <Text style={[pageTitle, {color: highTextColor}]}>{this.getGoalPrompt()}</Text>
           </View>
             {validCat &&
               <View style={[styles.rowCenter, styles.goalArea]}>
@@ -438,14 +359,14 @@ class GoalEditor extends Component<{
                     <SettingHeader icon={APP_ICONS.CalendarCheck} label="Effective Date" 
                             description="Begin checking this goal as of"
                     />
-                    <TouchableNativeFeedback
-                      background={TouchableNativeFeedback.SelectableBackgroundBorderless()}
+                    <RectButton
+                      rippleColor={rippleColor}
                       onPress={this.callGetGoalDate}
                     >
                       <View style={[styles.rowStart, styles.inputVal, styles.dateInputArea]}>
                         <Text style={styles.dateInputText}>{this.uSvc.dateFromSortDateYY(this.gS.goalDateSet)}</Text>
                       </View>
-                    </TouchableNativeFeedback>
+                    </RectButton>
                   </View>
                   {this.gS.goalCategory === DIT_GOAL_CAT && 
                     <View>
@@ -493,11 +414,12 @@ class GoalEditor extends Component<{
                                         label="Distance" 
                             description={this.gS.goalActivity + ' at least how many ' + this.gS.goalMetricUnits + '?'}
                         />
-                        <TextInputField
-                          style={[styles.textInputItem, styles.inputVal]}
-                          onChangeFn={this.setGoalMetricValue}
-                          placeholderValue={this.gS.goalMetricValue}
-                        />
+                        <View style={[styles.textInputItem, styles.inputVal]}>
+                          <TextInputField
+                            onChangeFn={this.setGoalMetricValue}
+                            placeholderValue={this.gS.goalMetricValue}
+                          />
+                        </View>
                       </View>
                       <View style={styles.divider}/>
                       <View style={styles.sortButtonCol}>
@@ -520,14 +442,15 @@ class GoalEditor extends Component<{
                       </View>
                       <View style={styles.divider}/>
                       <View style={styles.sortButtonCol}>
-                        <SettingHeader icon={APP_ICONS.Metronome} label="Time Limit" 
+                        <SettingHeader icon={APP_ICONS.TimerSand} label="Time Limit" 
                             description={'Finish in at most how many ' + this.gS.goalTestUnits + '?'}
                         />
-                        <TextInputField
-                          style={[styles.textInputItem, styles.inputVal]}
-                          onChangeFn={this.setGoalTestValue}
-                          placeholderValue={this.gS.goalTestValue}
-                        />
+                        <View style={[styles.textInputItem, styles.inputVal]}>
+                          <TextInputField
+                            onChangeFn={this.setGoalTestValue}
+                            placeholderValue={this.gS.goalTestValue}
+                          />
+                        </View>
                       </View>
                       <View style={styles.divider}/>
                     </View>    
@@ -597,11 +520,12 @@ class GoalEditor extends Component<{
                             description={this.gS.goalActivity + ' how many ' + this.gS.goalMetricUnits +
                             ' per ' + CATestUnitsToTime[this.gS.goalTestUnits] + '?'}
                         />
-                        <TextInputField
-                          style={[styles.textInputItem, styles.inputVal]}
-                          onChangeFn={this.setGoalMetricValue}
-                          placeholderValue={this.gS.goalMetricValue}
-                        />
+                        <View style={[styles.textInputItem, styles.inputVal]}>
+                          <TextInputField
+                            onChangeFn={this.setGoalMetricValue}
+                            placeholderValue={this.gS.goalMetricValue}
+                          />
+                        </View>
                       </View>
                       <View style={styles.divider}/>
                     </View>   
@@ -617,6 +541,7 @@ class GoalEditor extends Component<{
               iconSize={NAV_ICON_SIZE}
               icon="ArrowBack"
               style={navItem}
+              borderColor={navItemBorderColor}
               iconStyle={navIcon}
               color={navIconColor}
               raised
@@ -627,6 +552,7 @@ class GoalEditor extends Component<{
                 iconSize={NAV_ICON_SIZE}
                 icon="CheckMark"
                 style={navItem}
+                borderColor={navItemBorderColor}
                 iconStyle={navIcon}
                 color={navIconColor}
                 raised

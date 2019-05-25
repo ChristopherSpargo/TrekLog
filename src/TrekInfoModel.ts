@@ -1,23 +1,26 @@
 import { observable, action } from 'mobx';
 import { Alert } from 'react-native';
 import { LatLng } from 'react-native-maps';
-import BackgroundGeolocation from 'react-native-mauron85-background-geolocation';
+import BackgroundGeolocation from '@mauron85/react-native-background-geolocation';
 
 import { UtilsSvc, CM_PER_INCH, LB_PER_KG, M_PER_FOOT} from './UtilsService';
-import { NO_USER, UsersObj } from './SettingsComponent';
+import { GroupsObj, GroupSvc, SettingsObj } from './GroupService';
 import { WeatherData } from './WeatherSvc';
 import { StorageSvc } from './StorageService';
 import { ModalModel } from './ModalModel';
-import { uiTheme } from './App';
+import { uiTheme, COLOR_THEME_DARK, ThemeType, COLOR_THEME_LIGHT } from './App';
 
 // Class containing information about and service functions for a Trek
 
-export const CURR_DATA_VERSION = '4.4';   // version 2 added weather conditions data
+export const CURR_DATA_VERSION = '5.2';   // version 2 added weather conditions data
                                           // version 3 added hiking data (packWeight)
                                           // version 4 converted to storing with smaller key names
                                           // version 4.2 store calories computation
                                           // version 4.3 store drivingACar status
                                           // version 4.4 change calorie calculation
+                                          // version 5.0 start using files instead of AsyncData
+                                          // version 5.1 start storing images in Pictures/TrekLog directory
+                                          // version 5.2 truncate speed values to 4 significant digits
 
 export type MapType = "none" | "standard" | "satellite" | "hybrid" | "terrain" | "mutedStandard";
 
@@ -68,6 +71,8 @@ export interface NumericRange {
   range: number
 }
 
+export const BACKGROUND_IMAGES = 2;
+
 export const IMAGE_TYPE_PHOTO = 1;
 export const IMAGE_TYPE_VIDEO = 2;
 
@@ -100,7 +105,7 @@ export interface TrekImageSet {
 // Define the object stored in the database for a Trek
 export interface TrekObj {
     dataVersion:    string,
-    user:           string,
+    group:          string,
     date:           string,
     sortDate:       string,
     startTime:      string,
@@ -172,6 +177,8 @@ export interface RestoreObject {
   trekLabelFormOpen ?:  boolean,
   cancelDialogOpen ?:   boolean,
   showMapInLog ?:       boolean,
+  colorTheme ?:         ThemeType,
+  backgroundImage ?:    number,
 }
 
 export type MeasurementSystemType = "US" | "Metric";
@@ -206,7 +213,7 @@ export class TrekInfo {
 
   // properties in the TrekObj
               dataVersion = CURR_DATA_VERSION;
-  @observable user;
+  @observable group;
   @observable date;
               sortDate = '';
   @observable startTime;
@@ -254,12 +261,17 @@ export class TrekInfo {
   @observable currentCalories;
   @observable currentNetCalories;
   @observable showSpeedOrTime;                    // Flag to switch between showing Dist/Time and Time/Dist
+  @observable showStepsPerMin;                    // Flag to switch between showing Total Steps and Steps/Min
+  @observable showTotalCalories;                  // Flag to switch between showing Calories and Calories/Min
   @observable speedDialZoom;
   @observable trekImageCount;                     // Number of images/videos in this trek 
   @observable trekPointCount;                     // Number of GPS points currently in the trek path
   @observable showMapInLog   : boolean;
   @observable pendingReview : boolean;
-  
+  @observable colorTheme : ThemeType;
+  @observable showMapControls;
+  @observable currentBackground;
+
   startMS = 0;                                    // trek start time in milliseconds
   trekTimerId = 0;                                // id for the 1-second timer used during logging
   initialLoc : LatLng;                            // location detected when TrekLog first starts
@@ -290,14 +302,16 @@ export class TrekInfo {
   cancelDialogOpen = false;                       // state of Cancel this Trek Log dialog form (used for Restore)
   updateDashboard = false;
   settingsFound = '';
+  pendingInit = true;
   haveShownDriving = false;
 
-  currentUserSettings = {                         // used to restore current user settings after Reviewing Treks
+  currentGroupSettings = {                         // used to restore current group settings after Reviewing Treks
     weight: 0,                                    // in kg
     packWeight: 0,                                // in kg
   }
 
-  constructor ( private utilsSvc: UtilsSvc, private storageSvc: StorageSvc, private modalSvc: ModalModel ) {
+  constructor ( private utilsSvc: UtilsSvc, private storageSvc: StorageSvc, private modalSvc: ModalModel,
+    private groupSvc: GroupSvc ) {
     this.initializeObservables();
   }
 
@@ -309,12 +323,14 @@ export class TrekInfo {
     this.date = '';
     this.startTime = '';
     this.type = 'Walk';
-    this.user = '';
+    this.group = '';
     this.packWeight = 0;
     this.logging = false;
     this.pointList = [];
     this.duration = 0;
     this.trekDist = 0;
+    this.setTrekLabel('');
+    this.setTrekNotes('');
     this.timerOn = false;
     this.trekSaved = false;
     this.averageSpeed = 'N/A';
@@ -324,12 +340,14 @@ export class TrekInfo {
     this.currentCalories = 'N/A';
     this.currentNetCalories = 'N/A';
     this.showSpeedOrTime = 'speed';
+    this.showStepsPerMin = false;
+    this.showTotalCalories = true;
     this.layoutOpts = 'Current';
     this.trekCount = 0;
     this.conditions = undefined;
     this.timeframe = 'TWeek';
     this.typeSelections = 0;
-    this.defaultMapType = 'standard';
+    this.defaultMapType = 'theme' as MapType;
     this.limitsActive = false;
     this.timeLimit = 0;
     this.distLimit = 0;
@@ -340,69 +358,100 @@ export class TrekInfo {
     this.trekPointCount = 0;
     this.showMapInLog = false;
     this.pendingReview = false;
+    this.setColorTheme(COLOR_THEME_DARK);
+    this.setCurrentBackground(0);
   }
 
   // read the Settings object and initialize the corresponding properties. Also read the list of treks.
   init = () => {
+
     return new Promise<string> ((resolve, reject) => {
-      this.settingsFound = "OK";
-      if (!this.dataReady){
-        // we haven't read the list of treks yet (initialized)
-        // Get the list of uses (previously known as users)
-        this.storageSvc.fetchUserList()
-        .then((result : any) => {
-          let users = JSON.parse(result) as UsersObj;
-          // set the current use to the most rescent use
-          if (users.lastUser === NO_USER){
-            this.settingsFound = "NO_USES";
-            reject('NO_USES');
-          }
-          this.updateUser(users.lastUser);
-          // next, get the use's settings
-          this.storageSvc.fetchUserSettings(this.user)
-          .then((result : any) => {
-            let data = JSON.parse(result);
-            this.defaultTrekType = data.type;
-            this.updatePackWeight(data.packWeight || 0);
-            this.setTypeSelections(TREK_SELECT_BITS.All);
-            this.updateType(data.type);   // set the underlying default trek type
-            this.updateMeasurementSystem(data.measurementSystem);
-            this.weight = data.weights[data.weights.length-1].weight;
-            this.updateStrideLengths(data.strideLengths);
-            this.strideLength = this.strideLengths[this.type];
-            this.currentUserSettings.weight = this.weight;
-            this.currentUserSettings.packWeight = this.packWeight;
-            // Then, get the treks
-            this.readAllTreks(this.user)
-            .then((status) => {
-              resolve(status)
+        this.settingsFound = "OK";
+        if (!this.dataReady){
+          // this.storageSvc.restoreTreksFromMongo()
+          // .then((msg) => {
+          //   alert(msg)
+            this.pendingInit = true;
+            this.groupSvc.readGroups()       // read group list from database
+            .then((groups : GroupsObj) => {
+              // set the current use to the most recent group
+              this.setColorTheme(groups.theme || COLOR_THEME_DARK);
+              this.setTrekLogGroupProperties(groups.lastGroup || groups.groups[0])
+              .then((status) => {
+                this.pendingInit = false;
+                resolve(status)
+              })
+              .catch(() => {
+                this.pendingInit = false;
+                this.settingsFound = "NO_SETTINGS";
+                reject('NO_SETTINGS');
+                // Error reading settings for group
+              })
             })
-            .catch(() => {})
-          })
-          .catch (() => {
-            this.settingsFound = "NO_SETTINGS";
-            reject('NO_SETTINGS');
-            // Error reading settings for last use
-          })      
-        })
-        .catch (() => {
-          this.settingsFound = "NO_USES";
-          reject('NO_USES');
-          // Error reading list of uses
-        })      
-      }
-      else {
-        // already initialized
-        resolve('ALREADY_DONE');
-      }
-    })    
+            .catch (() => {
+              this.pendingInit = false;
+              this.settingsFound = "NO_GROUPS";
+              reject('NO_GROUPS');
+              // Error reading list of groups
+            })      
+          // })
+        }
+        else {
+          // already initialized
+          this.pendingInit = false;
+          resolve('ALREADY_DONE');
+        }
+  })    
 }
 
-// read populate the allTreks array with the treks for the given user
-readAllTreks = (user: string) => {
-  const {infoConfirmColor, infoConfirmTextColor} = uiTheme.palette;
+// change settings related to the logging group
+@action
+changeGroupSettings = (newSettings: SettingsObj) => {
+  this.defaultTrekType = newSettings.type;
+  this.updateType(newSettings.type);   // set the underlying default trek type
+  this.updateGroup(newSettings.group);
+  this.updateMeasurementSystem(newSettings.measurementSystem)
+  this.updateStrideLengths(newSettings.strideLengths);
+  this.strideLength = newSettings.strideLengths[this.type];
+  this.weight = newSettings.weights[newSettings.weights.length-1].weight;
+  this.updatePackWeight(newSettings.packWeight || 0);
+  this.setTypeSelections(TREK_SELECT_BITS.All);
+  this.currentGroupSettings.weight = this.weight;
+  this.currentGroupSettings.packWeight = this.packWeight;
+}
+
+// change the logging group to the given group
+setTrekLogGroupProperties = (group: string, settings ?: SettingsObj) => {
+  let newSettings = settings;
+
+  return new Promise<any>((resolve, reject) => {
+      if (!newSettings) {
+        this.groupSvc.readGroupSettings(group)
+        .then((result : SettingsObj) => {
+          newSettings = result;
+          this.changeGroupSettings(newSettings);
+          this.groupSvc.saveGroups(newSettings.group)
+          .then(() => resolve(this.readAllTreks(group)))
+          .catch((err) => reject('Error: SAVE_GROUPS:\n' + err))
+        })
+        .catch((err) => {
+          reject('Error: READ_GROUP_SETTINGS:\n' + err)
+        });       // Error reading group settings
+      }   
+      else {
+        this.changeGroupSettings(newSettings);
+        this.groupSvc.saveGroups(newSettings.group)
+        .then(() => resolve(this.readAllTreks(group)))
+        .catch((err) => reject('Error: SAVE_GROUPS:\n' + err))
+    }
+  })
+}
+
+// read populate the allTreks array with the treks for the given group
+readAllTreks = (group: string) => {
+  const {infoConfirmColor, infoConfirmTextColor} = uiTheme.palette[this.colorTheme];
   return new Promise<string> ((resolve, _reject) => {
-    this.storageSvc.fetchAllTreks(user)
+    this.storageSvc.readAllTrekFiles(group)
     .then((result) => {
       this.allTreks = result.list;
       this.setTrekCount();
@@ -427,7 +476,7 @@ readAllTreks = (user: string) => {
   getSaveObj = (noPointList = false) :TrekObj => {
     let savObj : TrekObj = {
       dataVersion:  this.dataVersion,
-      user:         this.user,
+      group:        this.group,
       date:         this.date,
       sortDate:     this.sortDate,
       startTime:    this.startTime,
@@ -463,7 +512,7 @@ readAllTreks = (user: string) => {
   setTrekProperties = (data: TrekObj) => {
     this.dataVersion    = data.dataVersion || '1';
     this.sortDate       = data.sortDate;
-    this.user           = data.user;
+    this.group          = data.group;
     this.date           = data.date;
     this.type           = data.type;
     this.weight         = data.weight;
@@ -528,6 +577,8 @@ readAllTreks = (user: string) => {
       trekLabelFormOpen:  this.trekLabelFormOpen,
       cancelDialogOpen:   this.cancelDialogOpen,
       showMapInLog:       this.showMapInLog,
+      colorTheme:         this.colorTheme,
+      backgroundImage:    this.currentBackground,
     }
     return rObj;
   }
@@ -538,19 +589,21 @@ readAllTreks = (user: string) => {
         BackgroundGeolocation.startTask(taskKey => {
           this.setDataReady(false);
           this.startMS =            resObj.startMS;
-          this.updateMeasurementSystem(resObj.measurementSystem);
           // first, rebuild the pointList from the Geolocation service
           resObj.trek.pointList = dataPts.map((pt) => {
             return ({l:{a: pt.latitude, o: pt.longitude}, 
                      t: Math.round((pt.time - this.startMS) / 1000), s: pt.speed}) as TrekPoint;
           })
+          this.updateMeasurementSystem(resObj.measurementSystem);
           this.setTrekProperties(resObj.trek);
           this.updateStrideLengths(resObj.strideLengths);
+          this.setColorTheme(resObj.colorTheme);
           this.initialLoc =         resObj.initialLoc;
           this.setLimitsActive(resObj.limitsActive);
           this.setTimeLimitInfo({value: resObj.timeLimit, units: resObj.units});
           this.setDistLimitInfo({value: resObj.distLimit, units: resObj.units});
           this.limitTrekDone =      resObj.limitTrekDone;
+          this.setCurrentBackground(resObj.backgroundImage);
           this.lastTime =           resObj.lastTime;
           this.lastDist =           resObj.lastDist;
           this.units =              resObj.units;
@@ -563,18 +616,18 @@ readAllTreks = (user: string) => {
           this.minPointDist =       resObj.minPointDist;
           this.setLogging(resObj.logging);
           this.setTimerOn(resObj.timerOn);
-          this.setShowMapInLog(resObj.showMapInLog);
           this.updateTrekSaved(resObj.trekSaved);
           this.setTypeSelections(resObj.typeSelections);
           this.updateShowSpeedOrTime(resObj.showSpeedOrTime);
           this.setDefaultMapType(resObj.defaultMapType);
-          this.currentUserSettings.weight = this.weight;            // from setTrekProperties
-          this.currentUserSettings.packWeight = this.packWeight;    // "
-          this.updateCalculatedValues(true);
+          this.currentGroupSettings.weight = this.weight;            // from setTrekProperties
+          this.currentGroupSettings.packWeight = this.packWeight;    // "
+          // this.updateCalculatedValues(true);
           this.setSaveDialogOpen(resObj.saveDialogOpen);
           this.setTrekLabelFormOpen(resObj.trekLabelFormOpen);
           this.setCancelDialogOpen(resObj.cancelDialogOpen);
-          this.readAllTreks(this.user);                             // this will set dataReady to true
+          this.setShowMapInLog(resObj.showMapInLog);
+          this.readAllTreks(this.group);                             // this will set dataReady to true
           BackgroundGeolocation.endTask(taskKey);
         });
       },
@@ -589,7 +642,7 @@ readAllTreks = (user: string) => {
       if (trek.pointList === undefined || trek.pointList.length === 0) { reject('Empty Trek'); }
       if ( addEntry === 'add' ) { this.addAllTreksEntry(trek); }
       if ( addEntry === 'update' ) { this.updateAllTreksEntry(trek); }
-      this.storageSvc.storeTrek(trek)
+      this.storageSvc.storeTrekData(trek)
       .then(() => {
         resolve('Ok');
       })
@@ -600,14 +653,18 @@ readAllTreks = (user: string) => {
     
   }
 
+  getTrekId = (trek: TrekObj) => {
+    return trek.group + trek.sortDate;
+  }
+
   // Remove the given trek object from the database and optionally remove its entry from in-memory list of treks.
   deleteTrek = (trek: TrekObj, remove = true) : Promise<string> => {
 
-    let key = this.storageSvc.getTrekKey(trek);
+    let id = this.getTrekId(trek);
     return new Promise((resolve, reject) => {
-      this.storageSvc.removeTrek(trek)
+      this.storageSvc.removeTrekData(trek)
       .then(() =>{
-        if (remove) { this.removeAllTreksEntry(key); }
+        if (remove) { this.removeAllTreksEntry(id); }
         resolve('Ok');
       })
       .catch(() => {
@@ -631,8 +688,8 @@ readAllTreks = (user: string) => {
 
   // remove the trek with the given key from the allTreks array
   @action 
-  removeAllTreksEntry = (key: string) => {
-    let i = this.allTreks.findIndex((trek) => this.storageSvc.getTrekKey(trek) === key);
+  removeAllTreksEntry = (id: string) => {
+    let i = this.allTreks.findIndex((trek) => this.getTrekId(trek) === id);
     if (i !== -1) {
       this.allTreks.splice(i, 1); // remove trek from allTreks list
       this.setTrekCount();
@@ -642,14 +699,50 @@ readAllTreks = (user: string) => {
   // update the entry for the given trek in the allTreks array
   @action 
   updateAllTreksEntry = (trek: TrekObj) => {
-    let key = this.storageSvc.getTrekKey(trek);
-    let i = this.allTreks.findIndex((t) => this.storageSvc.getTrekKey(t) === key);
+    let id = this.getTrekId(trek);
+    let i = this.allTreks.findIndex((t) => this.getTrekId(t) === id);
     if (i !== -1) {
       this.allTreks[i] = trek; // replace allTreks list entry
     }
   }
 
   ////////////////////////////////////////// End of Treks Database Handling
+
+  // set the current background image
+  @action
+  setCurrentBackground = (index: number) => {
+    this.currentBackground = index;
+  }
+
+  // change background image to next image or blank
+  toggleCurrentBackground = () => {
+    if(this.currentBackground === BACKGROUND_IMAGES){
+      this.setCurrentBackground(0)
+    }
+    else {
+      this.setCurrentBackground(this.currentBackground + 1);
+    }
+  }
+
+  // return true if there is a background image being shown
+  haveBackgroundImage = () => {
+    return this.currentBackground !== BACKGROUND_IMAGES;
+  }
+
+  // set the value of the colorTheme property
+  @action
+  setColorTheme = (val: ThemeType) => {
+    this.colorTheme = val;
+  }
+
+  //swap the color theme property
+  swapColorTheme = () => {
+    if (this.colorTheme === COLOR_THEME_DARK){
+      this.setColorTheme(COLOR_THEME_LIGHT);
+    } else {
+      this.setColorTheme(COLOR_THEME_DARK);
+    }
+  }
 
   // set the value for the saveDialogOpen property
   setSaveDialogOpen = (status: boolean) => {
@@ -800,7 +893,7 @@ readAllTreks = (user: string) => {
   clearTrek = () => {
     this.setTrekProperties({
       dataVersion:  this.dataVersion,
-      user:         this.user,
+      group:         this.group,
       date:         this.date,
       type:         this.type,
       weight:       this.weight,
@@ -833,7 +926,7 @@ readAllTreks = (user: string) => {
   // Set the value of the elevationGain property
   @action
   setElevationGain = (gain: number) => {
-    this.elevationGain = gain;
+    this.elevationGain = this.utilsSvc.fourSigDigits(gain);
   }
 
   // Set the value of the hills property
@@ -889,6 +982,7 @@ readAllTreks = (user: string) => {
   deleteTrekImage = (imageSetIndex: number, imageIndex: number) : number => {
     let currSet = this.trekImages[imageSetIndex];
     let newIndx = -1;
+    let delUri = currSet.images[imageIndex].uri;
 
     currSet.images.splice(imageIndex, 1);
     if (currSet.images.length === 0) {
@@ -901,6 +995,11 @@ readAllTreks = (user: string) => {
     }
     this.saveTrek(this.getSaveObj(), 'update');
     this.setTrekImageCount(this.getTrekImageCount());
+    this.storageSvc.removeDataItem(delUri)
+    .then(() => {})
+    .catch((err) => {
+      Alert.alert('Picture Delete Error', 'Picture Location:\n' + delUri + '\nError:\n' + err);
+    })
     return newIndx;
   }
 
@@ -935,6 +1034,21 @@ readAllTreks = (user: string) => {
   haveTrekImages = () => {
     return this.trekImageCount !== 0;
   }
+
+  // format a title for the given image number from the given image set
+  formatImageTitle = (set: number, iNum: number, showUri = false) : string => {
+    let image = this.trekImages[set].images[iNum];
+    let imageType = IMAGE_TYPE_INFO[image.type].name;
+    let title = imageType;
+    if (showUri ) {
+      return image.uri;
+      title = image.uri + '\n' + imageType;
+    }
+    if (image.time){
+      title += ' at ' +  this.utilsSvc.formatTime(image.time);
+    }
+    return title;
+}
 
   // set the value of the trekPointCount property
   @action
@@ -1040,8 +1154,7 @@ readAllTreks = (user: string) => {
     }
     this.currentCalories = this.formattedCalories(this.calories);
 
-    this.currentNetCalories = this.utilsSvc.cvtToNetCalories(this.currentCalories, 
-                                          this.weight, this.duration);
+    this.currentNetCalories = this.utilsSvc.getCaloriesPerMin(this.currentCalories, this.duration);
   }
 
   // compute the value for the calories property
@@ -1050,16 +1163,16 @@ readAllTreks = (user: string) => {
         this.hills, this.weight, this.getPackWeight());
   }
 
-  // Set the user to the given value
+  // Set the group to the given value
   @action
-  updateUser = (value: string) => {
-    this.user = value;
+  updateGroup = (value: string) => {
+    this.group = value;
   }
 
-  // make sure certain user settings values reflect current values from the settings record
-  restoreCurrentUserSettings = () => {
-    this.weight = this.currentUserSettings.weight;
-    this.updatePackWeight(this.currentUserSettings.packWeight);
+  // make sure certain group settings values reflect current values from the settings record
+  restoreCurrentGroupSettings = () => {
+    this.weight = this.currentGroupSettings.weight;
+    this.updatePackWeight(this.currentGroupSettings.packWeight);
   }
 
   // Set the conditions to the given value
@@ -1068,7 +1181,7 @@ readAllTreks = (user: string) => {
     this.conditions = value;
   }
 
-  // Set the user to the given value
+  // Set the measurement system to the given value
   @action
   updateMeasurementSystem = (value: MeasurementSystemType) => {
     this.measurementSystem = value;
@@ -1137,10 +1250,22 @@ readAllTreks = (user: string) => {
     this.trekSaved = status;
   }
 
-  // Indicate whether DISTANCE should show in the status bar
+  // Indicate whether Avg Speed or Time/Dist should show in the status
   @action
   updateShowSpeedOrTime = (mode: string) => {
     this.showSpeedOrTime = mode;
+  }
+
+  // Indicate whether Steps or Steps/Min should show in the status
+  @action
+  updateShowStepsPerMin = (status: boolean) => {
+    this.showStepsPerMin = status;
+  }
+
+  // Indicate whether Calories or Calories/Min should show in the status
+  @action
+  updateShowTotalCalories = (status: boolean) => {
+    this.showTotalCalories = status;
   }
 
   // convert the given distance (meters) to feet if necessary
@@ -1168,6 +1293,18 @@ readAllTreks = (user: string) => {
     return this.utilsSvc.formatSteps(this.type, steps, perMin ? time : undefined);
   }
 
+  formattedDuration = (dur = this.duration) => {
+    return this.utilsSvc.formatDuration(dur);
+  }
+
+  formattedAvgSpeed = () => {
+    return this.utilsSvc.formatAvgSpeed(this.measurementSystem, this.trekDist, this.duration);
+  }
+
+  formattedTimePerDist = () => {
+    return this.utilsSvc.formatTimePerDist(DIST_UNIT_CHOICES[this.measurementSystem], this.trekDist, this.duration);
+  }
+
   // Return the speed value from the last GPS point formatted so it can be displayed
   // the raw meters/second speed will be returned if the mpsOnly parameter is true.
   formattedCurrentSpeed = (system = this.measurementSystem, mpsOnly = false) => {
@@ -1180,7 +1317,7 @@ readAllTreks = (user: string) => {
       point = this.pointList[pll - 1];
       // now convert meters/sec to mph or kph
       if (this.duration - point.t < MAX_TIME_SINCE) {
-        speedMPS = point.s;
+        speedMPS = point.s || 0;
         speed = this.utilsSvc.computeRoundedAvgSpeed(system, speedMPS, 1);
       }
       else {
@@ -1199,23 +1336,11 @@ readAllTreks = (user: string) => {
     return mpsOnly ? speedMPS : 'N/A';
   }
 
-  formattedDuration = (dur = this.duration) => {
-    return this.utilsSvc.formatDuration(dur);
-  }
-
-  formattedAvgSpeed = () => {
-    return this.utilsSvc.formatAvgSpeed(this.measurementSystem, this.trekDist, this.duration);
-  }
-
-  formattedTimePerDist = () => {
-    return this.utilsSvc.formatTimePerDist(DIST_UNIT_CHOICES[this.measurementSystem], this.trekDist, this.duration);
-  }
-
-  // return total or net calories burned depending on the "total" param
+  // return total calories burned or burn rate depending on the "total" param
   formattedCalories = (totalCals, total = true, time = this.duration) => {
     return (total 
               ? totalCals.toString() 
-              : this.utilsSvc.cvtToNetCalories(totalCals, this.weight, time).toString()
+              : this.utilsSvc.getCaloriesPerMin(totalCals, time).toString()
            )
   }
 
@@ -1225,26 +1350,9 @@ readAllTreks = (user: string) => {
       if (!this.hasElevations()) { return undefined; }
       list = this.elevations; 
     }
-    return this.getNumericRange(list);
+    return this.utilsSvc.getNumericRange(list);
   }
 
-
-  // find the max and min of an array of numbers
-  // return a NumericRange object
-  getNumericRange = (list : number[]) : NumericRange => {
-    let range : NumericRange = {max: 0, min: 0, range: 0};
-
-    if (list.length){
-      range.max = -5000;
-      range.min = 100000;
-      list.forEach((val) => {
-        if (val > range.max){ range.max = val; }
-        if (val < range.min){ range.min = val; }
-      })
-      range.range = range.max - range.min;
-    }
-    return range;
-  }
 
   // return the starting (First) or current (Last) altitude for the Trek
   formattedTrekElevation = (pos: string) : string => {
@@ -1285,7 +1393,7 @@ readAllTreks = (user: string) => {
     let egPct = this.trekDist === 0 ? 0 : (this.elevationGain / this.trekDist);
 
 
-    return Math.round((egPct) * 100).toString() + '%';
+    return Math.round((egPct) * 100).toString() + ' %';
   }
 
   // return true if trek has Weather data

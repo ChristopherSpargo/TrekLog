@@ -1,5 +1,5 @@
 import { observable, action } from 'mobx';
-import { uiTheme } from './App';
+import { uiTheme, TL_BLUE, TL_YELLOW } from './App';
 
 export type ToastLocation = "Top" | "Bottom";
 export const STD_TOAST_TIME = 2500;
@@ -31,13 +31,13 @@ export class ToastModel {
 
   TOAST_CONFIGS = {
     Success: { icon: "CheckMark", iColor: 'white',             
-               tColor: uiTheme.palette.trekLogBlue,  bColor: 'white',  time: STD_TOAST_TIME},
+               tColor: TL_BLUE,  bColor: 'white',  time: STD_TOAST_TIME},
     Error:   { icon: "AlertCircleOutline",   iColor: 'white',
                tColor: "#f44336",    bColor: 'white',    time: STD_TOAST_TIME},
     Warning: { icon: "Warning", iColor: 'white', 
-               tColor: uiTheme.palette.trekLogYellow, bColor: 'white', time: STD_TOAST_TIME},
+               tColor: TL_YELLOW, bColor: 'white', time: STD_TOAST_TIME},
     Info:    { icon: "InfoCircleOutline",    iColor: 'white',
-               tColor: uiTheme.palette.trekLogBlue,  bColor: 'white',  time: STD_TOAST_TIME}
+               tColor: TL_BLUE,  bColor: 'white',  time: STD_TOAST_TIME}
   }
 
   @observable toastIsOpen;    // when true, Toast component will be open

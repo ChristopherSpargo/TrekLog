@@ -1,7 +1,7 @@
 import React from 'react';
 import { Animated } from 'react-native';
 
-export class FadeInView extends React.Component<{ 
+export class SlideDownView extends React.Component<{ 
   startValue ?: number,
   endValue ?: number,
   bgColor ?: string,
@@ -24,10 +24,10 @@ export class FadeInView extends React.Component<{
     Animated.timing(                  // Animate over time
       this.state.fadeAnim,            // The animated value to drive
       {
-        toValue: this.props.endValue, // Animate to final opacity
+        toValue: this.props.endValue, // Animate to final Y position
         duration: this.props.duration,                // Make it take a while
-        useNativeDriver: true,
-      }       
+        useNativeDriver: true,         
+      }
     ).start();                        // Starts the animation
   }
 
@@ -35,7 +35,7 @@ export class FadeInView extends React.Component<{
     Animated.timing(                  // Animate over time
       this.state.fadeAnim,            // The animated value to drive
       {
-        toValue: this.props.startValue,    // Animate to starting opacity 
+        toValue: this.props.startValue,    // Animate to starting Y position
         duration: this.props.duration,                // Make it take a while
         useNativeDriver: true,         
       }
@@ -49,7 +49,7 @@ export class FadeInView extends React.Component<{
         style={{
           ...this.props.style,
           backgroundColor: this.props.bgColor,
-          opacity: fadeAnim         // Bind scaleY to animated value
+          transform: [{translateY: fadeAnim}]         // Bind scaleY to animated value
         }}
       >
         {this.props.children}
@@ -58,4 +58,4 @@ export class FadeInView extends React.Component<{
   }
 }
 
-export default FadeInView;
+export default SlideDownView;

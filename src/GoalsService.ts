@@ -1,6 +1,6 @@
 import { observable, action } from "mobx";
 import { DatePickerAndroid } from "react-native";
-import { TREKLOG_GOALS_KEY, uiTheme } from "./App";
+import { uiTheme } from "./App";
 import {
   TrekInfo,
   TrekType,
@@ -192,7 +192,7 @@ export class GoalsSvc {
     this.filter = this.getFilterSettingsObj();
   };
 
-  // Set the list of goals for the current user
+  // Set the list of goals for the current group
   @action
   setGoalList = (list?: GoalObj[]) => {
     if (list === undefined) {
@@ -215,7 +215,7 @@ export class GoalsSvc {
     this.displayList = [];
   };
 
-  // Set the list of goals for the current user
+  // Set the list of goals for the current group
   @action
   setDisplayList = (list: GoalDisplayObj[]) => {
     this.displayList = list;
@@ -226,17 +226,13 @@ export class GoalsSvc {
   setGoalEditMode = (val: string) => {
     this.goalEditMode = val;
   };
-  // Format the storage key for this user's goals
-  formatUserGoalsKey = (user: string) => {
-    return TREKLOG_GOALS_KEY + user + "#";
-  };
 
-  // save the list of user's goals to the database
+  // read the list of group's goals from the database
   getGoalList = () => {
     this.setGoalList();
     return new Promise((resolve, reject) => {
       this.storageSvc
-        .fetchGoalList(this.trekInfo.user)
+        .fetchGoalListFile(this.trekInfo.group)
         .then((res: any) => {
           this.setGoalList(JSON.parse(res) as GoalObj[]);
           resolve("OK");
@@ -247,12 +243,12 @@ export class GoalsSvc {
     });
   };
 
-  // save the list of user's goals to the database
+  // save the list of group's goals to the database
   saveGoalList = () => {
     this.updateDataReady(false);
     return new Promise((resolve, reject) => {
       this.storageSvc
-        .storeGoalList(this.trekInfo.user, this.goalList)
+        .storeGoalListFile(this.trekInfo.group, this.goalList)
         .then(res => {
           this.updateDataReady(true);
           this.toastSvc.toastOpen({
@@ -354,7 +350,7 @@ export class GoalsSvc {
   // set the dataReady flag based on the displayList contents
   @action
   updateDataReady = (status: boolean) => {
-    this.dataReady = status;
+    this.dataReady = status && this.trekInfo.dataReady;
   };
 
   validGoal = () => {
@@ -880,7 +876,7 @@ export class GoalsSvc {
     let intSum = 0;
     let v;
     const DITGoal = gdo.goal.category === DIT_GOAL_CAT;
-    const { trekLogGreen } = uiTheme.palette;
+    const { trekLogGreen } = uiTheme.palette[this.trekInfo.colorTheme];
 
     if (gdo.goal.category === DIT_GOAL_CAT) {
       metric = "rate";
@@ -899,6 +895,7 @@ export class GoalsSvc {
           let t = this.trekInfo.allTreks[item.trek];
           barItem.type = t.type;
           barItem.index = index;
+          barItem.images = t.trekImages !== undefined;
           if (gdo.goal.activity === "Burn" || gdo.goal.activity === "Trek") {
             barItem.icon = t.type; // show type icon above bars if displaying multiple trek types at once
           }
@@ -1166,7 +1163,7 @@ export class GoalsSvc {
     return -1;
   };
 
-  checkTrekAgainstGoals = (trek: TrekObj): Promise<any> => {
+  checkTrekAgainstGoals = (trek: TrekObj, giveError = true): Promise<any> => {
     let result: { goal: GoalObj; item: GoalDisplayItem }[] = [];
     let goalsOfType: GoalObj[] = [];
     let targetGoals: GoalDisplayObj[];
@@ -1225,10 +1222,12 @@ export class GoalsSvc {
           resolve(result);
         })
         .catch(() => {
-          this.toastSvc.toastOpen({
-            tType: "Error",
-            content: "No goal list found."
-          });
+          if (giveError){
+            this.toastSvc.toastOpen({
+              tType: "Error",
+              content: "No goal list found."
+            });
+          }
           reject(result);
         });
     });

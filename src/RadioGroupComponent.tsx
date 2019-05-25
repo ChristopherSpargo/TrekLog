@@ -1,10 +1,11 @@
-import React, { useContext } from "react";
+import React, { useContext, useState, useEffect } from "react";
 import { View, Text, StyleSheet, TouchableNativeFeedback } from "react-native";
 import { useObserver } from "mobx-react-lite";
 
-import { UiThemeContext } from "./App";
+import { UiThemeContext, TrekInfoContext } from "./App";
 import SvgIcon from "./SvgIconComponent";
 import { APP_ICONS } from "./SvgImages";
+import { TrekInfo } from './TrekInfoModel';
 
 function RadioGroup({
   onChangeFn = undefined, // call this when value of radio changes
@@ -24,16 +25,18 @@ function RadioGroup({
   vertical = undefined // if true, arrange group vertically
 }) {
   const uiTheme: any = useContext(UiThemeContext);
+  const trekInfo: TrekInfo = useContext(TrekInfoContext);
 
   const validProps = values && (labels || icons);
-  const selectedIndx = values.indexOf(selected);
+  const [selectedIndex, setSelectedIndex] = useState(values.indexOf(selected));
   const vert = vertical;
   const defHeight = 30;
   const iHeight = itemHeight || defHeight;
   const iconSize = 40;
   const just = justify === "start" ? "flex-start" : "center";
   const alignDir = align === "start" ? "flex-start" : "center";
-  const { secondaryColor, highlightColor, highTextColor } = uiTheme.palette;
+  const { secondaryColor, highlightColor, highTextColor, mediumTextColor,
+          rippleColor } = uiTheme.palette[trekInfo.colorTheme];
   const lStyle = labelStyle || {};
   const iaStyleProp = iconAreaStyle || {};
   const iStyle = itemStyle || {};
@@ -85,7 +88,15 @@ function RadioGroup({
     }
   });
 
+  useEffect(() => {
+    if (selectedIndex !== values.indexOf(selected)){
+      setSelectedIndex(values.indexOf(selected));
+    }
+  },[selected]);
+
+
   function valueChange(indx: number) {
+    setSelectedIndex(indx);
     requestAnimationFrame(() => {
       onChangeFn(values[indx]);
     });
@@ -99,7 +110,7 @@ function RadioGroup({
             labels.map((item, indx) => (
               <TouchableNativeFeedback
                 key={indx}
-                // background={TouchableNativeFeedback.SelectableBackgroundBorderless()}
+                background={TouchableNativeFeedback.Ripple(rippleColor, false)}
                 onPress={() => valueChange(indx)}
               >
                 <View style={[styles.item, iStyle]}>
@@ -109,10 +120,10 @@ function RadioGroup({
                   <SvgIcon
                     size={24}
                     widthAdj={0}
-                    fill={selectedIndx === indx ? secondaryColor : "black"}
+                    fill={selectedIndex === indx ? secondaryColor : mediumTextColor}
                     paths={
                       APP_ICONS[
-                        selectedIndx === indx
+                        selectedIndex === indx
                           ? "RadioButtonChecked"
                           : "RadioButtonUnchecked"
                       ]
@@ -128,14 +139,14 @@ function RadioGroup({
             icons.map((item, indx) => (
               <TouchableNativeFeedback
                 key={indx}
-                background={TouchableNativeFeedback.SelectableBackgroundBorderless()}
+                background={TouchableNativeFeedback.Ripple(rippleColor, true)}
                 onPress={() => valueChange(indx)}
               >
                 <View
                   style={[
                     styles.typeIconArea,
                     iaStyleProp,
-                    selectedIndx === indx ? styles.iconHighlight : {}
+                    selectedIndex === indx ? styles.iconHighlight : {}
                   ]}
                 >
                   <SvgIcon

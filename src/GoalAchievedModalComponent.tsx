@@ -1,18 +1,21 @@
 import React from 'react';
 import { observer, inject } from 'mobx-react';
-import { View, StyleSheet, Text, TouchableNativeFeedback, TouchableWithoutFeedback } from 'react-native';
+import { View, StyleSheet, Text, TouchableWithoutFeedback } from 'react-native';
+import { BorderlessButton } from 'react-native-gesture-handler';
 
 import { BACKDROP_Z_INDEX, CONFIRM_Z_INDEX } from './App';
 import SvgIcon from './SvgIconComponent';
 import { ModalModel } from './ModalModel';
 import { APP_ICONS } from './SvgImages';
+import { TrekInfo } from './TrekInfoModel';
 
 // dialog used for basic NOTICES and CONFIRMATIONS
 
-@inject('modalSvc', 'uiTheme')
+@inject('modalSvc', 'uiTheme', 'trekInfo')
 @observer
 class GoalAchievedModal extends React.Component<{   
   modalSvc   ?: ModalModel,
+  trekInfo   ?: TrekInfo,
   uiTheme    ?: any,
 }, {} > {
 
@@ -42,18 +45,20 @@ class GoalAchievedModal extends React.Component<{
 
     const gnmData = this.props.modalSvc.gnmData;
     const contentLines = this.props.modalSvc.goalNoticeIsOpen && this.props.modalSvc.gnmData.content.split('\n');
-    const { highTextColor, goalGold, mediumTextColor } = this.props.uiTheme.palette;
+    const { highTextColor, goalGold, mediumTextColor, rippleColor, pageBackground, contrastingMask_3
+          } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
     const { cardLayout } = this.props.uiTheme;          
     const styles = StyleSheet.create({
       container: { ... StyleSheet.absoluteFillObject },
       background: {
         ... StyleSheet.absoluteFillObject,
         zIndex: BACKDROP_Z_INDEX,
-        backgroundColor: "rgba(0,0,0,.4)"
+        backgroundColor: contrastingMask_3,
       },
       cardCustom: {
         marginTop: 140,
         elevation: 2,
+        backgroundColor: pageBackground,
         zIndex: CONFIRM_Z_INDEX,
       },
       interiorBorder1: {
@@ -117,7 +122,7 @@ class GoalAchievedModal extends React.Component<{
         alignItems: "center",
         height: 40,
         marginTop: 10,
-        backgroundColor: cardLayout.backgroundColor,
+        backgroundColor: pageBackground,
       },
       actionButton: {
         minWidth: 100,
@@ -165,14 +170,15 @@ class GoalAchievedModal extends React.Component<{
                 }
               </View>
               <View style={styles.footer}>
-                <TouchableNativeFeedback
-                  background={TouchableNativeFeedback.SelectableBackgroundBorderless()}
+                <BorderlessButton
+                  rippleColor={rippleColor}
+                  borderless={true}
                   onPress={this.close.bind(this, gnmData.okText)}
                 >
                   <View style={styles.actionButton}>
                     <Text style={styles.button}>{gnmData.okText}</Text>
                   </View>
-                </TouchableNativeFeedback>
+                </BorderlessButton>
               </View>
             </View>
           </View>

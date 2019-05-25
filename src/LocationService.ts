@@ -1,5 +1,5 @@
 import { Alert } from 'react-native';
-import BackgroundGeolocation, { ConfigureOptions, Location } from 'react-native-mauron85-background-geolocation';
+import BackgroundGeolocation, { ConfigureOptions } from '@mauron85/react-native-background-geolocation';
 
 import { TrekInfo } from './TrekInfoModel'
 import { StorageSvc } from './StorageService';
@@ -48,7 +48,7 @@ export class LocationSvc {
                 style: 'cancel'
               }
             ]
-        ), 1000);
+        ), 2000);
       }
     });
   
@@ -144,12 +144,12 @@ export class LocationSvc {
     let options : ConfigureOptions = {
       desiredAccuracy: BackgroundGeolocation.HIGH_ACCURACY,
       locationProvider: BackgroundGeolocation.RAW_PROVIDER,
-      stationaryRadius: 1,
+      stationaryRadius: 0,
       stopOnStillActivity: false,
       distanceFilter: 3,
       interval: GPS_EVENT_INTERVAL * 1000,
       fastestInterval: GPS_EVENT_INTERVAL * 1000 / 2,
-      activitiesInterval: GPS_EVENT_INTERVAL *1000,
+      activitiesInterval: GPS_EVENT_INTERVAL * 1000,
       startForeground: true,
       debug: false,
       stopOnTerminate: true,
@@ -182,8 +182,8 @@ export class LocationSvc {
 
   // stop the geolocation and allow it to stop if the app is terminated
   shutDownGeolocation = () => {
-    this.stopGeolocation();
     this.setGeolocationConfig({stopOnTerminate: true});
+    this.stopGeolocation();
   }
   
   // remove all geolocation event listeners
@@ -196,6 +196,9 @@ export class LocationSvc {
     BackgroundGeolocation.configure(options);
   }
   
+  getGeolocationConfig = () => {
+    BackgroundGeolocation.getConfig((config => alert(JSON.stringify(config,null,2))))
+  }
   
 }
 

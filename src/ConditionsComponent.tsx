@@ -4,18 +4,18 @@ import {
   StyleSheet,
   Text,
   ScrollView,
-  TouchableNativeFeedback,
 } from "react-native";
+import { RectButton } from 'react-native-gesture-handler'
 
 import {
-  pageBackground,
   UiThemeContext,
   WeatherSvcContext,
   LocationSvcContext,
   TrekInfoContext,
   UtilsSvcContext,
   ToastSvcContext,
-  disabledTextColor
+  StorageSvcContext,
+  HEADER_HEIGHT
 } from "./App";
 import { APP_ICONS } from "./SvgImages";
 import SvgIcon from "./SvgIconComponent";
@@ -24,6 +24,7 @@ import { WeatherSvc, WeatherData, WindInfo } from './WeatherSvc';
 import { LocationSvc } from './LocationService';
 import { UtilsSvc } from './UtilsService';
 import { ToastModel } from './ToastModel';
+import { StorageSvc } from './StorageService';
 import { LatLng } from "react-native-maps";
 import Waiting from './WaitingComponent';
 
@@ -35,6 +36,7 @@ function Conditions() {
   const locationSvc: LocationSvc = useContext(LocationSvcContext);
   const utilsSvc: UtilsSvc = useContext(UtilsSvcContext);
   const toastSvc: ToastModel = useContext(ToastSvcContext);
+  const storageSvc: StorageSvc = useContext(StorageSvcContext);
 
   const [weatherReady, setWeatherReady] = useState(false);
   const weatherData = useRef<WeatherData>();
@@ -48,6 +50,7 @@ function Conditions() {
     }
     if (update) {
       setUpdate(false);
+      storageSvc.reportFilespaceUse();
     }
     // return function cleanUp() { setWeatherReady(false); }
   });
@@ -151,19 +154,17 @@ function Conditions() {
     highTextColor,
     dividerColor,
     listIconColor,
+    rippleColor,
+    pageBackground,
+    disabledTextColor,
     trekLogBlue
-  } = uiTheme.palette;
-  const { cardLayout } = uiTheme;
+  } = uiTheme.palette[trekInfo.colorTheme];
+  const { cardLayout, pageTitle } = uiTheme;
   const sortIconSize = 24;
   const sortButtonHeight = 53;
 
   const styles = StyleSheet.create({
-    container: { ... StyleSheet.absoluteFillObject, backgroundColor: pageBackground },
-    pageTitle: {
-      fontSize: 20,
-      color: highTextColor,
-      fontWeight: "bold",
-    },
+    container: { ... StyleSheet.absoluteFillObject, backgroundColor: pageBackground, top: HEADER_HEIGHT },
     rowLayout: {
       flexDirection: "row",
       alignItems: "center",
@@ -178,6 +179,8 @@ function Conditions() {
     },
     sortButtonArea: {
       minWidth: 80,
+      minHeight: sortButtonHeight,
+      justifyContent: "center",
       alignItems: "flex-end",
     },
     sortButtonTrigger: {
@@ -252,13 +255,13 @@ function Conditions() {
               <Text style={styles.sortButtonText}>{label}</Text>
             </View>
             {selValue &&
-              <TouchableNativeFeedback
-                background={TouchableNativeFeedback.SelectableBackgroundBorderless()}
+              <RectButton
+                rippleColor={rippleColor}
                 onPress={changeSystem}>
                   <View style={styles.sortButtonArea}>
                     <Text style={[styles.sortButtonValue, styles.selectable]}>{valueFn()}</Text>
                   </View>
-              </TouchableNativeFeedback>
+              </RectButton>
             }
             {!selValue && 
               <View>
@@ -272,65 +275,65 @@ function Conditions() {
 
 return (
     <View style={styles.container}>
-            <View style={[cardLayout, {marginBottom: 0, paddingBottom: 15}]}>
-              <Text style={styles.pageTitle}>At Your Location</Text>
+      <View style={[cardLayout, {marginBottom: 0, paddingBottom: 15}]}>
+        <Text style={[pageTitle, {color: highTextColor}]}>At Your Location</Text>
+      </View>
+      {!weatherReady && 
+        <Waiting msg="Obtaining weather data"/>
+      }
+      <ScrollView>
+        {weatherReady &&
+          <View style={[cardLayout]}>
+            <View style={{alignItems: "center"}}>
+                <Text style={styles.city}>{formattedConditions('City')}</Text>
+                <Text style={styles.time}>{formattedConditions('Time')}</Text>
             </View>
-            {!weatherReady && 
-              <Waiting msg="Obtaining weather data"/>
-            }
-            <ScrollView>
-              {weatherReady &&
-                <View style={[cardLayout]}>
-                  <View style={{alignItems: "center"}}>
-                      <Text style={styles.city}>{formattedConditions('City')}</Text>
-                      <Text style={styles.time}>{formattedConditions('Time')}</Text>
-                  </View>
-                  <SortItem
-                    div={false}
-                    icon={weatherData.current.condIconId}
-                    label='Skies'
-                    valueFn={() => utilsSvc.capitalizeWords(weatherData.current.desc)}
-                    selValue={false}
-                  />
-                  <SortItem
-                    icon={weatherData.current.tempIconId}
-                    label='Temperature'
-                    valueFn={formattedTemp}
-                    selValue={true}
-                  />
-                  <View style={styles.divider}/>
-                  <View style={[styles.sortButton, {paddingRight: 15}]}>
-                    <View style={styles.sortButtonTrigger}>
-                      <SvgIcon
-                        style={styles.sortButtonIcon}
-                        size={sortIconSize}
-                        paths={APP_ICONS[weatherData.current.windIconId]}
-                        fill={listIconColor}
-                      />
-                      <Text style={styles.sortButtonText}>Wind</Text>
-                    </View>
-                    <View style={styles.rowLayout}>
-                      <Text style={styles.windValue}>{formattedWind('Dir')}</Text>
-                      <Text style={styles.windText}>at</Text>
-                      <Text style={styles.windValue}>{formattedWind('Speed')}</Text>
-                      <Text style={styles.windText}>{formattedWind('Units')}</Text>
-                    </View>
-                  </View>
-                  <SortItem
-                    icon='Humidity'
-                    label='Humidity'
-                    valueFn={formattedHumidity}
-                    selValue={false}
-                  />
-                  <SortItem
-                    icon='ElevationRise'
-                    label='Elevation'
-                    valueFn={formattedElevation}
-                    selValue={false}
-                  />
-                </View>
-              }
-            </ScrollView>
+            <SortItem
+              div={false}
+              icon={weatherData.current.condIconId}
+              label='Skies'
+              valueFn={() => utilsSvc.capitalizeWords(weatherData.current.desc)}
+              selValue={false}
+            />
+            <SortItem
+              icon={weatherData.current.tempIconId}
+              label='Temperature'
+              valueFn={formattedTemp}
+              selValue={true}
+            />
+            <View style={styles.divider}/>
+            <View style={[styles.sortButton, {paddingRight: 15}]}>
+              <View style={styles.sortButtonTrigger}>
+                <SvgIcon
+                  style={styles.sortButtonIcon}
+                  size={sortIconSize}
+                  paths={APP_ICONS[weatherData.current.windIconId]}
+                  fill={listIconColor}
+                />
+                <Text style={styles.sortButtonText}>Wind</Text>
+              </View>
+              <View style={styles.rowLayout}>
+                <Text style={styles.windValue}>{formattedWind('Dir')}</Text>
+                <Text style={styles.windText}>at</Text>
+                <Text style={styles.windValue}>{formattedWind('Speed')}</Text>
+                <Text style={styles.windText}>{formattedWind('Units')}</Text>
+              </View>
+            </View>
+            <SortItem
+              icon='Humidity'
+              label='Humidity'
+              valueFn={formattedHumidity}
+              selValue={false}
+            />
+            <SortItem
+              icon='ElevationRise'
+              label='Elevation'
+              valueFn={formattedElevation}
+              selValue={false}
+            />
+          </View>
+        }
+      </ScrollView>
     </View>
   )
 }

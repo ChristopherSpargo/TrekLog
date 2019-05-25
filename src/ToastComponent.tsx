@@ -27,7 +27,7 @@ class Toast extends React.Component<{
         flexDirection: "row",
         alignItems: "center",
         left: 10,
-        height: 50,
+        height: 55,
         width: 325,
         elevation: 5,
         borderStyle: "solid",
@@ -43,8 +43,12 @@ class Toast extends React.Component<{
       top: {
         top: 125
       },
-      contentText: {
+      content: {
+        width: 270,
         marginLeft: 15,
+        flexWrap: "wrap",
+      },
+      contentText: {
         color: "white",
         fontSize: 20
       }
@@ -60,7 +64,9 @@ class Toast extends React.Component<{
                   paths={APP_ICONS[this.props.toastSvc.tData.icon]}
                   style={{marginLeft: 10}}
               />
-              <Text style={styles.contentText}>{this.props.toastSvc.tData.content}</Text>
+              <View style={styles.content}>
+                <Text style={styles.contentText}>{this.props.toastSvc.tData.content}</Text>
+              </View>
             </View>
         }
       </View>

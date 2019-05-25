@@ -3,12 +3,13 @@ package com.treklog;
 import android.app.Application;
 
 import com.facebook.react.ReactApplication;
-// import com.swmansion.gesturehandler.react.RNGestureHandlerPackage;
+import com.marianhello.bgloc.react.BackgroundGeolocationPackage;
+import com.RNFetchBlob.RNFetchBlobPackage;
+import com.swmansion.gesturehandler.react.RNGestureHandlerPackage;
 import org.reactnative.camera.RNCameraPackage;
 import com.brentvatne.react.ReactVideoPackage;
 import com.horcrux.svg.SvgPackage;
 import com.BV.LinearGradient.LinearGradientPackage;
-import com.marianhello.bgloc.react.BackgroundGeolocationPackage;
 import com.airbnb.android.react.maps.MapsPackage;
 import com.facebook.react.ReactNativeHost;
 import com.facebook.react.ReactPackage;
@@ -30,13 +31,14 @@ public class MainApplication extends Application implements ReactApplication {
     protected List<ReactPackage> getPackages() {
       return Arrays.<ReactPackage>asList(
           new MainReactPackage(),
-            // new RNGestureHandlerPackage(),
+            new RNFetchBlobPackage(),
+            new BackgroundGeolocationPackage(),
+            new RNGestureHandlerPackage(),
             new ReactVideoPackage(),
             new RNCameraPackage(),
-            new BackgroundGeolocationPackage(),
             new MapsPackage(),
             new SvgPackage(),
-            new LinearGradientPackage() 
+            new LinearGradientPackage()
       );
     }
 

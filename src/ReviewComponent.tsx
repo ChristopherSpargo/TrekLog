@@ -10,16 +10,16 @@ import { FilterSvc } from "./FilterService";
 import { TrekInfo, TrekObj } from "./TrekInfoModel";
 import { UtilsSvc } from "./UtilsService";
 import { ModalModel } from "./ModalModel";
-import { CONTROLS_HEIGHT, NAV_ICON_SIZE, HEADER_HEIGHT } from "./App";
+import { CONTROLS_HEIGHT, NAV_ICON_SIZE, HEADER_HEIGHT, PAGE_TITLE_HEIGHT } from "./App";
 import { ToastModel } from "./ToastModel";
 import SvgButton from "./SvgButtonComponent";
 import Waiting from "./WaitingComponent";
 import IconButton from "./IconButtonComponent";
 import { APP_ICONS } from "./SvgImages";
-import { StorageSvc } from "./StorageService";
 import BarDisplay from "./BarDisplayComponent";
 import { TrekDetails } from "./TrekDetailsComponent";
 import TrekLogHeader from "./TreklogHeaderComponent";
+import { LoggingSvc } from "./LoggingService";
 
 export type SortByTypes = "Dist" | "Time" | "Date" | "Speed" | "Steps" | "Cals";
 export type ShowTypes = "Dist" | "Time" | "Steps" | "Speed" | "Cals" | "Date";
@@ -87,7 +87,7 @@ const goBack = NavigationActions.back();
   "modalSvc",
   "toastSvc",
   "filterSvc",
-  "storageSvc"
+  "loggingSvc"
 )
 @observer
 class ReviewTreks extends Component<
@@ -96,26 +96,17 @@ class ReviewTreks extends Component<
     utilsSvc?: UtilsSvc;
     modalSvc?: ModalModel;
     toastSvc?: ToastModel;
-    storageSvc?: StorageSvc;
+    loggingSvc?: LoggingSvc;
     uiTheme?: any;
     navigation?: any;
     trekInfo?: TrekInfo; // object with all non-gps information about the Trek
   },
   {}
 > {
-  static navigationOptions = ({ navigation }) => {
-    return {
-      header: (
-        <TrekLogHeader
-          titleText={navigation.getParam("title", "Scanning...")}
-          icon="*"
-          backButtonFn={() => navigation.dispatch(goBack)}
-        />
-      )
-    };
-  };
 
   @observable deletingTrek;
+  @observable openItems;
+  @observable headerTitle;
 
   tInfo = this.props.trekInfo;
   fS = this.props.filterSvc;
@@ -124,19 +115,19 @@ class ReviewTreks extends Component<
   AFFIndex: number;
 
   updateCount = 0;
-  updateView = false;
+  @observable updateView;
 
   constructor(props) {
     super(props);
-    this.updateView = false;
     this.initializeObservables();
   }
 
-  shouldComponentUpdate() {
-    return this.updateView;
-  }
+  // shouldComponentUpdate() {
+  //   return this.updateView;
+  // }
 
   componentWillMount() {
+    this.setOpenItems(false);
     this.AFFIndex = this.fS.setAfterFilterFn(this.runAfterFilterTreks);
     this.fS.setTrekType();
     this.fS.setDateMax(this.tInfo.dtMax, "None");
@@ -148,7 +139,7 @@ class ReviewTreks extends Component<
   }
 
   componentDidMount() {
-    this.updateView = true;
+    this.setUpdateView(true);
   }
 
   componentWillUnmount() {
@@ -158,26 +149,38 @@ class ReviewTreks extends Component<
     this.setDeletingTrek(false);
     this.fS.setSelectedTrekIndex(-1);
     this.fS.setDataReady(false);
-    this.tInfo.restoreCurrentUserSettings();
+    this.tInfo.restoreCurrentGroupSettings();
   }
 
   // initialize all the observable properties in an action for mobx strict mode
   @action
   initializeObservables = () => {
     this.deletingTrek = false;
+    this.setHeaderTitle('Scanning...')
+    this.setOpenItems(true);
+    this.setUpdateView(false);
   };
+
+  @action
+  setUpdateView = (status: boolean) => {
+    this.updateView = status;
+  }
+
+  @action
+  setOpenItems = (status: boolean) => {
+    this.openItems = status;
+  }
 
   // call the filterTreks function and manage the message in the header
   callFilterTreks = () => {
-    this.props.navigation.setParams({ title: "Scanning..." });
+    this.setHeaderTitle("Scanning...");
     this.fS.filterTreks();
   };
 
   // Set the title in the header
-  setTitleParam = () => {
-    this.props.navigation.setParams({
-      title: this.fS.formatTitleMessage("Review:")
-    });
+  @action
+  setHeaderTitle = (title: string) => {
+    this.headerTitle = title;
   };
 
   // Set the value of the deletingTrek flag
@@ -191,6 +194,13 @@ class ReviewTreks extends Component<
     if (this.fS.filteredTreks.length) {
       let trek = this.tInfo.allTreks[this.fS.filteredTreks[indx]];
       this.tInfo.setTrekProperties(trek);
+      // this.props.loggingSvc.smoothTrek(9.1);
+      // alert(this.tInfo.trekPointCount)
+      // if(trek.trekImages){
+      //   alert(JSON.stringify(trek.trekImages,null,2))
+      // }
+      // alert(JSON.stringify(this.props.utilsSvc.defineTrekValueRanges(trek, 'speed'),null,2));
+      // alert(JSON.stringify(trek,null,2))
       this.props.navigation.navigate("SelectedTrek", {
         title:
           this.props.utilsSvc.formattedLongDateAbbrDay(trek.date) +
@@ -226,6 +236,9 @@ class ReviewTreks extends Component<
     }
     trek = this.tInfo.allTreks[this.fS.filteredTreks[indx]];
     this.fS.trekSelected(indx, true);
+    // if(trek.trekImages){
+    //   alert(JSON.stringify(trek.trekImages,null,2))
+    // }
     return (
       this.props.utilsSvc.formattedLongDateAbbrDay(trek.date) +
       "  " +
@@ -315,7 +328,7 @@ class ReviewTreks extends Component<
   // This function must first be registered (usually in the componentDidMount hook)
   // with filterSvc via setAfterFilterFn(fn) method.
   runAfterFilterTreks = () => {
-    this.setTitleParam();
+    this.setHeaderTitle(this.fS.formatTitleMessage("Review:"));
   };
 
   // format the label for the timeframe picker field
@@ -344,33 +357,40 @@ class ReviewTreks extends Component<
   };
 
   render() {
+    // alert("render: " + this.updateView)
     if (!this.updateView) {
       return (
         <View
           style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0 }}
         >
+          <TrekLogHeader
+            titleText={this.headerTitle}
+            icon="*"
+            backButtonFn={() => this.props.navigation.dispatch(goBack)}
+          />
           <Waiting />
         </View>
       );
     }
 
     const {height} = Dimensions.get('window');
-    const pageTitleHt = 25;
     const pageTitleSpacing = 20;
-    const statusBarHt = 15;
+    const statusBarHt = 0;
     const sortControlsHt = 30;
-    const areaHt = height - (statusBarHt + pageTitleSpacing + HEADER_HEIGHT + pageTitleHt + CONTROLS_HEIGHT);
-    const { cardLayout, controlsArea, navIcon, navItem } = this.props.uiTheme;
+    const areaHt = height - (statusBarHt + pageTitleSpacing + HEADER_HEIGHT + PAGE_TITLE_HEIGHT + CONTROLS_HEIGHT);
+    const { cardLayout, controlsArea, navIcon, navItem, pageTitle } = this.props.uiTheme;
     const {
-      highTextColor,
       disabledTextColor,
       pageBackground,
       trekLogBlue,
       mediumTextColor,
+      highTextColor,
+      navItemBorderColor,
+      disabledHeaderTextColor,
       navIconColor
-    } = this.props.uiTheme.palette;
+    } = this.props.uiTheme.palette[this.tInfo.colorTheme];
     const gotTreks = this.fS.dataReady && !this.fS.filteredTreksEmpty();
-    const graphBgColor = "white";
+    const graphBgColor = pageBackground;
     const graphHeight = 210;
 
     const styles = StyleSheet.create({
@@ -417,12 +437,6 @@ class ReviewTreks extends Component<
         color: "white",
         fontSize: 16
       },
-      pageTitle: {
-        fontSize: 20,
-        height: pageTitleHt,
-        color: highTextColor,
-        fontWeight: "bold"
-      },
       sortCtrls: {
         flexDirection: "row",
         justifyContent: "flex-end",
@@ -442,8 +456,15 @@ class ReviewTreks extends Component<
       <View style={styles.container}>
         {this.fS.dataReady && (
           <View style={[styles.container, {bottom: CONTROLS_HEIGHT}]}>
+            <TrekLogHeader
+              titleText={this.headerTitle}
+              icon="*"
+              backButtonFn={() => this.props.navigation.dispatch(goBack)}
+              group={this.tInfo.group || "None"}
+              groupTextColor={disabledHeaderTextColor}
+                />
             <View style={[cardLayout, { paddingBottom: 0 }]}>
-              <Text style={styles.pageTitle}>Trek Review</Text>
+              <Text style={[pageTitle, {color: highTextColor}]}>Trek Review</Text>
             </View>
             {gotTreks && 
               <View style={styles.scrollArea}>
@@ -452,7 +473,8 @@ class ReviewTreks extends Component<
                     <View style={styles.sortCtrls}>
                       <IconButton
                         iconSize={30}
-                        style={{ flexDirection: "row", marginRight: 5 }}
+                        style={{ flexDirection: "row", marginRight: 5, backgroundColor: "transparent",
+                                 width: 90 }}
                         icon={
                           this.fS.sortByDate ? "CheckBoxChecked" : "CheckBoxOpen"
                         }
@@ -502,8 +524,9 @@ class ReviewTreks extends Component<
                             dataRange={this.fS.barGraphData.range}
                             selected={this.fS.selectedTrekIndex}
                             selectFn={this.fS.trekSelected}
+                            openFlag={this.openItems}
                             barWidth={60}
-                            maxBarHeight={155}
+                            maxBarHeight={160}
                             style={{ height: 210, backgroundColor: "transparent" }}
                             scrollToBar={this.fS.scrollToBar}
                           />
@@ -538,6 +561,7 @@ class ReviewTreks extends Component<
               iconSize={NAV_ICON_SIZE}
               icon={this.fS.extraFilterSet() ? "FilterRemove" : "Filter"}
               style={navItem}
+              borderColor={navItemBorderColor}
               iconStyle={navIcon}
               color={navIconColor}
               raised
@@ -552,6 +576,7 @@ class ReviewTreks extends Component<
               iconSize={NAV_ICON_SIZE}
               icon="Delete"
               style={navItem}
+              borderColor={navItemBorderColor}
               iconStyle={navIcon}
               color={navIconColor}
               raised
@@ -562,6 +587,7 @@ class ReviewTreks extends Component<
               iconSize={NAV_ICON_SIZE}
               icon={this.fS.extraFilterSet() ? "FilterRemove" : "Filter"}
               style={navItem}
+              borderColor={navItemBorderColor}
               iconStyle={navIcon}
               color={navIconColor}
               raised
@@ -572,6 +598,7 @@ class ReviewTreks extends Component<
               iconSize={NAV_ICON_SIZE}
               icon="Map"
               style={navItem}
+              borderColor={navItemBorderColor}
               iconStyle={navIcon}
               color={navIconColor}
               raised

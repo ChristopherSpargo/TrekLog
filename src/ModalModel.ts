@@ -1,5 +1,4 @@
 import { observable, action } from 'mobx';
-import { uiTheme } from './App';
 
 // the ModalData object is used to pass configuration parameters to the modals' Open functions
 export interface ModalData {      
@@ -24,6 +23,7 @@ export interface ModalData {
   deleteText          ?: string,    // text for DELETE button
   notifyOnly          ?: boolean,   // true if no CANCEL button
   allowOutsideCancel  ?: boolean,   // true if user can cancel by tapping outside modal
+  openFn              ?: Function,  // function to call to open/close the modal
   resolve             ?: Function,  // function to call to resolve the Promise
   reject              ?: Function   // function to call to reject the Promise
 }
@@ -38,7 +38,6 @@ export class ModalModel {
   @observable simpleIsOpen;                // when true, SimpleModal component will be open
   @observable goalNoticeIsOpen;            // when true, GoalNoticeModal component will be open
   @observable labelFormOpen;               // when true, TrekLabel component will be open
-  @observable radioPickerOpen;             // when true, RadioPicker component will be open
 
   @observable smData   : ModalData;         // data object for SimpleModal
   @observable gnmData  : ModalData;         // data object for GoalAchievedModal
@@ -55,7 +54,6 @@ export class ModalModel {
     this.simpleIsOpen = false;
     this.goalNoticeIsOpen = false;
     this.labelFormOpen = false;
-    this.radioPickerOpen = false;
     this.smData = {};
     this.gnmData = {};
     this.lfData = {};
@@ -100,7 +98,7 @@ export class ModalModel {
     this.gnmData.dType        = mData.dType || 'GoalAchieved';
     this.gnmData.heading      = mData.heading || 'Goal Achieved!';
     this.gnmData.headingIcon  = mData.headingIcon;
-    this.gnmData.iconColor    = mData.iconColor || uiTheme.palette.mediumTextColor;
+    this.gnmData.iconColor    = mData.iconColor;
     this.gnmData.content      = mData.content || '';
     this.gnmData.itemList     = mData.itemList || [];
     this.gnmData.cancelText   = mData.cancelText || 'CANCEL';
@@ -164,16 +162,18 @@ export class ModalModel {
     this.rpData.selection           = mData.selection || '';
     this.rpData.cancelText          = mData.cancelText || 'CANCEL';
     this.rpData.okText              = mData.okText || 'OK';
+    this.rpData.openFn              = mData.openFn;
     return new Promise((resolve, reject) => {
       this.rpData.resolve = resolve;
       this.rpData.reject = reject;
-      this.radioPickerOpen = true;    // putting this here (later) helps avoid an empty picker (no radios)
+      this.rpData.openFn(true);    // putting this here (later) helps avoid an empty picker (no radios)
     });
   }
 
   @action
   closeRadioPicker = (delay?: number) : Promise<string> => {
-    this.radioPickerOpen = false;      
+    this.rpData.openFn(false);      
+    this.rpData.selection = '';
     return new Promise((resolve) => {       // now, allow time for the modal fade-out animation
       setTimeout(() => {
         resolve('Ok');

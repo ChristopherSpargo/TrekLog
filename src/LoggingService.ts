@@ -1,16 +1,15 @@
 import { action } from 'mobx';
-import { Location } from 'react-native-mauron85-background-geolocation';
+import { Location } from '@mauron85/react-native-background-geolocation';
 
-import { TrekInfo, CALC_VALUES_INTERVAL, LaLo, TrekPoint} from './TrekInfoModel'
+import { TrekInfo, CALC_VALUES_INTERVAL, LaLo, TrekPoint, MAX_TIME_SINCE } from './TrekInfoModel'
 import { UtilsSvc, MPH_TO_MPS, DRIVING_A_CAR_SPEED } from './UtilsService';
 import { LocationSvc } from './LocationService';
 import { ModalModel } from './ModalModel';
 import { ToastModel } from './ToastModel';
 
-const SPEED_RANGES_MPS = [0, 1 * MPH_TO_MPS, 2 * MPH_TO_MPS, 4 * MPH_TO_MPS, 8 * MPH_TO_MPS, 
-      16 * MPH_TO_MPS, 32 * MPH_TO_MPS, 64 * MPH_TO_MPS, 128 * MPH_TO_MPS, 256 * MPH_TO_MPS,
-      512 * MPH_TO_MPS, 1024 * MPH_TO_MPS];
-const DIST_FILTER_VALUES = [1, 1, 1, 2, 2, 4, 8, 16, 32, 64, 256];
+const SPEED_RANGES_MPS = [ 2 * MPH_TO_MPS,   4 * MPH_TO_MPS,  8 * MPH_TO_MPS, 
+                          16 * MPH_TO_MPS, 32 * MPH_TO_MPS,  64 * MPH_TO_MPS];
+const DIST_FILTER_VALUES = [1, 2, 4, 8, 16, 32, 64];
 export const SMOOTH_INTERVAL = 6;         // smooth route and compute distance every so many points
 export const MIN_SIG_SPEED = 
       {Walk: .2235, Run: .4470, Bike: 1.341, Hike: .2235};  // used to smooth based on type
@@ -32,7 +31,7 @@ export class LoggingSvc {
 
   constructor ( private utilsSvc: UtilsSvc, private trekInfo: TrekInfo, private locationSvc: LocationSvc,
                 private modalSvc: ModalModel, private toastSvc: ToastModel ) {
-  }
+                }
 
   // Start a new Trek logging process
   startTrek = () => {
@@ -50,6 +49,8 @@ export class LoggingSvc {
     this.trekInfo.hills = 'Unknown';
     this.trekInfo.drivingACar = false;
     this.trekInfo.haveShownDriving = false;
+    this.trekInfo.setTrekLabel('');
+    this.trekInfo.setTrekNotes('');
   }
 
   stopTrek = () => {
@@ -74,7 +75,7 @@ export class LoggingSvc {
   startPositionTracking = (gotPos: Function) => {
     // Get the current GPS position
         this.locationSvc.getCurrentLocation((location : Location) => {    
-        this.addPoint(location);
+        gotPos(location);
         this.watchGeolocationPosition(gotPos, true);
       },
       { enableHighAccuracy: true, 
@@ -150,7 +151,12 @@ export class LoggingSvc {
       if(--this.trekInfo.calculatedValuesTimer === 0) {
         // calculatedValues have not been updated recently, user must be stopped
         this.trekInfo.updateCalculatedValues(true);
-        this.trekInfo.calculatedValuesTimer = CALC_VALUES_INTERVAL;          
+        this.trekInfo.calculatedValuesTimer = CALC_VALUES_INTERVAL;    
+        // make sure distance filter is at minimum since we're stopped
+        if(this.trekInfo.minPointDist !== 1){
+          this.trekInfo.setMinPointDist(1);
+          this.locationSvc.updateGeolocationConfig({distanceFilter: this.trekInfo.minPointDist});
+        }      
       }
       this.updateDuration();
     }, 1000);
@@ -180,51 +186,61 @@ export class LoggingSvc {
   @action
   addPoint = (pos: Location) : boolean => {
     let added = false;
-    if (this.trekInfo.totalGpsPoints === 0) {  // start Trek timer after recieving first GPS reading
+    let tInfo = this.trekInfo;
+    let badFirstPt : boolean;
+
+    if (tInfo.totalGpsPoints === 0) {  // start Trek timer after recieving first GPS reading
       this.startTrekTimer();
       this.setStartTime();
     }
-    this.trekInfo.totalGpsPoints++;
-    if (this.trekInfo.endTime === '') { this.updateDuration(); }
+    tInfo.totalGpsPoints++;
+    if (tInfo.endTime === '') { this.updateDuration(); }
     let newPt = {l:{a: pos.latitude, o: pos.longitude}, 
-                    t: Math.round((pos.time - this.trekInfo.startMS) / 1000), s: pos.speed};
-    if(newPt.s === undefined){  //sometimes the speed property is undefined (why? I don't know)
-      if(!this.trekInfo.pointListEmpty()){ 
-        newPt.s = this.trekInfo.pointList[this.trekInfo.pointList.length - 1].s; // use prior point speed
+                    t: Math.round((pos.time - tInfo.startMS) / 1000), 
+                    s: this.utilsSvc.fourSigDigits(pos.speed)};
+    if(newPt.s === undefined || newPt.s === null){  //sometimes the speed property is undefined (why? I don't know)
+      if(!tInfo.pointListEmpty()){ 
+        newPt.s = tInfo.pointList[tInfo.pointList.length - 1].s; // use prior point speed
       }
       else {
         newPt.s = 0;
       }
     }
-    // discard all but 1 0-speed points at beginning of trek (gps honing in)
-    if(this.trekInfo.trekPointCount !== 1 || newPt.s !== 0 || this.trekInfo.pointList[0].s !== 0){
-      this.pointsSinceSmooth++;
-      let newDist = this.newPointDist(pos.latitude, pos.longitude);
-      this.trekInfo.pointList.push(newPt);
-      this.trekInfo.setTrekPointCount();
-      this.trekInfo.drivingACar = this.trekInfo.drivingACar || (newPt.s/MPH_TO_MPS) > DRIVING_A_CAR_SPEED;
-      this.trekInfo.updateSpeedNow();
-      if (!this.trekInfo.limitsActive){  // don't change distance filter if limited trek
-        let range = this.utilsSvc.findRangeIndex(pos.speed, SPEED_RANGES_MPS);
-        if ((range !== -1) && (range != this.trekInfo.currSpeedRange)) {
-          // update the distance filter to reflect the new speed range
-          this.trekInfo.currSpeedRange = range;
-          this.trekInfo.minPointDist = DIST_FILTER_VALUES[range];
-          this.locationSvc.updateGeolocationConfig({distanceFilter: this.trekInfo.minPointDist});
+    // leave out multiple 0-speed points
+    if (tInfo.trekPointCount < 2 || newPt.s !== 0 || tInfo.pointList[tInfo.trekPointCount - 1].s !== 0 ){
+      // check for first point unbelievably far from 2nd pt (check for high implied speed)
+      badFirstPt = (tInfo.trekPointCount === 1 && 
+      (this.utilsSvc.computeImpliedSpeed(newPt, tInfo.pointList[0]) > (newPt.s * 5)));
+      // discard all but 1 0-speed points at beginning of trek (gps honing in)
+      if(!badFirstPt && (tInfo.trekPointCount !== 1 || newPt.s !== 0 || tInfo.pointList[0].s !== 0)){
+        this.pointsSinceSmooth++;
+        let newDist = this.newPointDist(newPt.l.a, newPt.l.o);
+        tInfo.pointList.push(newPt);
+        tInfo.setTrekPointCount();
+        tInfo.drivingACar = tInfo.drivingACar || (newPt.s/MPH_TO_MPS) > DRIVING_A_CAR_SPEED;
+        tInfo.updateSpeedNow();
+        if (!tInfo.limitsActive){  // don't change distance filter if limited trek
+          let range = this.utilsSvc.findRangeIndex(newPt.s, SPEED_RANGES_MPS);
+          if ((range !== -1) && (range !== tInfo.currSpeedRange)) {
+            // update the distance filter to reflect the new speed range
+            tInfo.currSpeedRange = range;
+            tInfo.minPointDist = DIST_FILTER_VALUES[range];
+            this.locationSvc.updateGeolocationConfig({distanceFilter: tInfo.minPointDist});
+          }
         }
-      }
-      if (this.pointsSinceSmooth >= SMOOTH_INTERVAL) {
-        this.smoothTrek();
-        this.trekInfo.updateCalculatedValues();
+        if (this.pointsSinceSmooth >= SMOOTH_INTERVAL) {
+          this.smoothTrek();
+          tInfo.updateCalculatedValues();
+        }
+        else {
+          this.updateDist(newDist);
+        } 
+        tInfo.calculatedValuesTimer = CALC_VALUES_INTERVAL;
+        added = true;
       }
       else {
-        this.updateDist(newDist);
-      } 
-      this.trekInfo.calculatedValuesTimer = CALC_VALUES_INTERVAL;
-      added = true;
-    }
-    else {
-      this.trekInfo.pointList[0] = newPt; // replace 0-speed point with new 0-speed pt
+        tInfo.pointList[0] = newPt; // replace 0-speed point with new 0-speed pt
+      }
     }
     return added;
   }
@@ -282,13 +298,13 @@ export class LoggingSvc {
   // set the value of the trekDist property
   @action
   setTrekDist = (dist: number) => {
-    this.trekInfo.trekDist = dist;
+    this.trekInfo.trekDist = this.utilsSvc.fourSigDigits(dist);
   }
 
   // Reduce the amount of zig-zag in the point path (every so often)
   @action
-  smoothTrek = () => {
-    this.trekInfo.setPointList(this.smooth(this.trekInfo.pointList, KINK_FACTOR, 
+  smoothTrek = (k = KINK_FACTOR) => {
+    this.trekInfo.setPointList(this.smooth(this.trekInfo.pointList, k, 
                   MIN_SIG_SPEED[this.trekInfo.type]));
     this.pointsSinceSmooth = 0;
     this.totalDist();
@@ -305,15 +321,15 @@ smooth = (source: TrekPoint[], kink: number, minSigSpeed: number) => {
   /* source[] Input coordinates in google.maps.LatLngs    */
   /* kink in metres, kinks above this depth are kept  */
   /* kink depth is the height of the triangle abc where a-b and b-c are two consecutive line segments */
-      var n_source, n_stack, n_dest, start, end, i, sig;    
-      var dev_sqr, max_dev_sqr, band_sqr;
-      var x12, y12, d12, x13, y13, d13, x23, y23, d23;
-      var F = ((Math.PI / 180.0) * 0.5 );
-      var index = []; /* aray of indexes of source points to include in the reduced line */
-      var sig_start = []; /* indices of start & end of working section */
-      var sig_end = [];  
-      var sDiff = 0;
-      var sigSpeed = -1;
+      let n_source, n_stack, n_dest, start, end, i, sig;    
+      let dev_sqr, max_dev_sqr, band_sqr;
+      let x12, y12, d12, x13, y13, d13, x23, y23, d23;
+      let F = ((Math.PI / 180.0) * 0.5 );
+      let index = []; /* aray of indexes of source points to include in the reduced line */
+      let sig_start = []; /* indices of start & end of working section */
+      let sig_end = [];  
+      let sDiff = 0;
+      let sigSpeed = -1;
   
       /* check for simple cases */
   
@@ -419,7 +435,7 @@ smooth = (source: TrekPoint[], kink: number, minSigSpeed: number) => {
       index[n_dest++] = n_source-1;
   
       /* make return array */
-      var r = [];
+      let r = [];
       for(let i=0; i < n_dest; i++)
           r.push(source[index[i]]);
       return r;
@@ -478,7 +494,7 @@ smooth = (source: TrekPoint[], kink: number, minSigSpeed: number) => {
         })
       })
     }
-  
-    
+
+      
 }
 

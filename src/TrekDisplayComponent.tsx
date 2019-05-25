@@ -1,11 +1,15 @@
 import React from 'react';
 import { Component } from 'react';
-import MapView, { Marker, Polyline, LatLng, Region }  from 'react-native-maps';
 import { View, StyleSheet, Text } from 'react-native';
 import { observer, inject } from 'mobx-react';
+import { observable, action } from 'mobx';
+import MapView, { Marker, Polyline, LatLng, Region } from 'react-native-maps';
 
 import { INTERVAL_MARKER_Z_INDEX, CURRENT_POS_MARKER_Z_INDEX, INITIAL_POS_MARKER_Z_INDEX, 
-         PICTURE_MARKER_Z_INDEX } from './App';
+         PICTURE_MARKER_Z_INDEX, 
+         SHORT_CONTROLS_HEIGHT,
+         HEADER_HEIGHT,
+        } from './App';
 import SpeedDial, {SpeedDialItem} from './SpeedDialComponent';
 import { TrekInfo, MapType, TrekPoint, TrekImageSet } from './TrekInfoModel';
 import { UtilsSvc } from './UtilsService';
@@ -18,8 +22,8 @@ import { LoggingSvc } from './LoggingService';
 // const TREK_ZOOM_CURRENT = 15;
 // const TREK_ZOOM_STATE   =  6;
 // const TREK_ZOOM_COUNTRY =  4;
-// const COUNTRY_CENTER_LAT_USA = 41;
-// const COUNTRY_CENTER_LNG_USA = -101;
+const COUNTRY_CENTER_LAT_USA = 41;
+const COUNTRY_CENTER_LNG_USA = -101;
 
 @inject('trekInfo', 'uiTheme', 'utilsSvc', 'modalSvc', 'loggingSvc')
 @observer
@@ -30,12 +34,12 @@ class TrekDisplay extends Component<{
   selectedPath ?: LatLng[],
   selectFn ?: Function,
   layoutOpts : string,
+  mapType : MapType,
   changeMapFn : Function,
   changeZoomFn : Function,
   speedDialIcon ?: string,    // icon for speed dial trigger
   speedDialValue ?: string,   // value to return for speed dial with no items menu
   bottom ?: number,
-  mapType ?: MapType,
   markerDragFn ?: Function,
   useCameraFn ?: Function,    // function to call if user takes picture or video while logging
   showImagesFn ?: Function,   // function to call if user taps an image marker on the map
@@ -48,6 +52,7 @@ class TrekDisplay extends Component<{
   loggingSvc ?: LoggingSvc,
   }, {} > {
 
+
   tInfo = this.props.trekInfo;
   mapViewRef;
   mode = this.props.layoutOpts;
@@ -58,7 +63,557 @@ class TrekDisplay extends Component<{
   currentImageSet : TrekImageSet;
   currentImageSetIndex : number;
   backgroundTimeoutID : number;
-  
+  stdMapStyle =
+  [
+    {
+      "featureType": "administrative.neighborhood",
+      "elementType": "labels.text.fill",
+      "stylers": [
+        {
+          "color": "#b4d27b"
+        }
+      ]
+    },
+    {
+      "featureType": "administrative.neighborhood",
+      "elementType": "labels.text.stroke",
+      "stylers": [
+        {
+          "color": "#646464"
+        }
+      ]
+    },
+    {
+      "featureType": "landscape",
+      "elementType": "geometry",
+      "stylers": [
+        {
+          "color": "#949494"
+        }
+      ]
+    },
+    {
+      "featureType": "landscape",
+      "elementType": "labels.text.stroke",
+      "stylers": [
+        {
+          "color": "#303030"
+        }
+      ]
+    },
+    {
+      "featureType": "poi",
+      "elementType": "labels.text.stroke",
+      "stylers": [
+        {
+          "color": "#eaeaea"
+        },
+        {
+          "weight": 1.5
+        }
+      ]
+    },
+    {
+      "featureType": "poi.business",
+      "elementType": "labels.text.stroke",
+      "stylers": [
+        {
+          "color": "#3a3a3a"
+        },
+        {
+          "weight": 2.5
+        }
+      ]
+    },
+    {
+      "featureType": "road",
+      "elementType": "labels.text.fill",
+      "stylers": [
+        {
+          "color": "#ffffff"
+        }
+      ]
+    },
+    {
+      "featureType": "road",
+      "elementType": "labels.text.stroke",
+      "stylers": [
+        {
+          "color": "#484848"
+        }
+      ]
+    },
+    {
+      "featureType": "road.arterial",
+      "elementType": "geometry.fill",
+      "stylers": [
+        {
+          "color": "#ffffff"
+        }
+      ]
+    },
+    {
+      "featureType": "road.local",
+      "elementType": "geometry.fill",
+      "stylers": [
+        {
+          "color": "#ffffff"
+        }
+      ]
+    }
+  ];
+
+  lightThemeMapStyle = 
+  [
+    {
+      "elementType": "geometry",
+      "stylers": [
+        {
+          "color": "#ebe3cd"
+        }
+      ]
+    },
+    {
+      "elementType": "labels.text.fill",
+      "stylers": [
+        {
+          "color": "#523735"
+        }
+      ]
+    },
+    {
+      "elementType": "labels.text.stroke",
+      "stylers": [
+        {
+          "color": "#f5f1e6"
+        }
+      ]
+    },
+    {
+      "featureType": "administrative",
+      "elementType": "geometry.stroke",
+      "stylers": [
+        {
+          "color": "#c9b2a6"
+        }
+      ]
+    },
+    {
+      "featureType": "administrative.land_parcel",
+      "elementType": "geometry.stroke",
+      "stylers": [
+        {
+          "color": "#dcd2be"
+        }
+      ]
+    },
+    {
+      "featureType": "administrative.land_parcel",
+      "elementType": "labels.text.fill",
+      "stylers": [
+        {
+          "color": "#ae9e90"
+        }
+      ]
+    },
+    {
+      "featureType": "landscape.natural",
+      "elementType": "geometry",
+      "stylers": [
+        {
+          "color": "#dfd2ae"
+        }
+      ]
+    },
+    {
+      "featureType": "poi",
+      "elementType": "geometry",
+      "stylers": [
+        {
+          "color": "#dfd2ae"
+        }
+      ]
+    },
+    {
+      "featureType": "poi",
+      "elementType": "labels.text.fill",
+      "stylers": [
+        {
+          "color": "#93817c"
+        }
+      ]
+    },
+    {
+      "featureType": "poi.park",
+      "elementType": "geometry.fill",
+      "stylers": [
+        {
+          "color": "#a5b076"
+        }
+      ]
+    },
+    {
+      "featureType": "poi.park",
+      "elementType": "labels.text.fill",
+      "stylers": [
+        {
+          "color": "#447530"
+        }
+      ]
+    },
+    {
+      "featureType": "road",
+      "elementType": "geometry",
+      "stylers": [
+        {
+          "color": "#f5f1e6"
+        }
+      ]
+    },
+    {
+      "featureType": "road.arterial",
+      "elementType": "geometry",
+      "stylers": [
+        {
+          "color": "#fdfcf8"
+        }
+      ]
+    },
+    {
+      "featureType": "road.highway",
+      "elementType": "geometry",
+      "stylers": [
+        {
+          "color": "#f8c967"
+        }
+      ]
+    },
+    {
+      "featureType": "road.highway",
+      "elementType": "geometry.stroke",
+      "stylers": [
+        {
+          "color": "#e9bc62"
+        }
+      ]
+    },
+    {
+      "featureType": "road.highway.controlled_access",
+      "elementType": "geometry",
+      "stylers": [
+        {
+          "color": "#e98d58"
+        }
+      ]
+    },
+    {
+      "featureType": "road.highway.controlled_access",
+      "elementType": "geometry.stroke",
+      "stylers": [
+        {
+          "color": "#db8555"
+        }
+      ]
+    },
+    {
+      "featureType": "road.local",
+      "elementType": "labels.text.fill",
+      "stylers": [
+        {
+          "color": "#806b63"
+        }
+      ]
+    },
+    {
+      "featureType": "transit.line",
+      "elementType": "geometry",
+      "stylers": [
+        {
+          "color": "#dfd2ae"
+        }
+      ]
+    },
+    {
+      "featureType": "transit.line",
+      "elementType": "labels.text.fill",
+      "stylers": [
+        {
+          "color": "#8f7d77"
+        }
+      ]
+    },
+    {
+      "featureType": "transit.line",
+      "elementType": "labels.text.stroke",
+      "stylers": [
+        {
+          "color": "#ebe3cd"
+        }
+      ]
+    },
+    {
+      "featureType": "transit.station",
+      "elementType": "geometry",
+      "stylers": [
+        {
+          "color": "#dfd2ae"
+        }
+      ]
+    },
+    {
+      "featureType": "water",
+      "elementType": "geometry.fill",
+      "stylers": [
+        {
+          "color": "#b9d3c2"
+        }
+      ]
+    },
+    {
+      "featureType": "water",
+      "elementType": "labels.text.fill",
+      "stylers": [
+        {
+          "color": "#92998d"
+        }
+      ]
+    }
+  ];
+
+  darkThemeMapStyle = [
+    {
+      "elementType": "geometry",
+      "stylers": [
+        {
+          "color": "#1d2c4d"
+        }
+      ]
+    },
+    {
+      "elementType": "labels.text.fill",
+      "stylers": [
+        {
+          "color": "#8ec3b9"
+        }
+      ]
+    },
+    {
+      "elementType": "labels.text.stroke",
+      "stylers": [
+        {
+          "color": "#1a3646"
+        }
+      ]
+    },
+    {
+      "featureType": "administrative.country",
+      "elementType": "geometry.stroke",
+      "stylers": [
+        {
+          "color": "#4b6878"
+        }
+      ]
+    },
+    {
+      "featureType": "administrative.land_parcel",
+      "elementType": "labels.text.fill",
+      "stylers": [
+        {
+          "color": "#64779e"
+        }
+      ]
+    },
+    {
+      "featureType": "administrative.province",
+      "elementType": "geometry.stroke",
+      "stylers": [
+        {
+          "color": "#4b6878"
+        }
+      ]
+    },
+    {
+      "featureType": "landscape.man_made",
+      "elementType": "geometry.stroke",
+      "stylers": [
+        {
+          "color": "#334e87"
+        }
+      ]
+    },
+    {
+      "featureType": "landscape.natural",
+      "elementType": "geometry",
+      "stylers": [
+        {
+          "color": "#023e58"
+        }
+      ]
+    },
+    {
+      "featureType": "poi",
+      "elementType": "geometry",
+      "stylers": [
+        {
+          "color": "#283d6a"
+        }
+      ]
+    },
+    {
+      "featureType": "poi",
+      "elementType": "labels.text.fill",
+      "stylers": [
+        {
+          "color": "#6f9ba5"
+        }
+      ]
+    },
+    {
+      "featureType": "poi",
+      "elementType": "labels.text.stroke",
+      "stylers": [
+        {
+          "color": "#1d2c4d"
+        }
+      ]
+    },
+    {
+      "featureType": "poi.park",
+      "elementType": "geometry.fill",
+      "stylers": [
+        {
+          "color": "#023e58"
+        }
+      ]
+    },
+    {
+      "featureType": "poi.park",
+      "elementType": "labels.text.fill",
+      "stylers": [
+        {
+          "color": "#3C7680"
+        }
+      ]
+    },
+    {
+      "featureType": "road",
+      "elementType": "geometry",
+      "stylers": [
+        {
+          "color": "#466cb9" //"#304a7d"
+        }
+      ]
+    },
+    {
+      "featureType": "road",
+      "elementType": "labels.text.fill",
+      "stylers": [
+        {
+          "color": "#c8d3ea" //"#98a5be"
+        }
+      ]
+    },
+    {
+      "featureType": "road",
+      "elementType": "labels.text.stroke",
+      "stylers": [
+        {
+          "color": "#1d2c4d"
+        }
+      ]
+    },
+    {
+      "featureType": "road.highway",
+      "elementType": "geometry",
+      "stylers": [
+        {
+          "color": "#2c6675"
+        }
+      ]
+    },
+    {
+      "featureType": "road.highway",
+      "elementType": "geometry.stroke",
+      "stylers": [
+        {
+          "color": "#255763"
+        }
+      ]
+    },
+    {
+      "featureType": "road.highway",
+      "elementType": "labels.text.fill",
+      "stylers": [
+        {
+          "color": "#b0d5ce"
+        }
+      ]
+    },
+    {
+      "featureType": "road.highway",
+      "elementType": "labels.text.stroke",
+      "stylers": [
+        {
+          "color": "#023e58"
+        }
+      ]
+    },
+    {
+      "featureType": "transit",
+      "elementType": "labels.text.fill",
+      "stylers": [
+        {
+          "color": "#98a5be"
+        }
+      ]
+    },
+    {
+      "featureType": "transit",
+      "elementType": "labels.text.stroke",
+      "stylers": [
+        {
+          "color": "#1d2c4d"
+        }
+      ]
+    },
+    {
+      "featureType": "transit.line",
+      "elementType": "geometry.fill",
+      "stylers": [
+        {
+          "color": "#283d6a"
+        }
+      ]
+    },
+    {
+      "featureType": "transit.station",
+      "elementType": "geometry",
+      "stylers": [
+        {
+          "color": "#3a4762"
+        }
+      ]
+    },
+    {
+      "featureType": "water",
+      "elementType": "geometry",
+      "stylers": [
+        {
+          "color": "#0e1626"
+        }
+      ]
+    },
+    {
+      "featureType": "water",
+      "elementType": "labels.text.fill",
+      "stylers": [
+        {
+          "color": "#4e6d70"
+        }
+      ]
+    }
+  ];
+
   // propCamera : Camera = {
   //   center: {latitude: COUNTRY_CENTER_LAT_USA, longitude: COUNTRY_CENTER_LNG_USA},
   //   heading: 0, pitch: 0, altitude: 0,
@@ -74,9 +629,13 @@ class TrekDisplay extends Component<{
   // currCamera : Camera;
 
 
-  shouldComponentUpdate(){
-    return this.props.trekInfo.updateMap;
+  constructor(props) {
+    super(props);
+    this.setShowMapControls(true);
   }
+  // shouldComponentUpdate(){
+  //   return this.props.trekInfo.updateMap;
+  // }
 
   // componentWillMount() {
   //   this.currCamera = this.propCamera;
@@ -89,7 +648,10 @@ class TrekDisplay extends Component<{
   //   }
   // }
 
-  componentDidUpdate(){
+  componentDidUpdate(prevProps){
+    if (prevProps.mapType !== this.props.mapType){ 
+      this.forceUpdate();
+    }
     if (this.mode !== this.props.layoutOpts) {
       this.mode = this.props.layoutOpts;
       this.setLayout();
@@ -112,6 +674,15 @@ class TrekDisplay extends Component<{
         }
       }
     }
+  }
+
+  @action
+  setShowMapControls = (status: boolean) => {
+    this.tInfo.showMapControls = status;
+  }
+
+  toggleShowMapControls = () => {
+    this.setShowMapControls(!this.tInfo.showMapControls);
   }
 
   // this happens when user moves map or program follows Current position
@@ -167,14 +738,14 @@ class TrekDisplay extends Component<{
       case 'All':
         if (this.mapViewRef) { 
           this.mapViewRef.fitToCoordinates(path,
-                                          {edgePadding: {top: 50, right: 250, bottom: 50, left: 50}, 
+                                          {edgePadding: {top: 250, right: 200, bottom: 250, left: 50}, 
                                           animated: false});
         }
         break;
       case 'Interval':
         if (this.mapViewRef) { 
           this.mapViewRef.fitToCoordinates(path,
-                                          {edgePadding: {top: 200, right: 250, bottom: 200, left: 100}, 
+                                          {edgePadding: {top: 200, right: 200, bottom: 200, left: 50}, 
                                           animated: false});
         }
         break;
@@ -184,7 +755,7 @@ class TrekDisplay extends Component<{
         if (this.mapViewRef) { 
           this.mapViewRef.animateToRegion(this.props.utilsSvc.copyObj(this.currRegion), 10);
         }
-        // this.mapViewRef.animateToRegion(Object.assign({}, this.currRegion, 10));
+      // this.mapViewRef.animateToRegion(Object.assign({}, this.currRegion, 10));
       // this.mapViewRef.animateCamera(this.currCamera, {duration: 100});
         if (this.mode === 'NewAll'){
           this.mode = 'All';
@@ -255,32 +826,38 @@ class TrekDisplay extends Component<{
 
   // call function that will setup the previous trek in the list (if any)
   callPrevFn = () => {
-    this.props.prevFn();
+    requestAnimationFrame(() => {
+      this.props.prevFn();
+    })
   }
   
   render () {
     const tInfo = this.tInfo;
-    this.eMsg = 'Rendering';
     // tInfo.setUpdateMap(false);
-    const { trekLogYellow, highTextColor, trekLogOrange, secondaryColor,
-             } = this.props.uiTheme.palette;
+    const { trekLogYellow, highTextColor, trekLogOrange, secondaryColor, matchingMask_5,
+            matchingMask_3, contrastingMask_5, pageBackground, pathColor, navItemBorderColor, 
+            locationRadiusBorder, intervalMarkerBorderColor, intervalMarkerBackgroundColor
+          } = this.props.uiTheme.palette[this.tInfo.colorTheme];
+    const { navIcon } = this.props.uiTheme;
     const path = tInfo.pointList.map((pt) =>
           { return {latitude: pt.l.a, longitude: pt.l.o}; }); // copy just the LaLo data
     const numPts = tInfo.trekPointCount;
     const selection = (this.props.selectedInterval !== undefined || this.props.selectedInterval !== -1) 
                           ? this.props.selectedInterval : 0;
     const markers = this.props.intervalMarkers;
-    const mType : MapType = this.props.mapType || tInfo.defaultMapType;
+    const themeMap = this.props.mapType === 'theme' as MapType;
+    const mType : MapType = themeMap ? 'standard' : this.props.mapType;
     const haveLocation = tInfo.initialLoc !== undefined;
     const triggerIcon = this.props.speedDialIcon || "Location";
-    const radiusBorder = "rgba(99, 180, 207, .9)";
-    const radiusBg = "rgba(99, 180, 207, .2)";
-    const pathColor = "rgb(99, 180, 207)";
+    const radiusBg = "rgba(18, 46, 59, .5)";
     const trekImages = this.tInfo.trekImageCount !== 0;
     const imageMarkerIconSize = 18;
     const imageSelectorWidth = 50;
+    const selectedIntervalColor = trekLogOrange; //'rgba(255, 167, 38,.8)';  //"#ff704d";
     const showNext = this.props.nextFn !== undefined;
     const showPrev = this.props.prevFn !== undefined;
+    const minSDOffset = (this.props.bottom !== 0) ? 5 : SHORT_CONTROLS_HEIGHT;
+    const showControls = this.tInfo.showMapControls;
 
     const styles = StyleSheet.create({
       container: { ... StyleSheet.absoluteFillObject },
@@ -289,18 +866,18 @@ class TrekDisplay extends Component<{
         width: 32,
         height: 32,
         borderRadius: 16,
-        borderWidth: 1,
-        borderColor: radiusBorder,
+        borderWidth: 2,
+        borderColor: locationRadiusBorder,
         backgroundColor: radiusBg,
         overflow: "hidden",
         alignItems: "center",
         justifyContent: "center"
       },
       marker: {
-        width: 16,
-        height: 16,
-        borderWidth: 2.5,
-        borderRadius: 8,
+        width: 14,
+        height: 14,
+        borderWidth: 2,
+        borderRadius: 7,
         borderColor: "white",
         backgroundColor: "green",
         overflow: "hidden"
@@ -318,8 +895,8 @@ class TrekDisplay extends Component<{
         height: 20,
         borderWidth: 2.5,
         borderRadius: 10,
-        borderColor: "white",
-        backgroundColor: "lightgrey",
+        borderColor: intervalMarkerBorderColor,
+        backgroundColor: intervalMarkerBackgroundColor,
         justifyContent: "center",
         alignItems: "center",
       },
@@ -327,7 +904,7 @@ class TrekDisplay extends Component<{
         width: 32,
         height: 32,
         borderRadius: 16,
-        borderColor: trekLogOrange,
+        borderColor: selectedIntervalColor,
       },
       finalBg: {
         backgroundColor: "red"
@@ -337,7 +914,7 @@ class TrekDisplay extends Component<{
       },
       intervalTxt: {
         fontSize: 10,
-        color: highTextColor,
+        color: "white",
       },
       speedDialTrigger: {
         // backgroundColor: "rgba(255, 245, 157, .6)",
@@ -353,31 +930,39 @@ class TrekDisplay extends Component<{
         borderWidth: 2,
         borderRadius: 12,
         borderColor: 'firebrick',
-        backgroundColor: "white",
+        backgroundColor: pageBackground,
         justifyContent: "center",
         alignItems: "center",
+      },
+      imageSelectorArea: {
+        position: "absolute",
+        top: 0,
+        bottom: 0,
+        left: 0,
+        right: 0,
+        justifyContent: "center",
       },
       imageSelectorPrev: {
         position: "absolute",
         left: 10,
-        top: 0,
-        bottom: 100,
         width: imageSelectorWidth,
+        height: imageSelectorWidth,
         justifyContent: "center",
         alignItems: "center",
       },
       imageSelectorNext: {
         position: "absolute",
         right: 10,
-        top: 0,
-        bottom: 100,
         width: imageSelectorWidth,
+        height: imageSelectorWidth,
         justifyContent: "center",
         alignItems: "center",
       },
-      imageSelectorIconStyle: {
-        backgroundColor: "rgba(0,0,0,.2)", 
+      imageSelectorStyle: {
+        backgroundColor: matchingMask_3, 
         borderRadius: imageSelectorWidth/2,
+        borderStyle: "solid",
+        borderWidth: 1,
       },
     })
 
@@ -452,6 +1037,7 @@ class TrekDisplay extends Component<{
                        [ {icon: 'Orbit', label: 'Satellite', value: 'hybrid'},
                           {icon: 'Landscape', label: 'Terrain', value: 'terrain'},
                           {icon: 'Highway', label: 'Standard', value: 'standard'}];
+                          // {icon: 'YinYang', label: 'Theme', value: 'theme'}];
 
     // in Current mode, keep camera centered on current trek position
     // if (numPts > 0 && (this.mode === 'Current')) {
@@ -477,6 +1063,7 @@ class TrekDisplay extends Component<{
               onRegionChangeComplete={this.regionChangeDone}
               onRegionChange={this.regionChange}
               onPanDrag={() => this.mapMoved()}
+              onPress={() => this.toggleShowMapControls()}
               moveOnMarkerPress={false}
               // camera={this.mode === 'Current' ? this.propCamera : undefined}
               // camera={this.propCamera}
@@ -487,7 +1074,11 @@ class TrekDisplay extends Component<{
                   longitudeDelta: this.currRegion.longitudeDelta
                 } : undefined}
               mapType={mType}
-            >
+              // customMapStyle={themeMap ? (tInfo.colorTheme === COLOR_THEME_DARK ? 
+              //                 this.darkThemeMapStyle : 
+              //                 this.lightThemeMapStyle) : this.stdMapStyle}
+              customMapStyle={this.stdMapStyle}
+>
               {(numPts > 0) &&
                 <Marker
                   zIndex={INITIAL_POS_MARKER_Z_INDEX}
@@ -512,18 +1103,18 @@ class TrekDisplay extends Component<{
                   </View>
                 </Marker>
               }
-              {(numPts > 1) &&
-                <Polyline
-                  coordinates={path}
-                  strokeColor={pathColor}
-                  strokeWidth={3}
-                />
-              }
               {((numPts > 1) && markers) &&
                 <Polyline
-                  zIndex={INTERVAL_MARKER_Z_INDEX}
                   coordinates={this.props.selectedPath}
-                  strokeColor={trekLogOrange}
+                  strokeColor={selectedIntervalColor}
+                  strokeWidth={9}
+                />
+              }
+              {(numPts > 1) &&
+                <Polyline
+                  zIndex={INTERVAL_MARKER_Z_INDEX}
+                  coordinates={path}
+                  strokeColor={pathColor}
                   strokeWidth={3}
                 />
               }
@@ -547,17 +1138,17 @@ class TrekDisplay extends Component<{
             style={styles.map}
             // camera={ this.propCamera }
             region={{
-              latitude: haveLocation ? tInfo.initialLoc.latitude : 41,
-              longitude: haveLocation ? tInfo.initialLoc.longitude : -101,
+              latitude: haveLocation ? tInfo.initialLoc.latitude : COUNTRY_CENTER_LAT_USA,
+              longitude: haveLocation ? tInfo.initialLoc.longitude : COUNTRY_CENTER_LNG_USA,
               latitudeDelta: haveLocation ? 10: 20,
               longitudeDelta: haveLocation ? 10 : 20,
             }}
 
           />
         }
-        {(numPts > 0) &&
+        {(showControls && numPts > 0) &&
           <SpeedDial
-            bottom={this.props.bottom + 5}
+            bottom={this.props.bottom + minSDOffset }
             icon={triggerIcon}
             triggerValue={this.props.speedDialValue}
             selectFn={this.props.changeZoomFn}
@@ -566,18 +1157,18 @@ class TrekDisplay extends Component<{
             iconSize="Large"
           />
         }
-        {(this.tInfo.logging && this.props.useCameraFn && (numPts > 0)) &&
+        {(showControls && this.tInfo.logging && this.props.useCameraFn && (numPts > 0)) &&
           <SpeedDial
             icon="Camera"
-            bottom={this.props.bottom + 85}
+            bottom={this.props.bottom + minSDOffset + 80}
             selectFn={this.callUseCameraFn}
             style={styles.speedDialTrigger}
             iconSize="Large"
           />
         }
-        {(numPts > 0) &&
+        {(showControls && numPts > 0) &&
           <SpeedDial
-            top={25}
+            top={25 + HEADER_HEIGHT}
             items={mapTypes}
             icon="LayersOutline"
             selectFn={this.props.changeMapFn}
@@ -587,26 +1178,34 @@ class TrekDisplay extends Component<{
             itemSize="Big"
           />
         }
-        {showPrev &&
-          <View style={styles.imageSelectorPrev}>
-            <IconButton 
-              iconSize={imageSelectorWidth}
-              icon="ChevronLeft"
-              color="rgba(242,242,242,.8)"
-              iconStyle={styles.imageSelectorIconStyle}
-              onPressFn={this.callPrevFn}
-            />
-          </View>
-        }
-        {showNext &&
-          <View style={styles.imageSelectorNext}>
-            <IconButton
-              iconSize={imageSelectorWidth}
-              icon="ChevronRight"
-              color="rgba(242,242,242,.8)"
-              iconStyle={styles.imageSelectorIconStyle}
-              onPressFn={this.callNextFn}
-            />
+        {showControls && (showPrev || showNext) &&
+          <View style={styles.imageSelectorArea}>
+            {showPrev &&
+              <View style={styles.imageSelectorPrev}>
+                <IconButton 
+                  style={styles.imageSelectorStyle}
+                  iconSize={imageSelectorWidth}
+                  icon="ChevronLeft"
+                  color={contrastingMask_5}
+                  borderColor={navItemBorderColor}
+                  iconStyle={navIcon}
+                  onPressFn={this.callPrevFn}
+                />
+              </View>
+            }
+            {showNext &&
+              <View style={styles.imageSelectorNext}>
+                <IconButton
+                  style={styles.imageSelectorStyle}
+                  iconSize={imageSelectorWidth}
+                  icon="ChevronRight"
+                  color={contrastingMask_5}
+                  borderColor={navItemBorderColor}
+                  iconStyle={navIcon}
+                  onPressFn={this.callNextFn}
+                />
+              </View>
+            }
           </View>
         }
       </View>

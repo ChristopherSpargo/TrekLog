@@ -14,20 +14,14 @@ function TrekTypeSelect({
   selected  = undefined        // bitlist of the current selections
 }) {
 
-  function callOnChangeFn(value: string, set: boolean) {
-    requestAnimationFrame(() =>{
-      onChangeFn(value, set);
-    });
-  }
-
   // call onChange with toggle param 'true'
   function toggleType(value: string) {
-    callOnChangeFn(value, true);
+    onChangeFn(value, true);
   }
 
   // call onChange with toggle param 'false'
   function setType(value: string) {
-    callOnChangeFn(value, false);
+    onChangeFn(value, false);
   }
 
   const typeIconAreaSize = size;
@@ -37,6 +31,11 @@ function TrekTypeSelect({
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
+    },
+    controlButton: {
+      justifyContent: "center",
+      borderColor: "transparent",
+      backgroundColor: "transparent",
     },
   });
 
@@ -48,29 +47,29 @@ function TrekTypeSelect({
         onLongPressFn={setType}
         size={typeIconAreaSize}
         fill={TREK_TYPE_COLORS_OBJ.Walk}
-        style={{borderColor: "transparent"}}
-        path={APP_ICONS["Walk"]}
-        highlight={(selected & TREK_SELECT_BITS['Walk']) !== 0}
+        style={styles.controlButton}
+        path={APP_ICONS.Walk}
+        highlight={(selected & TREK_SELECT_BITS.Walk) !== 0}
       />
       <SvgButton 
         value="Run"
         onPressFn={toggleType}
         onLongPressFn={setType}
         size={typeIconAreaSize}
-        style={{borderColor: "transparent"}}
+        style={styles.controlButton}
         fill={TREK_TYPE_COLORS_OBJ.Run}
-        path={APP_ICONS["Run"]}
-        highlight={(selected & TREK_SELECT_BITS['Run']) !== 0}
+        path={APP_ICONS.Run}
+        highlight={(selected & TREK_SELECT_BITS.Run) !== 0}
       />
       <SvgButton 
         value="Bike"
         onPressFn={toggleType}
         onLongPressFn={setType}
         size={typeIconAreaSize}
-        style={{borderColor: "transparent"}}
+        style={styles.controlButton}
         fill={TREK_TYPE_COLORS_OBJ.Bike}
-        path={APP_ICONS["Bike"]}
-        highlight={(selected & TREK_SELECT_BITS['Bike']) !== 0}
+        path={APP_ICONS.Bike}
+        highlight={(selected & TREK_SELECT_BITS.Bike) !== 0}
         svgWidthAdj={4}
       />
       <SvgButton 
@@ -78,10 +77,10 @@ function TrekTypeSelect({
         onPressFn={toggleType}
         onLongPressFn={setType}
         size={typeIconAreaSize}
-        style={{borderColor: "transparent"}}
+        style={styles.controlButton}
         fill={TREK_TYPE_COLORS_OBJ.Hike}
-        path={APP_ICONS["Hike"]}
-        highlight={(selected & TREK_SELECT_BITS['Hike']) !== 0}
+        path={APP_ICONS.Hike}
+        highlight={(selected & TREK_SELECT_BITS.Hike) !== 0}
       />
     </View>
   ))

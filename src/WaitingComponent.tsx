@@ -1,11 +1,12 @@
-import React from "react";
+import React, { useContext } from "react";
 import { View, StyleSheet, ActivityIndicator, Text } from "react-native";
 import {
   CONTROLS_HEIGHT,
   WAITING_Z_INDEX,
-  secondaryColor,
-  uiTheme
+  uiTheme,
+  TrekInfoContext
 } from "./App";
+import { TrekInfo } from './TrekInfoModel';
 
 // Component to display an ActivityIndicator in the center of the screen
 
@@ -15,8 +16,9 @@ function Waiting({
   bottom = undefined // bottom of message container area
 }) {
 
-  const { darkBackground, textOnDark, textOnLight } = uiTheme.palette;
-  const textColor = bgColor === darkBackground ? textOnDark : textOnLight;
+  const trekInfo: TrekInfo = useContext(TrekInfoContext);
+  const { contrastingMask_9, textOffTheme, secondaryColor } = uiTheme.palette[trekInfo.colorTheme];
+  const textColor = textOffTheme;
   const bot = bottom || CONTROLS_HEIGHT;
   const styles = StyleSheet.create({
     container: { ...StyleSheet.absoluteFillObject, bottom: bot },
@@ -29,7 +31,7 @@ function Waiting({
     msgArea: {
       height: 40,
       justifyContent: "center",
-      backgroundColor: bgColor ? bgColor : "transparent",
+      backgroundColor: bgColor ? bgColor : contrastingMask_9,
       borderRadius: 20,
       marginBottom: 10,
       paddingHorizontal: 20

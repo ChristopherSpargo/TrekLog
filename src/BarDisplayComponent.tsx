@@ -1,11 +1,14 @@
 import React, { useContext, useEffect, useRef, MutableRefObject } from 'react'
-import { View, FlatList, TouchableNativeFeedback, StyleSheet, Text } from 'react-native'
+import { View, FlatList, StyleSheet, Text } from 'react-native'
+import { RectButton } from 'react-native-gesture-handler'
 import LinearGradient from 'react-native-linear-gradient';
 import { useObserver } from "mobx-react-lite";
 
 import { APP_ICONS } from './SvgImages';
 import { TREK_TYPE_COLORS_OBJ, UiThemeContext, TrekInfoContext } from './App'
 import SvgIcon from './SvgIconComponent';
+import { TrekInfo } from './TrekInfoModel';
+import ExpandView from './ExpandComponent';
 
 function BarItem({
   item, 
@@ -16,18 +19,18 @@ function BarItem({
   selected,
   barWidth,
   style,
-  pressed
+  pressed,
+  open
 }) {
   const uiTheme: any = useContext(UiThemeContext);
+  const trekInfo: TrekInfo = useContext(TrekInfoContext);
 
   function barPressed (idx: number, bar: number) {
-    requestAnimationFrame(() => {
       pressed(idx, bar);
-    })
   }
 
     const { highTextColor, dividerColor, itemSelectedColor, itemMeetsGoal, itemMissesGoal,
-            itemNotSelected } = uiTheme.palette;
+            itemNotSelected, pageBackground, rippleColor, mediumTextColor } = uiTheme.palette[trekInfo.colorTheme];
     const iconPaths = APP_ICONS[item.type];
     const newVal = range.max - item.value;
     const rangePct = (range.range / range.max);
@@ -41,7 +44,7 @@ function BarItem({
         goalGrad = item.indicatorFill === 'red' ? itemMissesGoal : itemMeetsGoal;
     }
     const barGradientStart = (selItem  && !item.indicatorFill) ? itemSelectedColor : goalGrad; 
-    const barGradientEnd = 'white';
+    const barGradientEnd = pageBackground;
     const styles = StyleSheet.create({
       itemArea: {
         alignItems: "center",
@@ -51,7 +54,7 @@ function BarItem({
         width: barWidth,
         height: style.height,
         paddingTop: 5,
-        backgroundColor: "white",
+        backgroundColor: pageBackground,
       },
       bdrRt: {
         borderRightWidth: 1,
@@ -61,16 +64,29 @@ function BarItem({
         width: barWidth,
         justifyContent: "space-between",
         alignItems: "center",
+      },
+      typeAndImages: {
+        flexDirection: "row",
+        alignItems: "flex-end",
+        justifyContent: "center",
         paddingBottom: 3,
       },
       areaBelow: {
         width: barWidth,
+        overflow: "hidden",
+        alignItems: "center",
+        paddingTop: 5,
+      },
+      gradientArea: {
+        width: barWidth,
+        height: itemHeight,
         alignItems: "center",
         paddingTop: 5,
       },
       indicator: {
         fontSize: 12 ,
         fontWeight: '400',
+        color: mediumTextColor
       },
       indicatorSel: {
         fontSize: 14,
@@ -88,30 +104,70 @@ function BarItem({
       }
     })
   
-    return (
+    return useObserver(() => (
       <View style={[styles.itemArea, lastItem ? styles.bdrRt : {}]}>
-        <TouchableNativeFeedback
-          background={TouchableNativeFeedback.SelectableBackgroundBorderless()}
+        <RectButton
+          rippleColor={rippleColor}
           onPress={item.noPress ? undefined : () => barPressed(idx, index)}
         >
-        <View>
-          <View style={styles.areaAbove}>
-            <Text style={selItem ? styles.indicatorSel : styles.indicator}>{item.indicator}</Text>
-            {item.type && 
-              <SvgIcon
-                paths={iconPaths}
-                fill={TREK_TYPE_COLORS_OBJ[item.type]}
-                size={20}
-              />
+          <View>
+            <View style={styles.areaAbove}>
+              <Text style={selItem ? styles.indicatorSel : styles.indicator}>{item.indicator}</Text>
+            </View>
+            {index < 6 &&
+              <ExpandView startValue={itemHeight + 1} endValue={0} open={open} duration={500}>
+                <View style={styles.areaBelow}>
+                  {item.type && 
+                    <View style={styles.typeAndImages}>
+                      <SvgIcon
+                        paths={iconPaths}
+                        fill={TREK_TYPE_COLORS_OBJ[item.type]}
+                        size={20}
+                      />
+                      {item.images && 
+                        <SvgIcon
+                          style={{marginLeft: 2}}
+                          paths={APP_ICONS.Camera}
+                          fill={highTextColor}
+                          size={12}
+                        />
+                      }
+                    </View>
+                  }
+                  <LinearGradient colors={[barGradientStart, barGradientEnd]} style={styles.gradientArea}>
+                    <Text style={selItem ? styles.valueSel : styles.value}>{item.label1}</Text>
+                  </LinearGradient>
+                </View>
+              </ExpandView>
+            }
+            {index >= 6 &&
+              <View style={styles.areaBelow}>
+                {item.type && 
+                  <View style={styles.typeAndImages}>
+                    <SvgIcon
+                      paths={iconPaths}
+                      fill={TREK_TYPE_COLORS_OBJ[item.type]}
+                      size={20}
+                    />
+                    {item.images && 
+                      <SvgIcon
+                        style={{marginLeft: 2}}
+                        paths={APP_ICONS.Camera}
+                        fill={highTextColor}
+                        size={12}
+                      />
+                    }
+                  </View>
+                }
+                <LinearGradient colors={[barGradientStart, barGradientEnd]} style={styles.gradientArea}>
+                  <Text style={selItem ? styles.valueSel : styles.value}>{item.label1}</Text>
+                </LinearGradient>
+              </View>
             }
           </View>
-          <LinearGradient colors={[barGradientStart, barGradientEnd]} style={[styles.areaBelow,{height: itemHeight}]}>
-            <Text style={selItem ? styles.valueSel : styles.value}>{item.label1}</Text>
-          </LinearGradient>
-        </View>
-        </TouchableNativeFeedback>
+        </RectButton>
       </View>
-    )
+    ))
 }
 
 
@@ -121,11 +177,12 @@ function BarDisplay({
   style,
   barWidth,
   maxBarHeight,
+  openFlag,      // flag to control the animation of the graph bars
   data,         // object with information for the graph bars
   dataRange,           // range of values in the data {max,min,range}
   scrollToBar = undefined,    // index of bar to scroll to (just to update the display)
 }) {
-  const trekInfo: any = useContext(TrekInfoContext);
+  const trekInfo: TrekInfo = useContext(TrekInfoContext);
 
   const scrollRef : MutableRefObject<FlatList<View>> = useRef();
   const selectedBar = useRef(0);
@@ -167,6 +224,7 @@ function BarDisplay({
             barWidth={barWidth}
             style={style}
             pressed={barPressed}
+            open={openFlag}
           />
         );
 
@@ -175,10 +233,13 @@ function BarDisplay({
         ref={scrollRef}
         data={data}
         keyExtractor={_keyExtractor}
-        extraData={selected}
-        initialNumToRender={10}
+        extraData={{item1: selected, item2: openFlag}}
+        initialNumToRender={7}
         horizontal
         renderItem={_renderItem}
+        // getItemLayout={(_data, index) => (
+        //   {length: barWidth, offset: barWidth * index, index: index}
+        // )}
       />
     ))
 }

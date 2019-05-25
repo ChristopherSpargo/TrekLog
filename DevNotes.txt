@@ -1,0 +1,2 @@
+5/15/19 - Found there is a missing permission in @mauron85/react-native-background-geolocation for
+          FOREGROUND_SERVICE.  Added to that project's lib/src/main/AndroidManifest.xml file.

@@ -1,10 +1,11 @@
 import React from 'react';
 import { observer, inject } from 'mobx-react';
 import { observable, action } from 'mobx';
-import { StyleSheet, TextInput, Keyboard, KeyboardTypeOptions } from 'react-native';
+import { StyleSheet, TextInput, Keyboard, KeyboardTypeOptions, View } from 'react-native';
+import { TrekInfo } from './TrekInfoModel';
 
 
-@inject('uiTheme')
+@inject('uiTheme', 'trekInfo')
 @observer
 class TextInputField extends React.Component<{   
   inputHeight       ?: number,
@@ -13,10 +14,12 @@ class TextInputField extends React.Component<{
   kbType            ?: string,
   autoFocus         ?: boolean,
   placeholderValue  ?: string,
+  pvDisplayOnly     ?: boolean,     // true if use placeholder value is not to be returned as input
   style             ?: any,
   returnType        ?: string,      // defaults to 'text'
   onChangeFn        ?: Function,
   uiTheme           ?: any,
+  trekInfo          ?: TrekInfo,
 }, {} > {
 
   @observable value : string;
@@ -40,7 +43,7 @@ class TextInputField extends React.Component<{
   setValueInput = () => {
     let v = this.value.trim();
     Keyboard.dismiss();
-    if (v === '') { 
+    if (v === '' && !this.props.pvDisplayOnly) { 
       v = this.props.placeholderValue;
     }
     this.props.onChangeFn(this.props.returnType !== "value" ? v : parseFloat(v));
@@ -53,12 +56,12 @@ class TextInputField extends React.Component<{
 
   render() {
 
-    const { highTextColor, mediumTextColor } = this.props.uiTheme.palette;
+    const { highTextColor, mediumTextColor, disabledTextColor 
+          } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
     const kbType = this.props.kbType || "numeric";
     const propStyle = this.props.style || {};
     const inputH = this.props.inputHeight || 45;
-    const inputW = this.props.inputWidth || 80;
-    const iColor = this.props.textColor || highTextColor;
+    const inputW = this.props.inputWidth || propStyle.width || 80;
 
     const styles = StyleSheet.create({
       textInputItem: {
@@ -67,22 +70,27 @@ class TextInputField extends React.Component<{
         borderWidth: 0,
         fontWeight: "300",
         fontSize: 20,
-        color: iColor,
+        color: highTextColor,
       },      
     })
 
     return (
-      <TextInput
-          style={[styles.textInputItem, propStyle]}
-          onChangeText={(text) => this.setValue(text)}
-          placeholder={this.props.placeholderValue}
-          value={this.value}
-          onBlur={this.setValueInput}
-          onKeyPress={(key) => this.checkForEnter(key)}
-          keyboardType={kbType as KeyboardTypeOptions}
-          underlineColorAndroid={mediumTextColor}
-          autoFocus={this.props.autoFocus ? true : false}
-      /> 
+      <View style={{width: inputW, marginTop: -10, justifyContent: "center"}}>
+        <TextInput
+            style={[styles.textInputItem, propStyle]}
+            onChangeText={(text) => this.setValue(text)}
+            placeholder={this.props.placeholderValue}
+            placeholderTextColor={disabledTextColor}
+            value={this.value}
+            onBlur={this.setValueInput}
+            onKeyPress={(key) => this.checkForEnter(key)}
+            keyboardType={kbType as KeyboardTypeOptions}
+            // underlineColorAndroid={mediumTextColor}
+            autoFocus={this.props.autoFocus ? true : false}
+        /> 
+        <View style={{flex: 1, marginTop: -10,
+                      borderBottomColor: mediumTextColor, borderBottomWidth: 1, borderStyle: "solid"}}/>
+    </View>
     )
   }
 }

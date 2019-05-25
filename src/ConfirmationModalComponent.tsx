@@ -1,22 +1,72 @@
 import React, { useContext } from "react";
 import { View, StyleSheet, Text, TouchableNativeFeedback } from "react-native";
+// import { withNavigation } from 'react-navigation'
 import { useObserver } from "mobx-react-lite";
 
-import { CONFIRM_Z_INDEX, BACKDROP_Z_INDEX, ModalSvcContext, UiThemeContext } from "./App";
+import { CONFIRM_Z_INDEX, BACKDROP_Z_INDEX, ModalSvcContext, UiThemeContext, TrekInfoContext } from "./App";
 import { ModalModel } from "./ModalModel";
+import { TrekInfo } from './TrekInfoModel';
 import SvgIcon from "./SvgIconComponent";
 import { APP_ICONS } from "./SvgImages";
 
 // dialog used for basic NOTICES and CONFIRMATIONS
 
 function ConfirmationModal() {
-  
+
+  // const _didFocusSubscription = useRef();
+  // const _willBlurSubscription = useRef();
+
   const modalSvc: ModalModel = useContext(ModalSvcContext);
+  const trekInfo: TrekInfo = useContext(TrekInfoContext);
   const uiTheme: any = useContext(UiThemeContext);
   const smData = modalSvc.smData;
   const contentLines = modalSvc.simpleIsOpen && smData.content.split("\n");
   const bigContentLines =
     modalSvc.simpleIsOpen && smData.bigContent && smData.bigContent.split("\n");
+
+    // useEffect(() => {
+    //   _didFocusSubscription.current = navigation.addListener('didFocus', () => {
+    //     BackHandler.addEventListener('hardwareBackPress', onBackButtonPressAndroid);
+    //   }); 
+    //   _willBlurSubscription.current = navigation.addListener('willBlur', () =>
+    //   BackHandler.removeEventListener('hardwareBackPress', onBackButtonPressAndroid));
+    //   return (() => {
+    //     // @ts-ignore
+    //     _didFocusSubscription.current && _didFocusSubscription.current.remove();
+    //     // @ts-ignore
+    //     _willBlurSubscription.current && _willBlurSubscription.current.remove();
+    //       })
+    // });
+  
+    // function onBackButtonPressAndroid() {
+    //   dismiss();
+    //   return true;
+    // }
+
+  // call the resolve method
+  function close(response = "OK") {
+    setTimeout(() => {
+      modalSvc
+        .closeSimpleModal(400)
+        .then(() => {
+          modalSvc.smData.resolve(response);
+        })
+        .catch(() => {});
+    }, 200);
+  }
+
+  // call the reject method
+  function dismiss() {
+    setTimeout(() => {
+      modalSvc
+        .closeSimpleModal(400)
+        .then(() => {
+          modalSvc.smData.reject("CANCEL");
+        })
+        .catch(() => {});
+    }, 200);
+  }
+
   const {
     highTextColor,
     lowTextColor,
@@ -24,9 +74,12 @@ function ConfirmationModal() {
     cancelColor,
     okChoiceColor,
     warningConfirmColor,
-    warningConfirmTextColor
-  } = uiTheme.palette;
-  const { cardLayout, footerButton, footerButtonText } = uiTheme;
+    warningConfirmTextColor,
+    pageBackground,
+    rippleColor,
+    contrastingMask_2
+  } = uiTheme.palette[trekInfo.colorTheme];
+  const { cardLayout, roundedTop, roundedBottom, footerButton, footerButtonText } = uiTheme;
   const titleColor = smData.headingTextColor || warningConfirmTextColor;
   const bgColor = smData.headingStartColor || warningConfirmColor;
   const iconColor =
@@ -37,7 +90,7 @@ function ConfirmationModal() {
     background: {
       ...StyleSheet.absoluteFillObject,
       zIndex: BACKDROP_Z_INDEX,
-      backgroundColor: "rgba(0,0,0,.4)"
+      backgroundColor: contrastingMask_2
     },
     formArea: {
       position: "absolute",
@@ -52,8 +105,10 @@ function ConfirmationModal() {
       paddingBottom: 0,
       paddingLeft: 0,
       paddingRight: 0,
-      borderTopWidth: 1,
+      marginLeft: 5,
+      marginRight: 5,
       borderColor: lowTextColor,
+      backgroundColor: pageBackground,
       justifyContent: "space-between",
       zIndex: CONFIRM_Z_INDEX
     },
@@ -91,38 +146,14 @@ function ConfirmationModal() {
     }
   });
 
-  // call the resolve method
-  function close(response = "OK") {
-    setTimeout(() => {
-      modalSvc
-        .closeSimpleModal(400)
-        .then(() => {
-          modalSvc.smData.resolve(response);
-        })
-        .catch(() => {});
-    }, 200);
-  }
-
-  // call the reject method
-  function dismiss() {
-    setTimeout(() => {
-      modalSvc
-        .closeSimpleModal(400)
-        .then(() => {
-          modalSvc.smData.reject("CANCEL");
-        })
-        .catch(() => {});
-    }, 200);
-  }
-
   return useObserver(() => (
     <View style={styles.container}>
       {modalSvc.simpleIsOpen && (
         <View style={styles.container}>
           <View style={styles.background}>
             <View style={styles.formArea}>
-              <View style={[cardLayout, styles.cardCustom]}>
-                <View style={[styles.header, { backgroundColor: bgColor }]}>
+              <View style={[cardLayout, styles.cardCustom, roundedTop, roundedBottom]}>
+                <View style={[styles.header, roundedTop, { backgroundColor: bgColor }]}>
                   {smData.headingIcon && (
                     <SvgIcon
                       style={{ marginRight: 6, backgroundColor: "transparent" }}
@@ -147,10 +178,10 @@ function ConfirmationModal() {
                       </Text>
                     ))}
                 </View>
-                <View style={styles.footer}>
+                <View style={[styles.footer, roundedBottom]}>
                   {smData.okText && smData.deleteText && (
                     <TouchableNativeFeedback
-                      background={TouchableNativeFeedback.SelectableBackgroundBorderless()}
+                      background={TouchableNativeFeedback.Ripple(rippleColor, false)}
                       onPress={() => close(smData.deleteText)}
                     >
                       <View style={footerButton}>
@@ -164,7 +195,7 @@ function ConfirmationModal() {
                   )}
                   {!smData.notifyOnly && (
                     <TouchableNativeFeedback
-                      background={TouchableNativeFeedback.SelectableBackgroundBorderless()}
+                      background={TouchableNativeFeedback.Ripple(rippleColor, false)}
                       onPress={dismiss}
                     >
                       <View style={footerButton}>
@@ -178,7 +209,7 @@ function ConfirmationModal() {
                   )}
                   {!smData.okText && smData.deleteText && (
                     <TouchableNativeFeedback
-                      background={TouchableNativeFeedback.SelectableBackgroundBorderless()}
+                      background={TouchableNativeFeedback.Ripple(rippleColor, false)}
                       onPress={() => close(smData.deleteText)}
                     >
                       <View style={footerButton}>
@@ -192,7 +223,7 @@ function ConfirmationModal() {
                   )}
                   {smData.okText && (
                     <TouchableNativeFeedback
-                      background={TouchableNativeFeedback.SelectableBackgroundBorderless()}
+                      background={TouchableNativeFeedback.Ripple(rippleColor, false)}
                       onPress={() => close(smData.okText)}
                     >
                       <View style={[footerButton, { marginRight: 1 }]}>
