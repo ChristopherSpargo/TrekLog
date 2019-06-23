@@ -1,8 +1,11 @@
 import { observable, action } from 'mobx';
-import { uiTheme, TL_BLUE, TL_YELLOW } from './App';
+import { TL_BLUE, TL_YELLOW } from './App';
 
 export type ToastLocation = "Top" | "Bottom";
-export const STD_TOAST_TIME = 2500;
+export const INFO_TOAST_TIME = 2500;
+export const ERR_TOAST_TIME = 4000;
+export const WARN_TOAST_TIME = 4000;
+export const SUCCESS_TOAST_TIME = 2500;
 
 // the ModalData object is used to pass configuration parameters to the modals' Open functions
 export interface ToastData {      
@@ -31,13 +34,13 @@ export class ToastModel {
 
   TOAST_CONFIGS = {
     Success: { icon: "CheckMark", iColor: 'white',             
-               tColor: TL_BLUE,  bColor: 'white',  time: STD_TOAST_TIME},
+               tColor: TL_BLUE,  bColor: 'white',  time: SUCCESS_TOAST_TIME},
     Error:   { icon: "AlertCircleOutline",   iColor: 'white',
-               tColor: "#f44336",    bColor: 'white',    time: STD_TOAST_TIME},
+               tColor: "#f44336",    bColor: 'white',    time: ERR_TOAST_TIME},
     Warning: { icon: "Warning", iColor: 'white', 
-               tColor: TL_YELLOW, bColor: 'white', time: STD_TOAST_TIME},
+               tColor: TL_YELLOW, bColor: 'white', time: WARN_TOAST_TIME},
     Info:    { icon: "InfoCircleOutline",    iColor: 'white',
-               tColor: TL_BLUE,  bColor: 'white',  time: STD_TOAST_TIME}
+               tColor: TL_BLUE,  bColor: 'white',  time: INFO_TOAST_TIME}
   }
 
   @observable toastIsOpen;    // when true, Toast component will be open

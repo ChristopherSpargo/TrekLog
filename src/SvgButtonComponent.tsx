@@ -34,7 +34,9 @@ class SvgButton extends Component<{
 
   buttonLongPressed = ({ nativeEvent }) => {
     if (nativeEvent.state === State.ACTIVE) {
-      this.props.onLongPressFn(this.props.value);
+      if(this.props.onLongPressFn){
+        this.props.onLongPressFn(this.props.value);
+      }
     }
   }
 

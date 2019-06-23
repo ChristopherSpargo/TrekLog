@@ -7,7 +7,9 @@ import { action, observable } from "mobx";
 import { NavigationActions } from "react-navigation";
 
 import { FilterSvc } from "./FilterService";
-import { TrekInfo, TrekObj } from "./TrekInfoModel";
+import { TrekInfo, TrekObj, RESP_CANCEL, RESP_HAS_LINK, MSG_HAS_LINK, RESP_OK, MSG_LINK_ADDED,
+          RESP_BAD_LENGTH, RESP_NO_MATCH, MSG_LINK_NOT_ADDED, MSG_LINK_NOT_CHANGED, 
+          MSG_NEW_COURSE_RECORD, MSG_STARTING_LOC, TrekPoint } from "./TrekInfoModel";
 import { UtilsSvc } from "./UtilsService";
 import { ModalModel } from "./ModalModel";
 import { CONTROLS_HEIGHT, NAV_ICON_SIZE, HEADER_HEIGHT, PAGE_TITLE_HEIGHT } from "./App";
@@ -20,34 +22,17 @@ import BarDisplay from "./BarDisplayComponent";
 import { TrekDetails } from "./TrekDetailsComponent";
 import TrekLogHeader from "./TreklogHeaderComponent";
 import { LoggingSvc } from "./LoggingService";
+import { GroupSvc } from "./GroupService";
+import CheckboxPicker from "./CheckboxPickerComponent";
+import RadioPicker from "./RadioPickerComponent";
+import { StorageSvc } from "./StorageService";
+import { CourseSvc } from "./CourseService";
 
 export type SortByTypes = "Dist" | "Time" | "Date" | "Speed" | "Steps" | "Cals";
 export type ShowTypes = "Dist" | "Time" | "Steps" | "Speed" | "Cals" | "Date";
 
-export const SORT_BY_CHOICES: SortByTypes[] = [
-  "Dist",
-  "Time",
-  "Date",
-  "Speed",
-  "Steps",
-  "Cals"
-];
-export const SHOW_CHOICES: ShowTypes[] = [
-  "Dist",
-  "Time",
-  "Steps",
-  "Speed",
-  "Cals",
-  "Date"
-];
-export const DISPLAY_NAMES = {
-  Dist: "Distance",
-  Time: "Time",
-  Steps: "Steps",
-  Speed: "Speed",
-  Date: "Date",
-  Cals: "Calories"
-};
+export type TimeFrameType = "Today" | "Yesterday" | "TWeek" | "LWeek" | "TMonth" | "LMonth" | "All" | "Custom";
+
 export const TIME_FRAMES = [
   { name: "Today", value: "Today" },
   { name: "Yesterday", value: "Yesterday" },
@@ -87,7 +72,10 @@ const goBack = NavigationActions.back();
   "modalSvc",
   "toastSvc",
   "filterSvc",
-  "loggingSvc"
+  "loggingSvc",
+  "storageSvc",
+  "courseSvc",
+  "groupSvc"
 )
 @observer
 class ReviewTreks extends Component<
@@ -97,6 +85,9 @@ class ReviewTreks extends Component<
     modalSvc?: ModalModel;
     toastSvc?: ToastModel;
     loggingSvc?: LoggingSvc;
+    storageSvc?: StorageSvc;
+    courseSvc?: CourseSvc;
+    groupSvc?: GroupSvc;
     uiTheme?: any;
     navigation?: any;
     trekInfo?: TrekInfo; // object with all non-gps information about the Trek
@@ -104,27 +95,25 @@ class ReviewTreks extends Component<
   {}
 > {
 
-  @observable deletingTrek;
   @observable openItems;
   @observable headerTitle;
+  @observable checkboxPickerOpen;
+  @observable coursePickerOpen;
+  @observable showWaiting;
+  @observable updateView;
 
   tInfo = this.props.trekInfo;
   fS = this.props.filterSvc;
+  courseSvc = this.props.courseSvc;
 
   activeNav: string = "";
   AFFIndex: number;
 
-  updateCount = 0;
-  @observable updateView;
 
   constructor(props) {
     super(props);
     this.initializeObservables();
   }
-
-  // shouldComponentUpdate() {
-  //   return this.updateView;
-  // }
 
   componentWillMount() {
     this.setOpenItems(false);
@@ -146,25 +135,40 @@ class ReviewTreks extends Component<
     this.fS.removeAfterFilterFn(this.AFFIndex - 1);
     this.tInfo.updateType(this.fS.trekType);
     this.tInfo.clearTrek();
-    this.setDeletingTrek(false);
     this.fS.setSelectedTrekIndex(-1);
     this.fS.setDataReady(false);
     this.tInfo.restoreCurrentGroupSettings();
+    this.props.loggingSvc.stopTrackingMarker();
+    // this.tInfo.badPointList = [];                    // **Debug
   }
 
   // initialize all the observable properties in an action for mobx strict mode
   @action
   initializeObservables = () => {
-    this.deletingTrek = false;
     this.setHeaderTitle('Scanning...')
     this.setOpenItems(true);
     this.setUpdateView(false);
+    this.setCheckboxPickerOpen(false);
+    this.setCoursePickerOpen(false);
+    this.setShowWaiting(false);
   };
 
   @action
   setUpdateView = (status: boolean) => {
     this.updateView = status;
   }
+
+  // set the open status of the checkboxPickerOpen component
+  @action
+  setCheckboxPickerOpen = (status: boolean) => {
+    this.checkboxPickerOpen = status;
+  };
+
+  // set the open status of the coursePickerOpen component
+  @action
+  setCoursePickerOpen = (status: boolean) => {
+    this.coursePickerOpen = status;
+  };
 
   @action
   setOpenItems = (status: boolean) => {
@@ -183,10 +187,10 @@ class ReviewTreks extends Component<
     this.headerTitle = title;
   };
 
-  // Set the value of the deletingTrek flag
+  // Set the value of the showWaiting flag
   @action
-  setDeletingTrek = (val: boolean) => {
-    this.deletingTrek = val;
+  setShowWaiting = (status: boolean) => {
+    this.showWaiting = status;
   };
 
   // Display the map for the Trek at the given index in filteredTreks
@@ -194,13 +198,27 @@ class ReviewTreks extends Component<
     if (this.fS.filteredTreks.length) {
       let trek = this.tInfo.allTreks[this.fS.filteredTreks[indx]];
       this.tInfo.setTrekProperties(trek);
-      // this.props.loggingSvc.smoothTrek(9.1);
-      // alert(this.tInfo.trekPointCount)
-      // if(trek.trekImages){
-      //   alert(JSON.stringify(trek.trekImages,null,2))
+      // let list = this.tInfo.pointList;
+      // this.tInfo.badPointList = [];
+      // let newList : TrekPoint[];            // **Debug
+      // newList = [];
+      // bads = 0;
+      // for (let i=1; i<list.length; i++) {
+      //   if (this.props.utilsSvc.computeImpliedSpeed(list[i-1], list[i]) < list[i].s * 5) {
+      //     // this.tInfo.badPointList.push({p1: list[i-1], p2: list[i]});
+      //     newList.push(list[i])
+      //   } else {
+      //     bads++;
+      //   }
       // }
-      // alert(JSON.stringify(this.props.utilsSvc.defineTrekValueRanges(trek, 'speed'),null,2));
-      // alert(JSON.stringify(trek,null,2))
+      // list = newList;
+      // for (let i=1; i<list.length; i++) {
+      //   if (this.props.utilsSvc.computeImpliedSpeed(list[i-1], list[i]) > list[i].s * 5) {
+      //     this.tInfo.badPointList.push(i);
+      //   }
+      // }
+      // this.tInfo.pointList = newList;
+      // alert(JSON.stringify(this.tInfo.badPointList,null,2))
       this.props.navigation.navigate("SelectedTrek", {
         title:
           this.props.utilsSvc.formattedLongDateAbbrDay(trek.date) +
@@ -208,7 +226,7 @@ class ReviewTreks extends Component<
           trek.startTime,
         icon: this.tInfo.type,
         switchSysFn: this.switchMeasurementSystem,
-        changeTrekFn: this.changeTrek
+        changeTrekFn: this.changeTrek,
       });
     }
   };
@@ -236,9 +254,6 @@ class ReviewTreks extends Component<
     }
     trek = this.tInfo.allTreks[this.fS.filteredTreks[indx]];
     this.fS.trekSelected(indx, true);
-    // if(trek.trekImages){
-    //   alert(JSON.stringify(trek.trekImages,null,2))
-    // }
     return (
       this.props.utilsSvc.formattedLongDateAbbrDay(trek.date) +
       "  " +
@@ -268,11 +283,11 @@ class ReviewTreks extends Component<
         allowOutsideCancel: true
       })
       .then(() => {
-        this.setDeletingTrek(true);
+        this.setShowWaiting(true);
         this.tInfo
           .deleteTrek(trek)
           .then(() => {
-            this.setDeletingTrek(false);
+            this.setShowWaiting(false);
             this.props.toastSvc.toastOpen({
               tType: "Success",
               content: trek.type + " has been deleted."
@@ -280,7 +295,7 @@ class ReviewTreks extends Component<
             this.callFilterTreks();
           })
           .catch(() => {
-            this.setDeletingTrek(false);
+            this.setShowWaiting(false);
             this.props.toastSvc.toastOpen({
               tType: "Error",
               content: "Error: Trek NOT deleted."
@@ -306,14 +321,80 @@ class ReviewTreks extends Component<
           this.deleteTrek(this.fS.selectedTrekIndex);
           break;
         case "Map":
-          this.props.trekInfo.setUpdateMap(true);
+          this.tInfo.setUpdateMap(true);
           this.tInfo.setUpdateGraph(false);
           this.showTrekMap(this.fS.selectedTrekIndex);
+          break;
+        case 'Course':
+          this.addCourseOrEffort();
           break;
         default:
       }
     });
   };
+
+  // make this trek an effort of some course or use it to create a new course
+  addCourseOrEffort = () => {
+    if (this.fS.filteredTreks.length) {
+      let trek = this.tInfo.allTreks[this.fS.filteredTreks[this.fS.selectedTrekIndex]];
+      this.courseSvc.newCourseOrEffort(trek, this.setCoursePickerOpen)
+      .then((sel) => {
+        switch(sel.resp){
+          case RESP_CANCEL:
+            break;
+          case RESP_HAS_LINK:
+            this.props.toastSvc.toastOpen({
+              tType: "Info",
+              content: MSG_HAS_LINK + 'This ' + trek.type + ' is already\nlinked to ' + sel.name,
+            });
+            break;
+          case RESP_NO_MATCH:
+            this.props.toastSvc.toastOpen({
+              tType: "Error",
+              content: (trek.course ? MSG_LINK_NOT_CHANGED : MSG_LINK_NOT_ADDED) + 
+                        trek.type + ' path does not match path\nof course: ' + sel.name + 
+                        ' (' + sel.info + '%).',
+            });
+            break;
+          case RESP_BAD_LENGTH:
+            this.props.toastSvc.toastOpen({
+              tType: "Error",
+              content: (trek.course ? MSG_LINK_NOT_CHANGED : MSG_LINK_NOT_ADDED) + 
+                        trek.type + ' length different than that\nof course: ' + sel.name,
+            });
+            break;
+          case MSG_STARTING_LOC:
+              this.props.toastSvc.toastOpen({
+                tType: "Error",
+                content: (trek.course ? MSG_LINK_NOT_CHANGED : MSG_LINK_NOT_ADDED) + 
+                          'Too far from start of course\n' + sel.name + ' (' + 
+                          this.props.utilsSvc.formatDist(sel.info, this.tInfo.distUnits()) + ').'
+              });
+              break;
+          case MSG_NEW_COURSE_RECORD:
+              this.props.toastSvc.toastOpen({
+                tType: "Success",
+                content: sel.resp + 'for: ' + sel.name + 
+                        ' (' + this.props.utilsSvc.timeFromSeconds(sel.info) + ')',
+                time: 5000
+              });
+              break;
+          case RESP_OK:
+          default:
+            this.props.toastSvc.toastOpen({
+              tType: "Success",
+              content: MSG_LINK_ADDED + trek.type + " linked with course\n" + sel.name,
+            });
+        }
+      })
+      .catch((err) => {
+        this.props.toastSvc.toastOpen({
+          tType: "Error",
+          content: err,
+        });
+      })
+    }
+  }
 
   // switch measurements system then update the bar graph
   switchMeasurementSystem = () => {
@@ -329,11 +410,6 @@ class ReviewTreks extends Component<
   // with filterSvc via setAfterFilterFn(fn) method.
   runAfterFilterTreks = () => {
     this.setHeaderTitle(this.fS.formatTitleMessage("Review:"));
-  };
-
-  // format the label for the timeframe picker field
-  formatTimeframeHeading = () => {
-    return this.fS.getTitleActivity() + "s for:";
   };
 
   // request an animation frame then call fS.setSortBy()
@@ -356,9 +432,38 @@ class ReviewTreks extends Component<
     });
   };
 
+  // change the group selections
+  getDifferentGroups = () => {
+    this.props.groupSvc
+      .getGroupSelections(
+        this.setCheckboxPickerOpen,
+        this.fS.groupList,
+        "Select Groups for Review"
+      )
+      .then(newGroups => {
+        this.setOpenItems(false);
+        this.fS.clearGroupList();
+        newGroups.forEach((group) => this.fS.addGroupListItem(group));
+        this.tInfo.readAllTreks(this.fS.groupList)
+        .then(() => {
+          this.fS.setDataReady(false);
+          if(this.tInfo.timeframe !== 'All'){
+            this.fS.findActiveTimeframe(this.tInfo.timeframe, true);
+          } else {
+            this.fS.filterTreks(true);
+          }
+          this.setOpenItems(true);
+        })
+        .catch(() => {
+          this.setOpenItems(true);
+        })
+      })
+      .catch(() => {});
+  };
+
   render() {
-    // alert("render: " + this.updateView)
     if (!this.updateView) {
+    // alert("render: " + this.updateView)
       return (
         <View
           style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0 }}
@@ -378,7 +483,7 @@ class ReviewTreks extends Component<
     const statusBarHt = 0;
     const sortControlsHt = 30;
     const areaHt = height - (statusBarHt + pageTitleSpacing + HEADER_HEIGHT + PAGE_TITLE_HEIGHT + CONTROLS_HEIGHT);
-    const { cardLayout, controlsArea, navIcon, navItem, pageTitle } = this.props.uiTheme;
+    const { cardLayout, controlsArea, navIcon, navItemWithLabel, navItemLabel, pageTitle } = this.props.uiTheme;
     const {
       disabledTextColor,
       pageBackground,
@@ -386,7 +491,6 @@ class ReviewTreks extends Component<
       mediumTextColor,
       highTextColor,
       navItemBorderColor,
-      disabledHeaderTextColor,
       navIconColor
     } = this.props.uiTheme.palette[this.tInfo.colorTheme];
     const gotTreks = this.fS.dataReady && !this.fS.filteredTreksEmpty();
@@ -460,9 +564,11 @@ class ReviewTreks extends Component<
               titleText={this.headerTitle}
               icon="*"
               backButtonFn={() => this.props.navigation.dispatch(goBack)}
-              group={this.tInfo.group || "None"}
-              groupTextColor={disabledHeaderTextColor}
-                />
+              group={this.fS.groupList.length === 1 ? this.fS.groupList[0] : "Multiple"}
+              setGroupFn={this.getDifferentGroups}
+            />
+            <CheckboxPicker pickerOpen={this.checkboxPickerOpen} />
+            <RadioPicker pickerOpen={this.coursePickerOpen} />
             <View style={[cardLayout, { paddingBottom: 0 }]}>
               <Text style={[pageTitle, {color: highTextColor}]}>Trek Review</Text>
             </View>
@@ -479,6 +585,7 @@ class ReviewTreks extends Component<
                           this.fS.sortByDate ? "CheckBoxChecked" : "CheckBoxOpen"
                         }
                         color={trekLogBlue}
+                        horizontal
                         label="By Date"
                         labelStyle={{ color: mediumTextColor, fontSize: 14 }}
                         onPressFn={() => this.fS.toggleSortByDate()}
@@ -535,6 +642,7 @@ class ReviewTreks extends Component<
                     </View>
                     <TrekDetails
                       selectable
+                      sortBy={this.fS.sortBy}
                       selectFn={this.callSetSortBy}
                       switchSysFn={this.switchMeasurementSystem}
                     />
@@ -554,19 +662,21 @@ class ReviewTreks extends Component<
             )}
           </View>
         )}
-        {(!this.fS.dataReady || this.deletingTrek) && <Waiting />}
+        {this.showWaiting && <Waiting />}
         {!gotTreks && (
           <View style={controlsArea}>
             <IconButton
               iconSize={NAV_ICON_SIZE}
               icon={this.fS.extraFilterSet() ? "FilterRemove" : "Filter"}
-              style={navItem}
+              style={navItemWithLabel}
               borderColor={navItemBorderColor}
               iconStyle={navIcon}
               color={navIconColor}
               raised
               onPressFn={this.setActiveNav}
               onPressArg="Filter"
+              label="Filter"
+              labelStyle={navItemLabel}
             />
           </View>
         )}
@@ -575,35 +685,55 @@ class ReviewTreks extends Component<
             <IconButton
               iconSize={NAV_ICON_SIZE}
               icon="Delete"
-              style={navItem}
+              style={navItemWithLabel}
               borderColor={navItemBorderColor}
               iconStyle={navIcon}
               color={navIconColor}
               raised
               onPressFn={this.setActiveNav}
               onPressArg="Delete"
+              label="Delete"
+              labelStyle={navItemLabel}
             />
             <IconButton
               iconSize={NAV_ICON_SIZE}
               icon={this.fS.extraFilterSet() ? "FilterRemove" : "Filter"}
-              style={navItem}
+              style={navItemWithLabel}
               borderColor={navItemBorderColor}
               iconStyle={navIcon}
               color={navIconColor}
               raised
               onPressFn={this.setActiveNav}
               onPressArg="Filter"
+              label="Filter"
+              labelStyle={navItemLabel}
+            />
+            <IconButton
+              iconSize={NAV_ICON_SIZE}
+              icon="Course"
+              style={navItemWithLabel}
+              iconStyle={navIcon}
+              borderColor={navItemBorderColor}
+              color={navIconColor}
+              raised
+              disabled={false}
+              onPressFn={this.setActiveNav}
+              onPressArg="Course"
+              label="Course"
+              labelStyle={navItemLabel}
             />
             <IconButton
               iconSize={NAV_ICON_SIZE}
               icon="Map"
-              style={navItem}
+              style={navItemWithLabel}
               borderColor={navItemBorderColor}
               iconStyle={navIcon}
               color={navIconColor}
               raised
               onPressFn={this.setActiveNav}
               onPressArg="Map"
+              label="Map"
+              labelStyle={navItemLabel}
             />
           </View>
         )}

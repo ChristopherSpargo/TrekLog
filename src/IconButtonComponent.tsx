@@ -25,6 +25,7 @@ class IconButton extends Component<{
   onPressFn ?: Function,    // function to execute (if not navigate) on button press
   onPressArg ?: any,
   raised ?: boolean,
+  horizontal ?: boolean,    // align label to right of icon if true, under icon if false
   trekInfo ?: TrekInfo,
   uiTheme ?: any,
 }, {} > {
@@ -41,14 +42,13 @@ class IconButton extends Component<{
 
   render() {
 
-    const { disabledTextColor, pageBackground, dividerColor, rippleColor, pageBackgroundFilm
+    const { disabledTextColor, pageBackground, dividerColor, rippleColor, navIconColor,
           } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
-    const { navItem } = this.props.uiTheme;
     const iconSize = this.props.iconSize || 30;
     const propStyle = this.props.style || {};
     const bSize = this.props.buttonSize || propStyle.width || iconSize;
     const bgColor = propStyle.backgroundColor || pageBackground;
-    const bdrColor = this.props.disabled ? dividerColor : (this.props.borderColor || propStyle.borderColor || dividerColor);
+    const bdrColor = this.props.disabled ? dividerColor : (this.props.borderColor || propStyle.borderColor || disabledTextColor);
     const iStyle = this.props.iconStyle || {};
     const iFill = this.props.disabled ? disabledTextColor : this.props.color;
     const raise = this.props.raised ? 2 : 0;
@@ -76,40 +76,44 @@ class IconButton extends Component<{
       },
     });
 
-    if (this.props.label) {
+    if (!this.props.horizontal) {
       return ( 
-        <BorderlessButton
-          rippleColor={rippleColor}
-          style={{flex: propStyle.flex, borderColor: bdrColor, backgroundColor: bgColor}}
-          borderless={true}
-          onPress={!this.props.disabled ? this.doOnPress : undefined}
-        >
-              <View style={{...styles.button, ...propStyle, ...{backgroundColor: 'transparent'}}}>
-              {this.props.icon &&
-                <SvgIcon 
-                  size={iconSize}
-                  style={[styles.icon, iStyle]}
-                  widthAdj={0}
-                  fill={iFill}
-                  paths={APP_ICONS[this.props.icon]}
-                />
-              }
-              {this.props.label &&
-                <Text style={this.props.labelStyle}>{this.props.label}</Text>
-              }
+        <View style={{flexDirection: "column", alignItems: "center", justifyContent: "center"}}>
+          {this.props.icon &&
+            <View style={styles.shadowArea}>
+              <BorderlessButton
+                rippleColor={rippleColor}
+                style={{flex: propStyle.flex, borderColor: bdrColor, backgroundColor: "transparent"}}
+                borderless={true}
+                onPress={(!this.props.disabled && this.props.onPressFn) ? this.doOnPress : undefined}
+              >
+                <View style={{...styles.button, ...propStyle, ...{borderColor: bdrColor, backgroundColor: bgColor}}}>
+                  <SvgIcon 
+                    size={iconSize}
+                    style={[styles.icon, iStyle]}
+                    widthAdj={0}
+                    fill={iFill}
+                    paths={APP_ICONS[this.props.icon]}
+                  />
+                </View>
+              </BorderlessButton>
             </View>
-        </BorderlessButton>
+          }
+          {this.props.label &&
+            <Text style={[{color: navIconColor}, this.props.labelStyle]}>{this.props.label}</Text>
+          }
+        </View>
       )
     } else {
       return ( 
-        <View style={styles.shadowArea}>
           <BorderlessButton
             rippleColor={rippleColor}
             style={{flex: propStyle.flex}}
             borderless={true}
             onPress={!this.props.disabled ? this.doOnPress : undefined}
           >
-              <View style={{...styles.button, ...propStyle, ...{borderColor: bdrColor, backgroundColor: bgColor}}}>
+              <View style={{...styles.button, ...propStyle, 
+                            ...{borderColor: bdrColor, backgroundColor: bgColor}}}>
                 {this.props.icon &&
                   <SvgIcon 
                     size={iconSize}
@@ -119,9 +123,11 @@ class IconButton extends Component<{
                     paths={APP_ICONS[this.props.icon]}
                   />
                 }
+                {this.props.label &&
+                  <Text style={[{color: navIconColor}, this.props.labelStyle]}>{this.props.label}</Text>
+                }
               </View>
           </BorderlessButton>
-        </View>
       )
     }
   }

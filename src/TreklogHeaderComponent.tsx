@@ -42,8 +42,8 @@ class TrekLogHeader extends Component<
     const {
       navIconColor,
       headerBackgroundColor,
+      headerBorderColor,
       headerTextColor,
-      disabledHeaderTextColor,
       rippleColor
     } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
     const { navIcon } = this.props.uiTheme;
@@ -58,7 +58,7 @@ class TrekLogHeader extends Component<
     const htColor = this.props.textColor || headerTextColor;
     const groupTextColor = this.props.groupTextColor || htColor;
     const bgColor = this.props.backgroundColor || headerBackgroundColor;
-    const bdrColor = this.props.borderBottomColor || "transparent";
+    const bdrColor = this.props.borderBottomColor || headerBorderColor;
     const useIconSize = 18;
     const hrbStyle = this.props.headerRightButtonStyle || {};
     const haveGroupFn = this.props.setGroupFn;

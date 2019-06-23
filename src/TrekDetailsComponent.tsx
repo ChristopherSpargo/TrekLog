@@ -19,6 +19,7 @@ import { LoggingSvc } from './LoggingService';
 @observer
 export class TrekDetails extends Component<{
   heightAdj ?: number,             // hight of the display area
+  sortBy?: string,              // what to highlight as current sort value
   selectable ?: boolean,        // true if "show" selections are allowed/processed
   selectFn ?: Function,         // function to call when switch 'show' selections are allowed
   switchSysFn ?: Function,      // call if want to switch measurement systems
@@ -176,7 +177,7 @@ export class TrekDetails extends Component<{
     const tInfo = this.props.trekInfo;
     const uSvc = this.props.utilsSvc;
     const selectable = this.props.selectable;
-    const sortVal = selectable === true ? this.fS.sortBy : '';
+    const sortVal = selectable === true ? this.props.sortBy : '';
     const showSpeed = this.showSpeedOrTime === 'speed';
     const hasLabel = tInfo.trekHasLabel();
     const hasNotes = tInfo.trekHasNotes();
@@ -468,38 +469,53 @@ export class TrekDetails extends Component<{
             }
             <View style={[styles.divider, 
                          (sortVal === 'Steps' && tInfo.type !== TREK_TYPE_HIKE) ? styles.bcTrans : {}]}/>
-            <View style={[styles.sortButton, {paddingRight: 15}]}>
-              <View style={styles.sortButtonTrigger}>
-                <SvgIcon
-                  style={styles.sortButtonIcon}
-                  size={sortIconSize}
-                  paths={APP_ICONS.ElevationRise}
-                  fill={listIconColor}
-                />
-                <Text style={styles.sortButtonText}>Elevation</Text>
+            {tInfo.hasElevations() &&
+              <View style={[styles.sortButton, {paddingRight: 15}]}>
+                <View style={styles.sortButtonTrigger}>
+                  <SvgIcon
+                    style={styles.sortButtonIcon}
+                    size={sortIconSize}
+                    paths={APP_ICONS.ElevationRise}
+                    fill={listIconColor}
+                  />
+                  <Text style={styles.sortButtonText}>Elevation</Text>
+                </View>
+                <View style={styles.elevItem}>
+                  <Text style={styles.elevItemLabel}>Min</Text>
+                  <Text style={styles.elevValue}>{tInfo.formattedTrekElevation('Min')}</Text>
+                </View>
+                <View style={styles.elevItem}>
+                  <Text style={styles.elevItemLabel}>Max</Text>
+                  <Text style={styles.elevValue}>{tInfo.formattedTrekElevation('Max')}</Text>
+                </View>
+                <View style={styles.elevItem}>
+                  <Text style={styles.elevItemLabel}>Gain</Text>
+                  <Text style={styles.elevValue}>{tInfo.formattedElevation(tInfo.elevationGain)}</Text>
+                </View>
               </View>
-              <View style={styles.elevItem}>
-                <Text style={styles.elevItemLabel}>Min</Text>
-                <Text style={styles.elevValue}>{tInfo.formattedTrekElevation('Min')}</Text>
-              </View>
-              <View style={styles.elevItem}>
-                <Text style={styles.elevItemLabel}>Max</Text>
-                <Text style={styles.elevValue}>{tInfo.formattedTrekElevation('Max')}</Text>
-              </View>
-              <View style={styles.elevItem}>
-                <Text style={styles.elevItemLabel}>Gain</Text>
-                <Text style={styles.elevValue}>{tInfo.formattedElevation(tInfo.elevationGain)}</Text>
-              </View>
-            </View>
-            <SortItem
-              canSelect={false}
-              dividerCheck={[]}
-              sortType='None'
-              icon="SlopeUphill"
-              label="Grade"
-              valueFn={() => this.tInfo.formattedElevationGainPct() + ' - ' + TERRAIN_DESCRIPTIONS[this.tInfo.hills]}
-              selValue={false}
-            />
+            }
+            {tInfo.hasElevations() &&
+              <SortItem
+                canSelect={false}
+                dividerCheck={[]}
+                sortType='None'
+                icon="SlopeUphill"
+                label="Grade"
+                valueFn={() => this.tInfo.formattedElevationGainPct() + ' - ' + TERRAIN_DESCRIPTIONS[this.tInfo.hills]}
+                selValue={false}
+              />
+            }
+            {tInfo.course &&
+              <SortItem
+                canSelect={false}
+                dividerCheck={[]}
+                sortType='None'
+                icon="Course"
+                label="Course"
+                valueFn={() => this.tInfo.course}
+                selValue={false}
+              />
+            }
             {tInfo.hasWeather() &&
               <View>
                 <View style={styles.divider}/>

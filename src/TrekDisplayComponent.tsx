@@ -6,9 +6,10 @@ import { observable, action } from 'mobx';
 import MapView, { Marker, Polyline, LatLng, Region } from 'react-native-maps';
 
 import { INTERVAL_MARKER_Z_INDEX, CURRENT_POS_MARKER_Z_INDEX, INITIAL_POS_MARKER_Z_INDEX, 
-         PICTURE_MARKER_Z_INDEX, 
-         SHORT_CONTROLS_HEIGHT,
+         PICTURE_MARKER_Z_INDEX, MAIN_PATH_Z_INDEX, TRACKING_POS_MARKER_Z_INDEX,
+         SHORT_CONTROLS_HEIGHT, CONTROLS_HEIGHT,
          HEADER_HEIGHT,
+         HEADER_Z_INDEX,
         } from './App';
 import SpeedDial, {SpeedDialItem} from './SpeedDialComponent';
 import { TrekInfo, MapType, TrekPoint, TrekImageSet } from './TrekInfoModel';
@@ -18,7 +19,8 @@ import { APP_ICONS } from './SvgImages';
 import { ModalModel } from './ModalModel'
 import IconButton from './IconButtonComponent';
 import { LoggingSvc } from './LoggingService';
-
+import { RateRangePathsObj } from './IntervalSvc';
+import FadeInTemp from './FadeInTempComponent';
 // const TREK_ZOOM_CURRENT = 15;
 // const TREK_ZOOM_STATE   =  6;
 // const TREK_ZOOM_COUNTRY =  4;
@@ -31,20 +33,32 @@ class TrekDisplay extends Component<{
   intervalMarkers ?: LatLng[],
   intervalLabelFn ?: Function,
   selectedInterval ?: number,
-  selectedPath ?: LatLng[],
-  selectFn ?: Function,
+  selectedPath ?: LatLng[],   // path to the selected marker from the prior marker
+  selectFn ?: Function,       // function to call when interval marker is selected
   layoutOpts : string,
-  mapType : MapType,
-  changeMapFn : Function,
-  changeZoomFn : Function,
+  mapType : MapType,          // current map type (Sat/Terrain/Std)
+  changeMapFn : Function,     // function to call to switch map type
+  changeZoomFn : Function,    // switch between zoomed-in or out
   speedDialIcon ?: string,    // icon for speed dial trigger
   speedDialValue ?: string,   // value to return for speed dial with no items menu
-  bottom ?: number,
-  markerDragFn ?: Function,
+  bottom ?: number,           // bottom limit for display
+  markerDragFn ?: Function,   // function to call if interval marker dragged
   useCameraFn ?: Function,    // function to call if user takes picture or video while logging
   showImagesFn ?: Function,   // function to call if user taps an image marker on the map
   nextFn ?: Function,         // if present, display "right" button on map and call this function when pressed
   prevFn ?: Function,         // if present, display "left" button on map and call this function when pressed
+  rateRangeObj ?: RateRangePathsObj,  // if present, show different colored PolyLine segements for path
+  toggleRangeDataFn ?: Function, // fucntion to call to change the rateRange data type (speed/calories)
+  trackingHeader ?: string,   // heading for tracking display
+  trackingPath ?: LatLng[],
+  trackingMarker ?: TrekPoint,
+  pathToCurrent : TrekPoint[], // path for polyLine to current trek position
+  trackingDiffDist ?: number,
+  trackingDiffTime ?: number,
+  trackingTime ?: number,     // elapsed tracking time
+  trekMarkerDragFn ?: Function, // call this function if replay trek marker dragged
+  courseMarkerDragFn ?: Function, // call this function if replay course marker dragged
+  timerType ?: string,        // if 'Log', 'Paused' or 'Play' show trek current position with yellow marker, else red
   uiTheme ?: any,
   utilsSvc ?: UtilsSvc,
   modalSvc ?: ModalModel,
@@ -52,6 +66,7 @@ class TrekDisplay extends Component<{
   loggingSvc ?: LoggingSvc,
   }, {} > {
 
+  @observable showPrevPtsIndex;
 
   tInfo = this.props.trekInfo;
   mapViewRef;
@@ -163,497 +178,31 @@ class TrekDisplay extends Component<{
     }
   ];
 
-  lightThemeMapStyle = 
-  [
-    {
-      "elementType": "geometry",
-      "stylers": [
-        {
-          "color": "#ebe3cd"
-        }
-      ]
-    },
-    {
-      "elementType": "labels.text.fill",
-      "stylers": [
-        {
-          "color": "#523735"
-        }
-      ]
-    },
-    {
-      "elementType": "labels.text.stroke",
-      "stylers": [
-        {
-          "color": "#f5f1e6"
-        }
-      ]
-    },
-    {
-      "featureType": "administrative",
-      "elementType": "geometry.stroke",
-      "stylers": [
-        {
-          "color": "#c9b2a6"
-        }
-      ]
-    },
-    {
-      "featureType": "administrative.land_parcel",
-      "elementType": "geometry.stroke",
-      "stylers": [
-        {
-          "color": "#dcd2be"
-        }
-      ]
-    },
-    {
-      "featureType": "administrative.land_parcel",
-      "elementType": "labels.text.fill",
-      "stylers": [
-        {
-          "color": "#ae9e90"
-        }
-      ]
-    },
-    {
-      "featureType": "landscape.natural",
-      "elementType": "geometry",
-      "stylers": [
-        {
-          "color": "#dfd2ae"
-        }
-      ]
-    },
-    {
-      "featureType": "poi",
-      "elementType": "geometry",
-      "stylers": [
-        {
-          "color": "#dfd2ae"
-        }
-      ]
-    },
-    {
-      "featureType": "poi",
-      "elementType": "labels.text.fill",
-      "stylers": [
-        {
-          "color": "#93817c"
-        }
-      ]
-    },
-    {
-      "featureType": "poi.park",
-      "elementType": "geometry.fill",
-      "stylers": [
-        {
-          "color": "#a5b076"
-        }
-      ]
-    },
-    {
-      "featureType": "poi.park",
-      "elementType": "labels.text.fill",
-      "stylers": [
-        {
-          "color": "#447530"
-        }
-      ]
-    },
-    {
-      "featureType": "road",
-      "elementType": "geometry",
-      "stylers": [
-        {
-          "color": "#f5f1e6"
-        }
-      ]
-    },
-    {
-      "featureType": "road.arterial",
-      "elementType": "geometry",
-      "stylers": [
-        {
-          "color": "#fdfcf8"
-        }
-      ]
-    },
-    {
-      "featureType": "road.highway",
-      "elementType": "geometry",
-      "stylers": [
-        {
-          "color": "#f8c967"
-        }
-      ]
-    },
-    {
-      "featureType": "road.highway",
-      "elementType": "geometry.stroke",
-      "stylers": [
-        {
-          "color": "#e9bc62"
-        }
-      ]
-    },
-    {
-      "featureType": "road.highway.controlled_access",
-      "elementType": "geometry",
-      "stylers": [
-        {
-          "color": "#e98d58"
-        }
-      ]
-    },
-    {
-      "featureType": "road.highway.controlled_access",
-      "elementType": "geometry.stroke",
-      "stylers": [
-        {
-          "color": "#db8555"
-        }
-      ]
-    },
-    {
-      "featureType": "road.local",
-      "elementType": "labels.text.fill",
-      "stylers": [
-        {
-          "color": "#806b63"
-        }
-      ]
-    },
-    {
-      "featureType": "transit.line",
-      "elementType": "geometry",
-      "stylers": [
-        {
-          "color": "#dfd2ae"
-        }
-      ]
-    },
-    {
-      "featureType": "transit.line",
-      "elementType": "labels.text.fill",
-      "stylers": [
-        {
-          "color": "#8f7d77"
-        }
-      ]
-    },
-    {
-      "featureType": "transit.line",
-      "elementType": "labels.text.stroke",
-      "stylers": [
-        {
-          "color": "#ebe3cd"
-        }
-      ]
-    },
-    {
-      "featureType": "transit.station",
-      "elementType": "geometry",
-      "stylers": [
-        {
-          "color": "#dfd2ae"
-        }
-      ]
-    },
-    {
-      "featureType": "water",
-      "elementType": "geometry.fill",
-      "stylers": [
-        {
-          "color": "#b9d3c2"
-        }
-      ]
-    },
-    {
-      "featureType": "water",
-      "elementType": "labels.text.fill",
-      "stylers": [
-        {
-          "color": "#92998d"
-        }
-      ]
-    }
-  ];
-
-  darkThemeMapStyle = [
-    {
-      "elementType": "geometry",
-      "stylers": [
-        {
-          "color": "#1d2c4d"
-        }
-      ]
-    },
-    {
-      "elementType": "labels.text.fill",
-      "stylers": [
-        {
-          "color": "#8ec3b9"
-        }
-      ]
-    },
-    {
-      "elementType": "labels.text.stroke",
-      "stylers": [
-        {
-          "color": "#1a3646"
-        }
-      ]
-    },
-    {
-      "featureType": "administrative.country",
-      "elementType": "geometry.stroke",
-      "stylers": [
-        {
-          "color": "#4b6878"
-        }
-      ]
-    },
-    {
-      "featureType": "administrative.land_parcel",
-      "elementType": "labels.text.fill",
-      "stylers": [
-        {
-          "color": "#64779e"
-        }
-      ]
-    },
-    {
-      "featureType": "administrative.province",
-      "elementType": "geometry.stroke",
-      "stylers": [
-        {
-          "color": "#4b6878"
-        }
-      ]
-    },
-    {
-      "featureType": "landscape.man_made",
-      "elementType": "geometry.stroke",
-      "stylers": [
-        {
-          "color": "#334e87"
-        }
-      ]
-    },
-    {
-      "featureType": "landscape.natural",
-      "elementType": "geometry",
-      "stylers": [
-        {
-          "color": "#023e58"
-        }
-      ]
-    },
-    {
-      "featureType": "poi",
-      "elementType": "geometry",
-      "stylers": [
-        {
-          "color": "#283d6a"
-        }
-      ]
-    },
-    {
-      "featureType": "poi",
-      "elementType": "labels.text.fill",
-      "stylers": [
-        {
-          "color": "#6f9ba5"
-        }
-      ]
-    },
-    {
-      "featureType": "poi",
-      "elementType": "labels.text.stroke",
-      "stylers": [
-        {
-          "color": "#1d2c4d"
-        }
-      ]
-    },
-    {
-      "featureType": "poi.park",
-      "elementType": "geometry.fill",
-      "stylers": [
-        {
-          "color": "#023e58"
-        }
-      ]
-    },
-    {
-      "featureType": "poi.park",
-      "elementType": "labels.text.fill",
-      "stylers": [
-        {
-          "color": "#3C7680"
-        }
-      ]
-    },
-    {
-      "featureType": "road",
-      "elementType": "geometry",
-      "stylers": [
-        {
-          "color": "#466cb9" //"#304a7d"
-        }
-      ]
-    },
-    {
-      "featureType": "road",
-      "elementType": "labels.text.fill",
-      "stylers": [
-        {
-          "color": "#c8d3ea" //"#98a5be"
-        }
-      ]
-    },
-    {
-      "featureType": "road",
-      "elementType": "labels.text.stroke",
-      "stylers": [
-        {
-          "color": "#1d2c4d"
-        }
-      ]
-    },
-    {
-      "featureType": "road.highway",
-      "elementType": "geometry",
-      "stylers": [
-        {
-          "color": "#2c6675"
-        }
-      ]
-    },
-    {
-      "featureType": "road.highway",
-      "elementType": "geometry.stroke",
-      "stylers": [
-        {
-          "color": "#255763"
-        }
-      ]
-    },
-    {
-      "featureType": "road.highway",
-      "elementType": "labels.text.fill",
-      "stylers": [
-        {
-          "color": "#b0d5ce"
-        }
-      ]
-    },
-    {
-      "featureType": "road.highway",
-      "elementType": "labels.text.stroke",
-      "stylers": [
-        {
-          "color": "#023e58"
-        }
-      ]
-    },
-    {
-      "featureType": "transit",
-      "elementType": "labels.text.fill",
-      "stylers": [
-        {
-          "color": "#98a5be"
-        }
-      ]
-    },
-    {
-      "featureType": "transit",
-      "elementType": "labels.text.stroke",
-      "stylers": [
-        {
-          "color": "#1d2c4d"
-        }
-      ]
-    },
-    {
-      "featureType": "transit.line",
-      "elementType": "geometry.fill",
-      "stylers": [
-        {
-          "color": "#283d6a"
-        }
-      ]
-    },
-    {
-      "featureType": "transit.station",
-      "elementType": "geometry",
-      "stylers": [
-        {
-          "color": "#3a4762"
-        }
-      ]
-    },
-    {
-      "featureType": "water",
-      "elementType": "geometry",
-      "stylers": [
-        {
-          "color": "#0e1626"
-        }
-      ]
-    },
-    {
-      "featureType": "water",
-      "elementType": "labels.text.fill",
-      "stylers": [
-        {
-          "color": "#4e6d70"
-        }
-      ]
-    }
-  ];
-
-  // propCamera : Camera = {
-  //   center: {latitude: COUNTRY_CENTER_LAT_USA, longitude: COUNTRY_CENTER_LNG_USA},
-  //   heading: 0, pitch: 0, altitude: 0,
-  //   zoom: TREK_ZOOM_CURRENT
-  // };
-
   currRegion : any = {
     latitude: 34,
     longitude: -112,
     latitudeDelta: 0.015,
     longitudeDelta: 0.01211
   }
-  // currCamera : Camera;
 
 
   constructor(props) {
     super(props);
     this.setShowMapControls(true);
+    this.showPrevPts(-1);
   }
+
   // shouldComponentUpdate(){
   //   return this.props.trekInfo.updateMap;
-  // }
-
-  // componentWillMount() {
-  //   this.currCamera = this.propCamera;
-  //   this.currCamera.center = this.propCamera.center;
-  // }
-
-  // componentDidMount() {
-  //   if(this.mapViewRef){
-  //     this.mapViewRef.setCamera(this.propCamera);
-  //   }
   // }
 
   componentDidUpdate(prevProps){
     if (prevProps.mapType !== this.props.mapType){ 
       this.forceUpdate();
     }
-    if (this.mode !== this.props.layoutOpts) {
-      this.mode = this.props.layoutOpts;
+    if (this.mode !== this.props.layoutOpts ||
+      prevProps.rateRangeObj !== this.props.rateRangeObj){ 
+        this.mode = this.props.layoutOpts;
       this.setLayout();
     }
     if ((this.props.selectedInterval !== undefined) && (this.selectedMarker !== this.props.selectedInterval)) {
@@ -662,8 +211,9 @@ class TrekDisplay extends Component<{
         if (this.markerRefs) { this.markerRefs[this.selectedMarker].showCallout(); }
         if (this.mode === 'Interval') {
           if (this.mapViewRef) { 
+            let topPadding = this.props.rateRangeObj ? 325 : 200;
             this.mapViewRef.fitToCoordinates(this.props.selectedPath,
-                    {edgePadding: {top: 200, right: 250, bottom: 200, left: 100}, animated: false});
+                    {edgePadding: {top: topPadding, right: 50, bottom: 50, left: 50}, animated: false});
           }
         } 
         else {
@@ -688,8 +238,6 @@ class TrekDisplay extends Component<{
   // this happens when user moves map or program follows Current position
   regionChangeDone = (r: Region) => {
     if (this.mode !== 'Open') {
-      // this.currCamera.center.latitude = r.latitude;
-      // this.currCamera.center.longitude = r.longitude;
       this.currRegion.latitude        = r.latitude;
       this.currRegion.longitude       = r.longitude;
       this.currRegion.latitudeDelta   = r.latitudeDelta;
@@ -701,8 +249,6 @@ class TrekDisplay extends Component<{
   // this happens when user moves the map
   regionChange = (r: Region) => {
     if (this.mode === 'Open') {
-      // this.currCamera.center.latitude = r.latitude;
-      // this.currCamera.center.longitude = r.longitude;
       this.currRegion.latitude        = r.latitude;
       this.currRegion.longitude       = r.longitude;
       this.currRegion.latitudeDelta   = r.latitudeDelta;
@@ -721,9 +267,6 @@ class TrekDisplay extends Component<{
 
   // set the camera center to the given point and the zoom to TREK_ZOOM_CURRENT
   resetCameraCenter = (point: TrekPoint) => {
-    // this.currCamera.center.latitude = point.l.a;
-    // this.currCamera.center.longitude = point.l.o;
-    // this.currCamera.zoom = TREK_ZOOM_CURRENT;
     if (point){
       this.currRegion.latitude        = point.l.a;
       this.currRegion.longitude       = point.l.o;
@@ -734,29 +277,30 @@ class TrekDisplay extends Component<{
 
   // change the focus or zoom level on the map
   layoutMap = ( path: LatLng[]) => {
+    let rangePadding = this.props.rateRangeObj ? 150 : 0;
+    let bPadding = (this.props.intervalMarkers ? 50 : 250);
     switch(this.mode){
       case 'All':
         if (this.mapViewRef) { 
           this.mapViewRef.fitToCoordinates(path,
-                                          {edgePadding: {top: 250, right: 200, bottom: 250, left: 50}, 
+                                          {edgePadding: {top: 200, right: 50, 
+                                                         bottom: bPadding, left: 50}, 
                                           animated: false});
         }
         break;
       case 'Interval':
         if (this.mapViewRef) { 
           this.mapViewRef.fitToCoordinates(path,
-                                          {edgePadding: {top: 200, right: 200, bottom: 200, left: 50}, 
-                                          animated: false});
+                                          {edgePadding: {top: 200, right: 50, 
+                                           bottom: 50, left: 50}, animated: false});
         }
         break;
-      case 'NewAll':        
       case 'Current':
+      case 'NewAll':        
       case 'Start':
         if (this.mapViewRef) { 
           this.mapViewRef.animateToRegion(this.props.utilsSvc.copyObj(this.currRegion), 10);
         }
-      // this.mapViewRef.animateToRegion(Object.assign({}, this.currRegion, 10));
-      // this.mapViewRef.animateCamera(this.currCamera, {duration: 100});
         if (this.mode === 'NewAll'){
           this.mode = 'All';
           this.setLayout();
@@ -772,17 +316,21 @@ class TrekDisplay extends Component<{
   // prepare the path argument and the camera object in preparation for layoutMap
   setLayout = () => {
     let path : LatLng[] = [];
+    let ptc = this.props.pathToCurrent;
     switch(this.mode){
       case 'All':
-        path = this.tInfo.pointList.map((pt) =>
-            { return {latitude: pt.l.a, longitude: pt.l.o}; }); // copy just the LatLng data
+        if(this.props.trackingPath){
+          path = this.props.trackingPath;
+        } else {
+          path = this.props.utilsSvc.cvtPointListToLatLng(ptc); // copy just the LatLng data
+        }
         break;
       case 'Current':
       case 'NewAll':
-        this.resetCameraCenter(this.tInfo.pointList[this.tInfo.trekPointCount - 1]);
+          this.resetCameraCenter(ptc[ptc.length - 1]);
         break;
       case 'Start':
-        this.resetCameraCenter(this.tInfo.pointList[0]);
+        this.resetCameraCenter(ptc[0]);
         break;
       case 'Open':
         break;
@@ -795,7 +343,7 @@ class TrekDisplay extends Component<{
     this.layoutMap(path);
   }
 
-  // call the function to set the map focus point/area (Current/Start/All)
+  // call the function to set the map focus point/area (Current/All)
   changeMapFocus = (val: string) => {
     this.mode = '';
     this.props.changeZoomFn(val);
@@ -830,34 +378,58 @@ class TrekDisplay extends Component<{
       this.props.prevFn();
     })
   }
+
+  @action
+  showPrevPts = (index: number) => {
+    if(this.showPrevPtsIndex === index){
+      this.showPrevPtsIndex = -1;
+    } else {
+      this.showPrevPtsIndex = index;
+    }
+  }
   
   render () {
     const tInfo = this.tInfo;
     // tInfo.setUpdateMap(false);
-    const { trekLogYellow, highTextColor, trekLogOrange, secondaryColor, matchingMask_5,
+    const { trekLogYellow, highTextColor, secondaryColor, matchingMask_8, rippleColor, mediumTextColor,
             matchingMask_3, contrastingMask_5, pageBackground, pathColor, navItemBorderColor, 
-            locationRadiusBorder, intervalMarkerBorderColor, intervalMarkerBackgroundColor
+            locationRadiusBorder, intervalMarkerBorderColor, intervalMarkerBackgroundColor,
+            trackingMarkerRadiusBorder, trackingMarkerPathColor, matchingMask_9, 
+            trackingColorMinus, trackingColorPlus, trackingStatsBackgroundHeader
           } = this.props.uiTheme.palette[this.tInfo.colorTheme];
     const { navIcon } = this.props.uiTheme;
-    const path = tInfo.pointList.map((pt) =>
-          { return {latitude: pt.l.a, longitude: pt.l.o}; }); // copy just the LaLo data
-    const numPts = tInfo.trekPointCount;
+    const path = this.props.utilsSvc.cvtPointListToLatLng(this.props.pathToCurrent); // copy just the LaLo data
+    const numPts = path.length;
     const selection = (this.props.selectedInterval !== undefined || this.props.selectedInterval !== -1) 
                           ? this.props.selectedInterval : 0;
     const markers = this.props.intervalMarkers;
-    const themeMap = this.props.mapType === 'theme' as MapType;
-    const mType : MapType = themeMap ? 'standard' : this.props.mapType;
+    const mType = this.props.mapType;
     const haveLocation = tInfo.initialLoc !== undefined;
     const triggerIcon = this.props.speedDialIcon || "Location";
     const radiusBg = "rgba(18, 46, 59, .5)";
     const trekImages = this.tInfo.trekImageCount !== 0;
     const imageMarkerIconSize = 18;
     const imageSelectorWidth = 50;
-    const selectedIntervalColor = trekLogOrange; //'rgba(255, 167, 38,.8)';  //"#ff704d";
+    const selectedIntervalColor = '#660000';//trekLogOrange; //'rgba(255, 167, 38,.8)';  //"#ff704d";
     const showNext = this.props.nextFn !== undefined;
     const showPrev = this.props.prevFn !== undefined;
     const minSDOffset = (this.props.bottom !== 0) ? 5 : SHORT_CONTROLS_HEIGHT;
     const showControls = this.tInfo.showMapControls;
+    const rangesObj = this.props.rateRangeObj;
+    const trackingMarker = this.props.trackingMarker;
+    const tdTime = this.props.trackingDiffTime;
+    const tdTimeColor = tdTime < 0 ? trackingColorMinus : trackingColorPlus;
+    const tdDist = this.props.trackingDiffDist ;
+    const tdDistColor = tdDist < 0 ? trackingColorMinus : trackingColorPlus;
+    const tdDistStr = tInfo.formattedDist(Math.abs(tdDist));
+    const spindx = tdDistStr.indexOf(' ');
+    const tdDistValue = tdDistStr.substr(0, spindx);
+    const tdDistUnits = tdDistStr.substr(spindx);
+    const trackingTime = this.props.trackingTime;
+    const logOn = this.props.timerType === 'Log';
+    const replayOn = (this.props.timerType === 'Play');
+    const cmBackground = (logOn || replayOn) ? trekLogYellow : "red";
+    // const badPoints = this.tInfo.badPointList && this.tInfo.badPointList.length > 0; // **Debug
 
     const styles = StyleSheet.create({
       container: { ... StyleSheet.absoluteFillObject },
@@ -873,6 +445,17 @@ class TrekDisplay extends Component<{
         alignItems: "center",
         justifyContent: "center"
       },
+      trackingMarkerRadius: {
+        width: 42,
+        height: 42,
+        borderRadius: 21,
+        borderWidth: 2,
+        borderColor: trackingMarkerRadiusBorder,
+        backgroundColor: radiusBg,
+        overflow: "hidden",
+        alignItems: "center",
+        justifyContent: "center",
+      },
       marker: {
         width: 14,
         height: 14,
@@ -882,13 +465,23 @@ class TrekDisplay extends Component<{
         backgroundColor: "green",
         overflow: "hidden"
       },
-      bgEnd: {
-        backgroundColor: "red",
-        zIndex: CURRENT_POS_MARKER_Z_INDEX,
+      currMarker: {
+        width: 14,
+        height: 14,
+        borderWidth: 2,
+        borderRadius: 7,
+        borderColor: "white",
+        backgroundColor: cmBackground,
+        overflow: "hidden"
       },
-      bgMoving: {
-        backgroundColor: trekLogYellow,
-        zIndex: CURRENT_POS_MARKER_Z_INDEX,
+      trackingMarker: {
+        width: 14,
+        height: 14,
+        borderWidth: 2,
+        borderRadius: 7,
+        borderColor: "white",
+        backgroundColor: "blue",
+        overflow: "hidden"
       },
       intervalMarker: {
         width: 20,
@@ -917,7 +510,6 @@ class TrekDisplay extends Component<{
         color: "white",
       },
       speedDialTrigger: {
-        // backgroundColor: "rgba(255, 245, 157, .6)",
         backgroundColor: secondaryColor,
       },
       imageIcon: {
@@ -964,6 +556,98 @@ class TrekDisplay extends Component<{
         borderStyle: "solid",
         borderWidth: 1,
       },
+      legendLocation: {
+        position: "absolute",
+        top: HEADER_HEIGHT,
+        left: 0,
+        right: 0,
+      },
+      legendArea: {
+        flex: 1,
+        paddingBottom: 5,
+        paddingHorizontal: 15,
+        backgroundColor: matchingMask_8,
+        flexDirection: "row",
+        alignItems: "center",
+      },
+      legendHeader: {
+        fontSize: 16,
+        textAlign: "center",
+        color: highTextColor,
+      },
+      legendRangesArea: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+      },
+      legendRange: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+      },
+      legendRangeTextArea: {
+        flexDirection: "column",
+      },
+      legendRangeValue: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        borderBottomWidth: 4,
+        borderStyle: "solid",
+      },
+      legendRangeText: {
+        color: highTextColor,
+      },
+      legendRangeColor: {
+        width: 15,
+      },
+      trackingStatus: {
+        position: "absolute",
+        top: 0 + (logOn ? CONTROLS_HEIGHT - 10 : 0),
+        flex: 1,
+        marginLeft: logOn ? 0 : 56,
+        paddingVertical: 5,
+        paddingRight: 5,
+        paddingLeft: logOn ? 5 : 0,
+        backgroundColor: logOn ? matchingMask_9 : trackingStatsBackgroundHeader,
+        flexDirection: "row",
+        alignItems: "center",
+        zIndex: HEADER_Z_INDEX+1,
+      },
+      trackingGroup: {
+        flex: 1,
+        flexDirection: "column",
+        justifyContent: "center",
+        alignItems: "center",
+      },
+      trackingItem: {
+        flex: 1,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+      },
+      trackingItemValue: {
+        fontSize: 32,
+      },
+      trackingTime: {
+        fontSize: 16,
+        color: mediumTextColor
+      },
+      trackingItemUnits: {
+        fontSize: 26,
+        marginTop: 4,
+      },
+      trackingHeader: {
+        fontSize: 18,
+        color: highTextColor
+      },
+      badMarker1: {
+        width: 14,
+        height: 14,
+        borderWidth: 2,
+        borderRadius: 7,
+        borderColor: "white",
+        backgroundColor: "black",
+        overflow: "hidden"
+      },
     })
 
     const Intervals = (props: any) => {
@@ -983,11 +667,7 @@ class TrekDisplay extends Component<{
             tracksViewChanges={false}  
             draggable={index !== last ? true : undefined}
             onDragEnd={index !== last ? this.markerDragEnd.bind(this, index, path) : undefined}
-            onPress={() => {
-                // this.selectedMarker = index;
-                props.selectFn(index);
-              }
-            }
+            onPress={() => props.selectFn(index)}
           >
             {index !== last &&
               <View style={[styles.intervalMarker, props.selection === index ? styles.selected : {}]}>
@@ -1033,26 +713,63 @@ class TrekDisplay extends Component<{
       )})
     )}
 
+    // const BadPoints = (props: any) => {       // **Debug
+    //   let list = this.props.pathToCurrent;
+    //   return (
+    //     props.bads.map((item, index) => {
+    //       return (
+    //         <View key={index}>
+    //           <Marker
+    //             zIndex={PICTURE_MARKER_Z_INDEX}
+    //             anchor={{x: 0.5, y: 0.5}}
+    //             coordinate={{latitude: list[item-1].l.a, longitude: list[item-1].l.o}}
+    //             tracksViewChanges={false}
+    //             title={list[item-1].t + ' \ ' + list[item-1].s}
+    //             onPress={() => this.showPrevPts(item-1)}
+    //           >
+    //             <View style={[styles.badMarker1, {backgroundColor: "purple"}]}/>
+    //           </Marker>
+    //           <Marker
+    //             zIndex={PICTURE_MARKER_Z_INDEX}
+    //             anchor={{x: 0.5, y: 0.5}}
+    //             coordinate={{latitude: list[item].l.a, longitude: list[item].l.o}}
+    //             tracksViewChanges={false}
+    //             title={(list[item].t - list[item-1].t) + ' | ' + 
+    //                    Math.round(this.props.utilsSvc.computeImpliedSpeed(list[item-1], list[item])) + ' | ' + 
+    //                    list[item].s + ' | ' + list[item].t}
+    //           >
+    //             <View style={styles.badMarker1}/>
+    //           </Marker>
+    //         </View>
+    //   )})
+    // )}
+
+    // const PreviousPts = (props: any) => {           // **Debug
+    //   let list = this.props.pathToCurrent;
+    //   return (
+    //     props.bads.map((i: number) => {
+    //       return (
+    //           <Marker
+    //             key={i}
+    //             zIndex={PICTURE_MARKER_Z_INDEX}
+    //             anchor={{x: 0.5, y: 0.5}}
+    //             coordinate={{latitude: list[props.start-i].l.a, longitude: list[props.start-i].l.o}}
+    //             tracksViewChanges={false}
+    //             title={list[props.start-i].t + ' | ' + list[props.start-i].s}
+    //           >
+    //             <View style={[styles.badMarker1, {backgroundColor: "orange"}]}/>
+    //           </Marker>
+    //       )}
+    //   )
+    // )}
+
     const  mapTypes : SpeedDialItem[] = 
-                       [ {icon: 'Orbit', label: 'Satellite', value: 'hybrid'},
+                        [ {icon: 'Orbit', label: 'Satellite', value: 'hybrid'},
                           {icon: 'Landscape', label: 'Terrain', value: 'terrain'},
                           {icon: 'Highway', label: 'Standard', value: 'standard'}];
-                          // {icon: 'YinYang', label: 'Theme', value: 'theme'}];
 
-    // in Current mode, keep camera centered on current trek position
-    // if (numPts > 0 && (this.mode === 'Current')) {
-    //   this.currCamera.center.latitude =  path[numPts-1].latitude;
-    //   this.currCamera.center.longitude = path[numPts-1].longitude;
-    //   if (this.mapViewRef) {this.mapViewRef.setCamera(this.currCamera);}
-    // }
+    // alert(JSON.stringify(styles.currMarker,null,2));
 
-    // // if logging hasn't started, center the camera on the user's general location (or country)
-    // if (numPts === 0) {
-    //   this.currCamera.center.latitude = haveLocation ? tInfo.initialLoc.latitude : COUNTRY_CENTER_LAT_USA;
-    //   this.currCamera.center.longitude= haveLocation ? tInfo.initialLoc.longitude : COUNTRY_CENTER_LNG_USA;
-    //   this.currCamera.zoom = haveLocation ? TREK_ZOOM_STATE : TREK_ZOOM_COUNTRY;
-    //   if (this.mapViewRef) {this.mapViewRef.setCamera(this.currCamera);}
-    // } 
     return (
       <View style={styles.container}>
         {(numPts > 0) &&
@@ -1065,8 +782,6 @@ class TrekDisplay extends Component<{
               onPanDrag={() => this.mapMoved()}
               onPress={() => this.toggleShowMapControls()}
               moveOnMarkerPress={false}
-              // camera={this.mode === 'Current' ? this.propCamera : undefined}
-              // camera={this.propCamera}
               region={this.mode === 'Current' ? 
                 { latitude: path[numPts-1].latitude,
                   longitude: path[numPts-1].longitude,
@@ -1074,69 +789,115 @@ class TrekDisplay extends Component<{
                   longitudeDelta: this.currRegion.longitudeDelta
                 } : undefined}
               mapType={mType}
-              // customMapStyle={themeMap ? (tInfo.colorTheme === COLOR_THEME_DARK ? 
-              //                 this.darkThemeMapStyle : 
-              //                 this.lightThemeMapStyle) : this.stdMapStyle}
               customMapStyle={this.stdMapStyle}
->
-              {(numPts > 0) &&
-                <Marker
-                  zIndex={INITIAL_POS_MARKER_Z_INDEX}
-                  anchor={{x: 0.5, y: 0.5}}
-                  tracksViewChanges={false}
-                  coordinate={path[0]}
-                >
-                  <View style={styles.markerRadius}>
-                    <View style={styles.marker}/>
-                  </View>
-                </Marker>
-              }
-              {((numPts > 1) && !markers) &&
-                <Marker
-                  zIndex={CURRENT_POS_MARKER_Z_INDEX}
-                  anchor={{x: 0.5, y: 0.5}}
-                  tracksViewChanges={false}
-                  coordinate={path[numPts-1]}
-                >
-                  <View style={styles.markerRadius}>
-                    <View style={[styles.marker, tInfo.timerOn ? styles.bgMoving : styles.bgEnd]}/>
-                  </View>
-                </Marker>
-              }
-              {((numPts > 1) && markers) &&
+          >
+            {(trackingMarker) &&
+              <Marker
+                zIndex={TRACKING_POS_MARKER_Z_INDEX}
+                anchor={{x: 0.5, y: 0.5}}
+                tracksViewChanges={false}
+                coordinate={{latitude: trackingMarker.l.a, longitude: trackingMarker.l.o}}
+                // draggable
+                draggable={(trackingMarker && this.props.courseMarkerDragFn) ? true : undefined}
+                onDragEnd={(event) => this.props.courseMarkerDragFn(event.nativeEvent.coordinate)}
+              >
+                <View style={styles.trackingMarkerRadius}>
+                  <View style={styles.trackingMarker}/>
+                </View>
+              </Marker>
+            }
+            {(this.props.trackingPath) &&
+              <Polyline
+                coordinates={this.props.trackingPath}
+                strokeColor={trackingMarkerPathColor}
+                strokeWidth={11}
+              />
+            }
+            {(numPts > 0) &&
+              <Marker
+                zIndex={INITIAL_POS_MARKER_Z_INDEX}
+                anchor={{x: 0.5, y: 0.5}}
+                tracksViewChanges={false}
+                coordinate={path[0]}
+              >
+                <View style={styles.markerRadius}>
+                  <View style={styles.marker}/>
+                </View>
+              </Marker>
+            }
+            {((numPts > 1) && !markers) &&
+              <Marker
+                zIndex={CURRENT_POS_MARKER_Z_INDEX}
+                anchor={{x: 0.5, y: 0.5}}
+                tracksViewChanges={false}
+                coordinate={path[numPts-1]}
+                // draggable
+                draggable={(trackingMarker && this.props.trekMarkerDragFn) ? true : undefined}
+                onDragEnd={(event) => this.props.trekMarkerDragFn(event.nativeEvent.coordinate)}
+              >
+                <View style={styles.markerRadius}>
+                  <View style={styles.currMarker}/>
+                </View>
+              </Marker>
+            }
+            {((numPts > 1) && markers) &&
+              <Polyline
+                coordinates={this.props.selectedPath}
+                strokeColor={selectedIntervalColor}
+                strokeWidth={11}
+              />
+            }
+            {(numPts > 1 && !rangesObj) &&
+              <Polyline
+                zIndex={MAIN_PATH_Z_INDEX}
+                coordinates={path}
+                strokeColor={pathColor}
+                strokeWidth={5}
+              />
+            }
+            {(numPts > 1 && rangesObj) && 
+              rangesObj.lines.map((pathSeg, idx) => {
+                let line = [...pathSeg.lineSegment];
+                return (
                 <Polyline
-                  coordinates={this.props.selectedPath}
-                  strokeColor={selectedIntervalColor}
-                  strokeWidth={9}
-                />
+                  key={idx}
+                  zIndex={MAIN_PATH_Z_INDEX}
+                  coordinates={line}
+                  strokeColor={pathSeg.fillColor}
+                  strokeWidth={5}
+                />)
               }
-              {(numPts > 1) &&
-                <Polyline
-                  zIndex={INTERVAL_MARKER_Z_INDEX}
-                  coordinates={path}
-                  strokeColor={pathColor}
-                  strokeWidth={3}
-                />
-              }
-              {((numPts > 1) && markers) &&
-                <Intervals 
-                  lableFn={this.props.intervalLabelFn}
-                  selection={selection}
-                  selectFn={this.props.selectFn}
-                  markers={markers}
-                />
-              }
-              {((numPts > 0) && trekImages) &&
-                <Images 
-                  images={this.tInfo.trekImages}
-                />
-              }
-            </MapView>
+              )
+            }
+            {((numPts > 1) && markers) &&
+              <Intervals 
+                lableFn={this.props.intervalLabelFn}
+                selection={selection}
+                selectFn={this.props.selectFn}
+                markers={markers}
+              />
+            }
+            {((numPts > 0) && trekImages) &&
+              <Images 
+                images={this.tInfo.trekImages}
+              />
+            }
+            {/* {((numPts > 0) && badPoints) &&           // **Debug
+              <BadPoints 
+                bads={this.tInfo.badPointList}
+              />
+            }
+            {((numPts > 0) && badPoints && this.showPrevPtsIndex !== -1) &&   // **Debug
+              <PreviousPts 
+                bads={[1,2,3,4,5,6,7,8,9,10,11,12,13,14]}
+                start={this.showPrevPtsIndex}
+              />
+            } */}
+          </MapView>
         }
         {(numPts === 0) && 
           <MapView            // Map to show when waiting for START command
             style={styles.map}
-            // camera={ this.propCamera }
             region={{
               latitude: haveLocation ? tInfo.initialLoc.latitude : COUNTRY_CENTER_LAT_USA,
               longitude: haveLocation ? tInfo.initialLoc.longitude : COUNTRY_CENTER_LNG_USA,
@@ -1146,29 +907,81 @@ class TrekDisplay extends Component<{
 
           />
         }
+        {(showControls && numPts > 0 && this.props.rateRangeObj) &&
+          <View style={styles.legendLocation}>
+          <FadeInTemp dimOpacity={0.2} onPressFn={this.props.toggleRangeDataFn}>            
+            <View style={styles.legendArea}>
+              <View style={{flex: 1}}>               
+                <Text style={styles.legendHeader}>{rangesObj.legend.title}</Text>
+                <View style={styles.legendRangesArea}>
+                  {rangesObj.legend.ranges.map((range) =>
+                      <View style={styles.legendRange}>
+                        <View style={[styles.legendRangeValue, {borderColor: range.color}]}>
+                          <Text style={styles.legendRangeText}>{range.start}</Text>
+                          <Text style={[styles.legendRangeText]}> - </Text>
+                          <Text style={styles.legendRangeText}>{range.end}</Text>
+                        </View>
+                      </View>
+                    )
+                  }
+                </View>
+              </View>
+            </View>
+          </FadeInTemp>
+          </View>
+        }
+        {(numPts > 0 && trackingMarker) &&
+          <View style={styles.trackingStatus}>
+            <View style={[styles.trackingGroup, {flex: .8}]}>
+              <Text style={styles.trackingHeader}>{this.props.trackingHeader}</Text>
+              {trackingTime !== undefined &&
+                <View style={styles.trackingItem}>
+                  <Text style={styles.trackingTime}>
+                      {'(' + this.props.utilsSvc.timeFromSeconds(trackingTime) + ')'}
+                  </Text>
+                </View>
+              }
+            </View>
+            <View style={styles.trackingItem}>
+              <Text style={[styles.trackingItemValue, {color: tdTimeColor}]}>
+                {this.props.utilsSvc.timeFromSeconds(Math.abs(tdTime))}
+              </Text>
+            </View>
+            <View style={styles.trackingItem}>
+              <Text style={[styles.trackingItemValue, {color: tdDistColor}]}>
+                {tdDistValue}
+              </Text>
+              <Text style={[styles.trackingItemUnits, {color: tdDistColor}]}>
+                {tdDistUnits}
+              </Text>
+            </View>
+          </View>
+        }
         {(showControls && numPts > 0) &&
           <SpeedDial
-            bottom={this.props.bottom + minSDOffset }
+            bottom={this.props.bottom + minSDOffset + 40}
             icon={triggerIcon}
             triggerValue={this.props.speedDialValue}
             selectFn={this.props.changeZoomFn}
             style={styles.speedDialTrigger}
             horizontal={true}
             iconSize="Large"
+            fadeOut={0}
           />
         }
-        {(showControls && this.tInfo.logging && this.props.useCameraFn && (numPts > 0)) &&
+        {(showControls && logOn && this.props.useCameraFn && (numPts > 0)) &&
           <SpeedDial
             icon="Camera"
-            bottom={this.props.bottom + minSDOffset + 80}
+            bottom={this.props.bottom + minSDOffset + 120}
             selectFn={this.callUseCameraFn}
             style={styles.speedDialTrigger}
             iconSize="Large"
+            fadeOut={0}
           />
         }
         {(showControls && numPts > 0) &&
           <SpeedDial
-            top={25 + HEADER_HEIGHT}
+            top={70 + HEADER_HEIGHT}
             items={mapTypes}
             icon="LayersOutline"
             selectFn={this.props.changeMapFn}
@@ -1176,6 +989,7 @@ class TrekDisplay extends Component<{
             horizontal={true}
             iconSize="Large"
             itemSize="Big"
+            fadeOut={0}
           />
         }
         {showControls && (showPrev || showNext) &&

@@ -172,6 +172,7 @@ class GoalAchievedModal extends React.Component<{
               <View style={styles.footer}>
                 <BorderlessButton
                   rippleColor={rippleColor}
+                  style={{backgroundColor: 'transparent'}}
                   borderless={true}
                   onPress={this.close.bind(this, gnmData.okText)}
                 >

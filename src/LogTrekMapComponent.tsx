@@ -49,6 +49,13 @@ class LogTrekMap extends Component<{
     this.trekInfo.setShowMapInLog(false);
   }
 
+  componentWillMount() {
+    if(this.trekInfo.layoutOpts === 'Open'){
+      this.toggleSpeedDialZoom(this.trekInfo.speedDialZoom ? 'All' : 'Current', true);
+    } else {
+      this.logSvc.setLayoutOpts(this.trekInfo.speedDialZoom ? 'Current' : 'All')
+    }
+  }
   // respond to action from controls
   setActiveNav = (val) => {
     requestAnimationFrame(() =>{
@@ -110,13 +117,15 @@ class LogTrekMap extends Component<{
     const { controlsArea } = this.props.uiTheme;
     const sdIcon = this.trekInfo.speedDialZoom ? "ZoomOutMap" : "Location";
     const sdValue = this.trekInfo.speedDialZoom ? "All" : "Current";
-    const { highTextColor, trekLogBlue, matchingMask_5, matchingMask_7, rippleColor 
+    const { highTextColor, trekLogBlue, matchingMask_5, matchingMask_7, rippleColor,
+            trackingStatsBackgroundHeader 
           } = this.palette;
     const semiTrans = this.trekInfo.defaultMapType === 'hybrid' ? matchingMask_7 : matchingMask_5;
     const distItem = this.formattedDist();
     const speedItem = this.formattedCurrentSpeed();
     const stepsItem = this.formattedSteps();
-    const showControls = this.trekInfo.showMapControls;
+    const bgBottom = (numPts > 0 && !reviewOk) ? semiTrans : "transparent"
+    const reviewTracking = reviewOk && this.trekInfo.trackingObj;
 
     const styles = StyleSheet.create({
       container: { ... StyleSheet.absoluteFillObject },
@@ -148,11 +157,15 @@ class LogTrekMap extends Component<{
         color: highTextColor,
       },
       caAdjust: {
-        backgroundColor: (numPts > 0 && !reviewOk) ? semiTrans : "transparent",
-        justifyContent: "flex-start"
+        justifyContent: "flex-start",
+        height: CONTROLS_HEIGHT - 10,
+      },
+      caBottom: {
+        backgroundColor: bgBottom,
       },
       caTop: {
         top: 0,
+        backgroundColor: reviewTracking ? trackingStatsBackgroundHeader : bgBottom,
         bottom: undefined,
       },
       backButtonArea: {
@@ -167,6 +180,7 @@ class LogTrekMap extends Component<{
     return (
       <View style={[styles.container]}>
         <TrekDisplay 
+          pathToCurrent={this.trekInfo.pointList}
           bottom={mapBottom} 
           layoutOpts={this.trekInfo.layoutOpts} 
           changeZoomFn={this.toggleSpeedDialZoom}
@@ -176,8 +190,15 @@ class LogTrekMap extends Component<{
           changeMapFn={this.trekInfo.setDefaultMapType}
           useCameraFn={this.useCamera}
           showImagesFn={this.showCurrentImageSet}
+          trackingPath={this.trekInfo.trackingObj ? this.trekInfo.trackingObj.path : undefined}
+          trackingMarker={this.trekInfo.trackingMarkerLocation}
+          trackingDiffDist={this.trekInfo.trackingDiffDist}
+          trackingDiffTime={this.trekInfo.trackingDiffTime}
+          timerType={this.trekInfo.timerOn ? 'Log' : 'None'}
+          trackingHeader={this.trekInfo.trackingObj ? this.trekInfo.trackingObj.header : undefined}
+          trackingTime={this.trekInfo.trackingObj ? this.trekInfo.trackingObj.goalValue : undefined}
         />
-        <View style={[controlsArea, styles.caTop, styles.caAdjust]}>
+        <View style={[controlsArea, styles.caAdjust, styles.caTop]}>
           {(numPts > 0 && reviewOk) &&
             <View style={[styles.stats, {justifyContent: "flex-start"}]}>
               <BorderlessButton
@@ -221,7 +242,7 @@ class LogTrekMap extends Component<{
             </View>
           }
         </View>
-        <View style={[controlsArea, styles.caAdjust]}>
+        <View style={[controlsArea, styles.caAdjust, styles.caBottom]}>
           {(numPts > 0 && !reviewOk) &&
             <View style={styles.stats}>
                 <BorderlessButton

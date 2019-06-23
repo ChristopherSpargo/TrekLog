@@ -27,7 +27,7 @@ class Toast extends React.Component<{
         flexDirection: "row",
         alignItems: "center",
         left: 10,
-        height: 55,
+        minHeight: 55,
         width: 325,
         elevation: 5,
         borderStyle: "solid",
@@ -50,7 +50,7 @@ class Toast extends React.Component<{
       },
       contentText: {
         color: "white",
-        fontSize: 20
+        fontSize: 18
       }
     })
     return (

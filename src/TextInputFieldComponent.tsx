@@ -12,6 +12,7 @@ class TextInputField extends React.Component<{
   inputWidth        ?: number,
   textColor         ?: string,
   kbType            ?: string,
+  itemTest          ?: RegExp,      // RegExp to use to validate input  
   autoFocus         ?: boolean,
   placeholderValue  ?: string,
   pvDisplayOnly     ?: boolean,     // true if use placeholder value is not to be returned as input
@@ -37,7 +38,9 @@ class TextInputField extends React.Component<{
 
   @action
   setValue = (val: string) => {
+    if(!this.props.itemTest || this.props.itemTest.test(val)){   // check validity if necessary
       this.value = val;
+    }
   }
 
   setValueInput = () => {

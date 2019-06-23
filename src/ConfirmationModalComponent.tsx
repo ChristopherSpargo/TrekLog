@@ -4,7 +4,7 @@ import { View, StyleSheet, Text, TouchableNativeFeedback } from "react-native";
 import { useObserver } from "mobx-react-lite";
 
 import { CONFIRM_Z_INDEX, BACKDROP_Z_INDEX, ModalSvcContext, UiThemeContext, TrekInfoContext } from "./App";
-import { ModalModel } from "./ModalModel";
+import { ModalModel, CONFIRM_INFO } from "./ModalModel";
 import { TrekInfo } from './TrekInfoModel';
 import SvgIcon from "./SvgIconComponent";
 import { APP_ICONS } from "./SvgImages";
@@ -75,13 +75,15 @@ function ConfirmationModal() {
     okChoiceColor,
     warningConfirmColor,
     warningConfirmTextColor,
+    infoConfirmColor,
+    infoConfirmTextColor,
     pageBackground,
     rippleColor,
     contrastingMask_2
   } = uiTheme.palette[trekInfo.colorTheme];
   const { cardLayout, roundedTop, roundedBottom, footerButton, footerButtonText } = uiTheme;
-  const titleColor = smData.headingTextColor || warningConfirmTextColor;
-  const bgColor = smData.headingStartColor || warningConfirmColor;
+  const titleColor = smData.dType === CONFIRM_INFO ? infoConfirmTextColor : warningConfirmTextColor;
+  const bgColor = smData.dType === CONFIRM_INFO ? infoConfirmColor : warningConfirmColor;
   const iconColor =
     smData.iconColor !== undefined ? smData.iconColor : titleColor;
 

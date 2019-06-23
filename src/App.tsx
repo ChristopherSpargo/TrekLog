@@ -31,6 +31,9 @@ import { LoggingSvc } from './LoggingService';
 import { LocationSvc } from './LocationService';
 import { GroupSvc } from './GroupService';
 import { IntervalSvc } from './IntervalSvc';
+import { CourseSvc } from './CourseService';
+import Courses from './CoursesComponent';
+import CourseDetails from './CourseDetailsComponent';
 
 configure({
   enforceActions: "always"
@@ -64,15 +67,15 @@ export const semitransBlack_2 = "rgba(0, 0, 0, .2)";
 export const semitransBlack_3 = "rgba(0, 0, 0, .3)";
 export const semitransBlack_5 = "rgba(0, 0, 0, .5)";
 export const semitransBlack_7 = "rgba(0, 0, 0, .7)";
+export const semitransBlack_8 = "rgba(0, 0, 0, .8)";
 export const semitransBlack_9 = "rgba(0, 0, 0, .9)";
 export const PAGE_TITLE_HEIGHT = 28;
 export const HEADER_ICON_SIZE = 24;
 export const BACK_BUTTON_SIZE = 40;
 export const HEADER_HEIGHT = 56;
-export const CONTROLS_HEIGHT = 70;
-export const SHORT_CONTROLS_HEIGHT = 70;
-export const NAV_ITEM_SIZE = CONTROLS_HEIGHT - 15;
-export const NAV_ITEM_PADDING = 13;
+export const CONTROLS_HEIGHT = 75;
+export const SHORT_CONTROLS_HEIGHT = 75;
+export const NAV_ITEM_SIZE = CONTROLS_HEIGHT - 20;
 export const NAV_ICON_SIZE = 28;
 
 export const TREKLOG_GROUPS_DIRECTORY = 'Groups';
@@ -82,6 +85,9 @@ export const TREKLOG_GOALS_FILENAME = 'Goals.txt';
 export const TREKLOG_FILE_EXT = '.txt';
 export const TREKLOG_FILE_FORMAT = 'utf8';
 export const TREKLOG_PICTURES_DIRECTORY = "TrekLog";
+export const TREKLOG_COURSES_DIRECTORY = 'Courses';
+export const TREKLOG_COURSES_FILENAME = 'CourseList.txt';
+export const TREKLOG_FILENAME_REGEX = /^[a-z,A-Z,0-9]*$/;
 
 export const TREKLOG_LOG_KEY = '#Treklog#';
 export const TREKLOG_USERS_KEY = '#Users';
@@ -92,8 +98,10 @@ export const FOOTER_BUTTON_HEIGHT = 45;
 
 export const INVISIBLE_Z_INDEX = -1;
 export const INITIAL_POS_MARKER_Z_INDEX = 1;
-export const CURRENT_POS_MARKER_Z_INDEX = 2;
+export const CURRENT_POS_MARKER_Z_INDEX = 13;
+export const TRACKING_POS_MARKER_Z_INDEX = 12;
 export const INTERVAL_MARKER_Z_INDEX = 3;
+export const MAIN_PATH_Z_INDEX = 3;
 export const PICTURE_MARKER_Z_INDEX = 25;
 export const INTERVAL_GRAPH_Z_INDEX = 4;
 export const ICON_BUTTON_Z_INDEX = 5;
@@ -115,7 +123,7 @@ export const uiTheme = {
       primaryDarker: primaryDarker,
       primaryLighter: "#a5d6a7",
       secondaryColor: "rgb(156, 39, 176)", 
-      secondaryColorTrans: "rgba(156, 39, 176,.6)",
+      secondaryColorTrans: "rgba(156, 39, 176,.7)",
       textOnSecondaryColor: "white",
       tertiaryColor: '#d795e9',
       accentColor: "#00665c",
@@ -128,6 +136,8 @@ export const uiTheme = {
       disabledTextColor: "rgba(0,0,0,.38)",
       dividerColor: semitransBlack_12,
       headerBackgroundColor: primaryColor,
+      trackingStatsBackgroundHeader: "white",
+      headerBorderColor: semitransBlack_12,
       headerTextColor: "white",
       disabledHeaderTextColor: "rgba(255,255,255,.42)",
       textOnPrimaryColor: "white",
@@ -148,6 +158,7 @@ export const uiTheme = {
       pageBackground: "white",
       pageBackgroundFilm: "rgba(255,255,255,.4)",
       selectOnFilm: "#6600cc",
+      selectOnTheme: TL_BLUE,
       controlsBackground: "white",
       textOnTheme: "rgba(0,0,0,.60)",
       textOffTheme: "white",
@@ -158,6 +169,8 @@ export const uiTheme = {
       highlightColor: "rgba(118, 189, 213,1)",
       pathColor: "#0066ff",
       locationRadiusBorder: "#ffff00",
+      trackingMarkerRadiusBorder: TL_RED,
+      trackingMarkerPathColor: "rgba(64,64,64,.7)",
       intervalMarkerBorderColor: "black",
       intervalMarkerBackgroundColor: semitransBlack_5,
       goalGold: "#e6c300",
@@ -175,19 +188,22 @@ export const uiTheme = {
       matchingMask_3: semitransWhite_3,
       matchingMask_5: semitransWhite_5,
       matchingMask_7: semitransWhite_7,
+      matchingMask_8: semitransWhite_8,
       matchingMask_9: semitransWhite_9,
       contrastingMask_2: semitransBlack_2,
       contrastingMask_3: semitransBlack_3,
       contrastingMask_5: semitransBlack_5,
       contrastingMask_7: semitransBlack_7,
       contrastingMask_9: semitransBlack_9,
+      trackingColorPlus: "green",
+      trackingColorMinus: "red",
     },
     dark: {
       primaryColor: primaryColor,
       primaryDarker: primaryDarker,
       primaryLighter: "#a5d6a7",
       secondaryColor: "#ffff00", 
-      secondaryColorTrans: "rgba(255,255,0,.6)",
+      secondaryColorTrans: "rgba(255,255,0,.7)",
       textOnSecondaryColor: "rgba(0,0,0,.87)",
       tertiaryColor: '#d795e9',
       accentColor: "#00665c",
@@ -198,11 +214,13 @@ export const uiTheme = {
       mediumTextColor: "rgba(255,255,255,.60)",
       highTextColor: 'white',
       disabledTextColor: "rgba(255,255,255,.42)",
-      dividerColor: "rgba(255,255,255,.20)" ,
-      headerBackgroundColor: primaryColor,
+      dividerColor: "rgba(255,255,255,.20)",
+      headerBackgroundColor: "black",
+      trackingStatsBackgroundHeader: "black",
+      headerBorderColor: "rgba(255,255,255,.20)",
       headerTextColor: "rgba(255,255,255,.70)",
       disabledHeaderTextColor: "rgba(255,255,255,.42)",
-      textOnPrimaryColor: "rgba(255,255,255,.60)",
+      textOnPrimaryColor: "rgba(255,255,255,.80)",
       highlightedItemColor: "#333333",
       trekLogBlue: TL_BLUE,
       trekLogOrange: TL_ORANGE,
@@ -220,13 +238,16 @@ export const uiTheme = {
       pageBackground: "black",
       pageBackgroundFilm: "rgba(0,0,0,.4)",
       selectOnFilm: TL_BLUE,
+      selectOnTheme: TL_BLUE,
       controlsBackground: "black",
       textOnTheme: "rgba(255,255,255,.60)",
       textOffTheme: "black",
       linkActive: linkActive,
       navIconColor: "rgba(255,255,255,.60)",
       pathColor: "#0066ff",//"#0040ff",
+      trackingMarkerPathColor: "rgba(64,64,64,.7)",
       locationRadiusBorder: "#ffff00",
+      trackingMarkerRadiusBorder: TL_RED,
       intervalMarkerBorderColor: "black",
       intervalMarkerBackgroundColor: semitransBlack_5,
       navItemBorderColor: semitransWhite_3,
@@ -247,12 +268,15 @@ export const uiTheme = {
       matchingMask_3: semitransBlack_3,
       matchingMask_5: semitransBlack_5,
       matchingMask_7: semitransBlack_7,
+      matchingMask_8: semitransBlack_8,
       matchingMask_9: semitransBlack_9,
       contrastingMask_2: semitransWhite_2,
       contrastingMask_3: semitransWhite_3,
       contrastingMask_5: semitransWhite_5,
       contrastingMask_7: semitransWhite_7,
       contrastingMask_9: semitransWhite_9,
+      trackingColorPlus: "#00cc00",
+      trackingColorMinus: "red",
     }
   },
   toolbar: {
@@ -298,6 +322,17 @@ export const uiTheme = {
     borderStyle: "solid",
     borderRadius: NAV_ITEM_SIZE / 2,
   },
+  navItemWithLabel: {
+    height: NAV_ITEM_SIZE - 5,
+    width: NAV_ITEM_SIZE - 5,
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderRadius: (NAV_ITEM_SIZE - 5) / 2,
+  },
+  navItemLabel: {
+    fontSize: 13,
+    marginTop: -4,
+  },
   navIcon: {
     backgroundColor: "transparent",
   },
@@ -341,7 +376,9 @@ const NavStack = createStackNavigator(
     GoalDetail: GoalDetail,
     ExtraFilters: ExtraFilters,
     Images: TrekImages,
-    Conditions: ShowConditions
+    Conditions: ShowConditions,
+    Courses: Courses,
+    CourseDetails: CourseDetails
   },
   {
     initialRouteName: "Log",
@@ -374,13 +411,16 @@ export const TrekInfoContext = React.createContext(trekInfo);
 const intervalSvc = new IntervalSvc(utilsSvc, trekInfo);
 // export const IntervalSvcContext = React.createContext(intervalSvc);
 
+const courseSvc = new CourseSvc(utilsSvc, trekInfo, intervalSvc, storageSvc, modalSvc);
+// export const CourseSvcContext = React.createContext(courseSvc);
+
 const weatherSvc = new WeatherSvc(toastSvc);
 export const WeatherSvcContext = React.createContext(weatherSvc);
 
 const locationSvc = new LocationSvc( trekInfo, storageSvc);
 export const LocationSvcContext = React.createContext(locationSvc);
 
-const loggingSvc = new LoggingSvc(utilsSvc, trekInfo, locationSvc, modalSvc, toastSvc);
+const loggingSvc = new LoggingSvc(utilsSvc, trekInfo, locationSvc, courseSvc, modalSvc, toastSvc);
 // export const LoggingSvcContext = React.createContext(loggingSvc);
 
 const goalsSvc = new GoalsSvc(utilsSvc, trekInfo, toastSvc, storageSvc);
@@ -423,6 +463,7 @@ class TrekLog extends React.Component {
           loggingSvc={loggingSvc}
           groupSvc={groupSvc}
           intervalSvc={intervalSvc}
+          courseSvc={courseSvc}
         >
           <View style={styles.container}>
             <NavStack/>

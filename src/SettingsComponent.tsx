@@ -7,14 +7,15 @@ import { NavigationActions } from 'react-navigation';
 
 import { TrekInfo, TrekType, MeasurementSystemType, DEFAULT_STRIDE_LENGTHS, STRIDE_CONVERSION_FACTORS,
          WEIGHT_UNIT_CHOICES, STRIDE_UNIT_CHOICES, TREK_TYPE_CHOICES, TrekTypeDataNumeric,
-         TREK_SELECT_BITS} from './TrekInfoModel'
+         TREK_SELECT_BITS, SWITCH_MEASUREMENT_SYSTEM, SYSTEM_TYPE_METRIC, SYSTEM_TYPE_US, 
+         TREK_TYPE_WALK, TREK_TYPE_HIKE, TREK_TYPE_RUN, INVALID_NAMES} from './TrekInfoModel'
 import RadioGroup from './RadioGroupComponent';
 import TrekTypeSelect from './TrekTypeSelectComponent';
 import { ToastModel } from './ToastModel';
 import { CONTROLS_HEIGHT, COLOR_THEME_LIGHT, COLOR_THEME_DARK, ThemeType,
-         SCROLL_DOWN_DURATION, FADE_IN_DURATION } from './App';
+         SCROLL_DOWN_DURATION, FADE_IN_DURATION, TREKLOG_FILENAME_REGEX } from './App';
 import { UtilsSvc, LB_PER_KG, CM_PER_INCH } from './UtilsService';
-import { ModalModel } from './ModalModel';
+import { ModalModel, CONFIRM_INFO } from './ModalModel';
 import Waiting from './WaitingComponent';
 import { StorageSvc } from './StorageService';
 import SpeedDial from './SpeedDialComponent';
@@ -26,7 +27,7 @@ import IconButton from './IconButtonComponent';
 import RadioPicker from './RadioPickerComponent';
 import FadeInView from './FadeInComponent';
 import SlideDownView from './SlideDownComponent';
-import { GroupSvc, NEW_GROUP, DEFAULT_WEIGHT, SettingsObj, WeightObj } from './GroupService';
+import { GroupSvc, DEFAULT_WEIGHT, SettingsObj, WeightObj } from './GroupService';
 
 const goBack = NavigationActions.back() ;
 
@@ -54,13 +55,13 @@ class Settings extends Component<{
   @observable heightStr;
   @observable packWeightStr;
   @observable strideLengthStr;
-  @observable newGroup;
-  @observable enterGroup;
   @observable keyboardOpen;
   @observable originalSettings : SettingsObj;
   @observable openItems;
+  @observable newGroup;
   
   uSvc = this.props.utilsSvc;
+  gSvc = this.props.groupSvc;
   todayShortDate = this.uSvc.formatShortSortDate();
   heightNum = 0;
   weightNum = 0;
@@ -68,8 +69,9 @@ class Settings extends Component<{
   weights : WeightObj[] = [];
   packWeightNum = 0;
   strideLengths : TrekTypeDataNumeric;
-  activeNav = '';             // used by BottomNavigation component
+  activeNav = '';             // used by navigation component
   oldTheme : ThemeType;
+  oldSystem : MeasurementSystemType;
 
   keyboardDidShowListener;
   keyboardDidHideListener;
@@ -83,9 +85,11 @@ class Settings extends Component<{
     // read the Groups object from the database
     this.setOriginalSettings(undefined);
     this.setOpenItems(false);        
-    this.props.groupSvc.readGroups()
+    this.gSvc.readGroups()
     .then((groups) => {
         this.oldTheme = groups.theme;
+        this.oldSystem = groups.measurementSystem;
+        this.setSystem(groups.measurementSystem || SYSTEM_TYPE_US);
         this.changeGroup(this.props.trekInfo.group)
       })
     .catch(() => {
@@ -115,17 +119,16 @@ class Settings extends Component<{
     this.dataReady = false;
     this.changingGroup = false;
     this.group = '';
-    this.system = 'Metric';
-    this.theme = this.props.groupSvc.getTheme();
+    this.system = SYSTEM_TYPE_METRIC;
+    this.theme = this.gSvc.getTheme();
     this.heightStr = '0';
     this.weightStr = '0';
     this.packWeightStr = '0';
     this.strideLengthStr = {Walk: '0', Run: '0', Bike: '0', Hike: '0'};
-    this.newGroup = '';
-    this.enterGroup = false;
     this.keyboardOpen = false;
     this.originalSettings = undefined;
     this.setOpenItems(false);
+    this.setNewGroup(false);
   }
 
   @action
@@ -151,19 +154,23 @@ class Settings extends Component<{
     this.setDefaultSettings();
     this.updateDataReady(true);
     this.props.toastSvc.toastOpen({tType: "Error", content: "Please create a group."});
-    this.changeGroup(NEW_GROUP);
+    this.getDifferentGroup();
   }
 
   // Get the settings for the current group
   getGroupSettings = () => {
     return new Promise((resolve, reject) => {
-      this.props.groupSvc.readGroupSettings(this.group)
+      this.gSvc.readGroupSettings(this.group)
       .then((data : SettingsObj) => {
-        this.setSystem(data.measurementSystem === 'US' ? 'Metric' : 'US');  // set to opposite of specified system
         this.heightNum = data.height !== undefined ? data.height : 0;
-        this.setHeight(Math.round(data.measurementSystem === 'US' ? (this.heightNum / CM_PER_INCH) : this.heightNum).toString()); 
+
+        // temporarily switch to wrong system type to allow use of switchSystem to do some things
+        this.setSystem(SWITCH_MEASUREMENT_SYSTEM[this.system] as MeasurementSystemType);
+
+        this.setHeight(Math.round(this.system === SYSTEM_TYPE_US ? 
+                                  (this.heightNum / CM_PER_INCH) : this.heightNum).toString()); 
         this.packWeightNum = data.packWeight !== undefined ? data.packWeight : 0;
-        this.setPackWeight(Math.round(data.measurementSystem === 'US' 
+        this.setPackWeight(Math.round(this.system === SYSTEM_TYPE_METRIC 
                 ? (this.packWeightNum / CM_PER_INCH) 
                 : this.packWeightNum).toString()); 
         this.strideLengths = data.strideLengths || DEFAULT_STRIDE_LENGTHS;
@@ -179,7 +186,9 @@ class Settings extends Component<{
         }
         this.weightDate = this.weights.length ? this.weights[this.weights.length-1].date : this.todayShortDate;
         this.weightNum = this.weights.length ? this.weights[this.weights.length-1].weight : DEFAULT_WEIGHT;
-        this.switchSystem(data.measurementSystem) // this will set packWeightStr, weightStr and strideLengthStr values
+
+        // this will set packWeightStr, weightStr and strideLengthStr values
+        this.switchSystem(SWITCH_MEASUREMENT_SYSTEM[this.system] as MeasurementSystemType) 
         this.setDefaultType(data.type);           // having this earlier in the sequence causes error in weights array
         this.setOriginalSettings(this.getSaveObj());     // save original settings
         resolve("ok");
@@ -194,17 +203,19 @@ class Settings extends Component<{
   // set the settings fields to their default values
   @action
   setDefaultSettings = () => {
-    this.setDefaultType('Walk');
-    this.setSystem('Metric');
+    this.setDefaultType(TREK_TYPE_WALK);
+    // switch to wrong measurementSystem type
+    this.setSystem(SWITCH_MEASUREMENT_SYSTEM[this.system] as MeasurementSystemType);
     this.heightNum = 0;
     this.setHeight("0");
     this.weightDate = this.todayShortDate;
-    this.weightNum = DEFAULT_WEIGHT;  // kg
+    this.weightNum = this.system === SYSTEM_TYPE_METRIC ?  DEFAULT_WEIGHT : DEFAULT_WEIGHT * LB_PER_KG;  // kg
     this.weights = [{weight: this.weightNum, date: this.weightDate}];
     this.packWeightNum = 0;
     this.setPackWeight("0");
     this.strideLengths = this.uSvc.copyObj(DEFAULT_STRIDE_LENGTHS) as TrekTypeDataNumeric;
-    this.switchSystem('US');
+    // switch to wright measurementSystem type
+    this.switchSystem(SWITCH_MEASUREMENT_SYSTEM[this.system] as MeasurementSystemType);
     this.setOriginalSettings({} as SettingsObj);  // default to everything has changed
   }
 
@@ -228,7 +239,6 @@ class Settings extends Component<{
       type: this.defaultType,
       height: this.uSvc.fourSigDigits(this.heightNum),
       weights: newWeights,
-      measurementSystem: this.system,
       strideLengths: this.uSvc.copyObj(this.strideLengths) as TrekTypeDataNumeric,
       packWeight: this.uSvc.fourSigDigits(this.packWeightNum),
     }
@@ -240,6 +250,7 @@ class Settings extends Component<{
     
     if(sGiven === undefined) { return true; }
     if(this.theme !== this.oldTheme) { return false; }
+    if (this.system !== this.oldSystem) { return false; }
     sNow = this.getSaveObj();
     return this.uSvc.compareObjects(sNow, sGiven);
   }
@@ -247,14 +258,17 @@ class Settings extends Component<{
   // Update the current TrekInfoModel settings from the given object
   @action
   updateTrekInfo = (saveObj: SettingsObj) => {
+    this.props.trekInfo.setMeasurementSystem(this.system)
     this.props.trekInfo.setTrekLogGroupProperties(this.group, saveObj);
   }
 
   // save the list of groups to the database
   saveGroupsList = () => {
     this.oldTheme = this.theme;
-    this.props.groupSvc.setTheme(this.theme);
-    return this.props.groupSvc.saveGroups(this.group);
+    this.oldSystem = this.system;
+    this.gSvc.setTheme(this.theme);
+    this.gSvc.setMeasurementSystem(this.system);
+    return this.gSvc.saveGroups(this.group);
   }
 
   // save the list of groups and the Settings of the current group to the database
@@ -264,12 +278,12 @@ class Settings extends Component<{
     return new Promise((resolve, reject) => {
       this.saveGroupsList()
       .then(() => {
-        this.props.groupSvc.saveGroupSettings(this.group, saveObj)
+        this.gSvc.saveGroupSettings(this.group, saveObj)
         .then(() => {
           this.updateTrekInfo(saveObj);
           this.setOriginalSettings(this.getSaveObj());
           setTimeout(() => {
-            if(!this.enterGroup){
+            if(!this.newGroup){
               this.props.toastSvc.toastOpen({tType: "Success", content: "Settings updated."});
             }
             resolve('OK');      
@@ -314,14 +328,8 @@ class Settings extends Component<{
   }
 
   @action
-  setEnterGroup = (status: boolean) => {
-    this.enterGroup = status;
-  }
-
-  // Update the value of the newGroup property
-  @action
-  setNewGroup = (val: string) => {
-    this.newGroup = val;
+  setNewGroup = (status: boolean) => {
+    this.newGroup = status;
   }
 
   @action
@@ -362,48 +370,39 @@ class Settings extends Component<{
 
   // Change to the settings for the given group
   changeGroup = (value: string) => {
-    const {infoConfirmColor, infoConfirmTextColor} = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
-
-    if (value === NEW_GROUP) {
-      this.setNewGroup('New Group Name');
-      this.setEnterGroup(true);
-    }
-    else {
-      if (this.group!== '' && this.group!== value){
-        if (!this.compareSettings(this.originalSettings)) {
-          this.props.modalSvc.simpleOpen({heading: "Save Settings", headingIcon: "Settings",  
-                                          headingStartColor: infoConfirmColor, 
-                                          headingTextColor: infoConfirmTextColor, 
-                                          content: "Save changes to settings for "+ this.group +"?", 
-                                          cancelText: 'DISCARD', okText: 'SAVE'})
-          .then(() => {
-            this.saveSettings()
-            .then(() =>{
-              this.finishSetGroup(value);
-            })
-            .catch(() => {}) // error saving, group will not change
-          })
-          .catch(() =>{
+    if (this.group!== '' && this.group!== value){
+      if (!this.compareSettings(this.originalSettings)) {
+        this.props.modalSvc.simpleOpen({heading: "Save Settings", headingIcon: "Settings",
+                                        dType: CONFIRM_INFO,  
+                                        content: "Save changes to settings for "+ this.group +"?", 
+                                        cancelText: 'DISCARD', okText: 'SAVE'})
+        .then(() => {
+          this.saveSettings()
+          .then(() =>{
             this.finishSetGroup(value);
           })
-        }
-        else {
+          .catch(() => {}) // error saving, group will not change
+        })
+        .catch(() =>{
           this.finishSetGroup(value);
-        }
+        })
       }
       else {
         this.finishSetGroup(value);
       }
+    }
+    else {
+      this.finishSetGroup(value);
     }
   }
 
   finishSetGroup = (value: string) => {
     this.updateChangingGroup(true);
     this.setGroup(value);
-    if (value !== this.props.groupSvc.getLastGroup()){
+    if (value !== this.gSvc.getLastGroup()){
       this.saveGroupsList();
     }
-    this.setEnterGroup(false);
+    this.setNewGroup(false);
     this.getGroupSettings()
     .then(() =>{
       this.updateTrekInfo(this.originalSettings);
@@ -435,7 +434,7 @@ class Settings extends Component<{
         cancelText: 'CANCEL', deleteText: 'DELETE'})
       .then(() => {
         this.updateChangingGroup(true);
-        this.props.groupSvc.deleteGroup(this.group)
+        this.gSvc.deleteGroup(this.group)
         .then((currGroup : string) => {
           this.props.toastSvc.toastOpen({tType: "Info", content: "Successfully deleted " + this.group});
           if (currGroup !== this.group){
@@ -452,37 +451,25 @@ class Settings extends Component<{
     });
   }
 
-  // abort creating a new group
-  @action
-  cancelNewGroup = () => {
-    requestAnimationFrame(() => {
-      if( this.group!== '') { 
-        this.setEnterGroup(false); 
-      } else {
-        this.props.toastSvc.toastOpen({tType: "Error", content: "Please create a group."});
-      }
-      this.setNewGroup('');
-    });
-  }
-
   // Add a new name to the list of groups
-  addNewGroup = () => {
+  addNewGroup = (name: string) => {
     requestAnimationFrame(() => {
-      let name =  this.newGroup;
-      if (name !== '' && !/[\/ ,.<>?+=\-@!#]/.test(name)){
-        if (name !== 'New' && !this.props.groupSvc.isGroup(name)){
-          this.props.groupSvc.addGroup(name)
+      if (name !== '' && TREKLOG_FILENAME_REGEX.test(name)){
+        if ((INVALID_NAMES.indexOf(name.toLocaleLowerCase()) === -1) && !this.gSvc.isGroup(name)){
+          this.gSvc.addGroup(name)
           .then(() => {
             this.props.toastSvc.toastOpen({tType: "Success", content: "Successfully added " + name + "."});
+            this.setNewGroup(true);
             this.changeGroup(name);
           })
         }
         else {
-          this.props.toastSvc.toastOpen({tType: "Error", content: "Group " + name + " already exists."});
+          this.props.toastSvc.toastOpen({tType: "Error", content: "Reserved or existing name."});
+          this.getDifferentGroup();
         }
-        this.setNewGroup('');
       } else {
-        this.props.toastSvc.toastOpen({tType: "Error", content: "Invalid name."});
+        this.props.toastSvc.toastOpen({tType: "Error", content: "Invalid name. (use a-zA-Z0-9)"});
+        this.getDifferentGroup();
       }
     });
 }
@@ -491,8 +478,8 @@ class Settings extends Component<{
   @action
   switchSystem = (value: MeasurementSystemType) => {
     switch (this.system){
-      case 'Metric':
-        if (value === 'US'){
+      case SYSTEM_TYPE_METRIC:
+        if (value === SYSTEM_TYPE_US){
           this.setWeight(Math.round(this.weightNum * LB_PER_KG).toString());
           this.setHeight(Math.round(this.heightNum / CM_PER_INCH).toString());
           this.setPackWeight(Math.round(this.packWeightNum * LB_PER_KG).toString());
@@ -502,8 +489,8 @@ class Settings extends Component<{
           })
         }
         break;
-      case 'US':
-        if (value === 'Metric'){
+      case SYSTEM_TYPE_US:
+        if (value === SYSTEM_TYPE_METRIC){
           this.setWeight(Math.round(this.weightNum).toString());
           this.setHeight(Math.round(this.heightNum).toString());
           this.setPackWeight(Math.round(this.packWeightNum).toString());
@@ -526,7 +513,7 @@ class Settings extends Component<{
     }
     this.weightNum = Math.round(parseFloat(value) * 100) / 100;;
     if( !isNaN(this.weightNum) ){
-      if(this.system === 'US'){ this.weightNum /= LB_PER_KG };  // store values as kg
+      if(this.system === SYSTEM_TYPE_US){ this.weightNum /= LB_PER_KG };  // store values as kg
       this.weightNum = this.uSvc.fourSigDigits(this.weightNum);
     }
     this.setWeight(value);
@@ -536,7 +523,7 @@ class Settings extends Component<{
   setNewPackWeight = (value: string) => {
     this.packWeightNum = Math.round(parseFloat(value) * 100) / 100;;
     if( !isNaN(this.packWeightNum) ){
-      if(this.system === 'US'){ this.packWeightNum /= LB_PER_KG };  // store values as kg
+      if(this.system === SYSTEM_TYPE_US){ this.packWeightNum /= LB_PER_KG };  // store values as kg
       this.packWeightNum = this.uSvc.fourSigDigits(this.packWeightNum);
     }
     this.setPackWeight(value);
@@ -547,13 +534,13 @@ class Settings extends Component<{
     let ht = Math.round(parseFloat(value) * 100) / 100;
 
     if (!this.strideLengths.Walk) {
-      this.setStrideLength("Walk", Math.round(ht * .414).toString());
+      this.setStrideLength(TREK_TYPE_WALK, Math.round(ht * .414).toString());
     }
     if (!this.strideLengths.Hike) {
-      this.setStrideLength("Hike", Math.round(ht * .414).toString());
+      this.setStrideLength(TREK_TYPE_HIKE, Math.round(ht * .414).toString());
     }
     if (!this.strideLengths.Run) {
-      this.setStrideLength("Run", Math.round(ht * .95).toString());
+      this.setStrideLength(TREK_TYPE_RUN, Math.round(ht * .95).toString());
     }
     this.setNewHeight(value);
   }
@@ -562,7 +549,7 @@ class Settings extends Component<{
   setNewHeight = (value: string) => {
     this.heightNum = Math.round(parseFloat(value) * 100) / 100;
     if( !isNaN(this.heightNum) ) {
-      if(this.system === 'US'){ this.heightNum *= CM_PER_INCH };  // store values as kg
+      if(this.system === SYSTEM_TYPE_US){ this.heightNum *= CM_PER_INCH };  // store values as kg
       this.heightNum = this.uSvc.fourSigDigits(this.heightNum);
     }
     this.setHeight(value);
@@ -573,22 +560,27 @@ class Settings extends Component<{
   setStrideLength = (type: string, value?: string) => {
     if (value !== undefined){
       this.strideLengthStr[type] = value;
-      this.strideLengths[type] = ((this.system === 'US') // keep strideLengths in cm
+      this.strideLengths[type] = ((this.system === SYSTEM_TYPE_US) // keep strideLengths in cm
             ? (parseInt(value,10) * CM_PER_INCH) 
             : parseInt(value, 10)) * STRIDE_CONVERSION_FACTORS[type];
       this.strideLengths[type] = this.uSvc.fourSigDigits(this.strideLengths[type]);
     }
     else {  // if no value given, just update from strideLengths
-      this.strideLengthStr[type] = Math.round(((this.system === 'US') // strideLengths are in cm
+      this.strideLengthStr[type] = Math.round(((this.system === SYSTEM_TYPE_US) // strideLengths are in cm
       ? (this.strideLengths[type] / CM_PER_INCH) 
       : this.strideLengths[type]) / STRIDE_CONVERSION_FACTORS[type]).toString();
     }
   }
 
   getDifferentGroup = () => {
-    this.props.groupSvc.getGroupSelection(this.setRadioPickerOpen, this.group,  'Select A Group', true)
+    this.gSvc.getGroupSelection(this.setRadioPickerOpen, this.group,  'Select A Group', true, TREKLOG_FILENAME_REGEX)
     .then((newGroup) => {
-      this.changeGroup(newGroup);
+      if(this.gSvc.isGroup(newGroup)){
+        this.changeGroup(newGroup);
+      }
+      else {
+        this.addNewGroup(newGroup)
+      }
     })
     .catch(() =>{ 
     })
@@ -600,10 +592,10 @@ class Settings extends Component<{
     const { cardLayout, navItem, navIcon, pageTitle } = this.props.uiTheme;
     const settingIconSize = 24;
     const cardHeight = 110;
-    const haveGroups = this.props.groupSvc.groups.groups.length > 0;
+    const haveGroups = this.gSvc.haveGroups();
     const { highTextColor, mediumTextColor, disabledTextColor, secondaryColor, primaryColor,
-            pageBackground, dangerColor, cancelColor, dividerColor, rippleColor, navItemBorderColor,
-            okChoiceColor, listIconColor, disabledHeaderTextColor } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
+            pageBackground, dangerColor, dividerColor, rippleColor, navItemBorderColor,
+            listIconColor } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
     const groupSelectIconSize = 26;
     const groupSelectButtonSize = 40;
 
@@ -737,23 +729,23 @@ class Settings extends Component<{
 
     return(
         <View style={styles.container}>
-          <TrekLogHeader
-            icon="*"
-            titleText="Settings"
-            backButtonFn={() =>  this.props.navigation.dispatch(goBack)}
-            group={this.group || "None"}
-            groupTextColor={disabledHeaderTextColor}
-          />
           <RadioPicker pickerOpen={this.radioPickerOpen}/>
           {this.dataReady &&
           <View style={[styles.container, {paddingBottom: 10}]}>
+            <TrekLogHeader
+              icon="*"
+              titleText="Settings"
+              backButtonFn={() =>  this.props.navigation.dispatch(goBack)}
+              group={this.group || "None"}
+              setGroupFn={this.getDifferentGroup}
+            />
             <View style={[cardLayout, { marginBottom: 0, paddingBottom: 10}]}>
               <Text style={[pageTitle, {color: highTextColor}]}>TrekLog Settings</Text>
             </View>
             <ScrollView>
               <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
                         duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
-                <SlideDownView startValue={-130} endValue={0} open={this.openItems} 
+                <SlideDownView startValue={-150} endValue={0} open={this.openItems} 
                           duration={SCROLL_DOWN_DURATION}>
                   <View style={[cardLayout, styles.cardCustom]}>
                     <SettingHeader icon={APP_ICONS.YinYang} label="Theme" 
@@ -780,13 +772,37 @@ class Settings extends Component<{
                 <SlideDownView startValue={-130} endValue={0} open={this.openItems} 
                           duration={SCROLL_DOWN_DURATION}>
                   <View style={[cardLayout, styles.cardCustom]}>
+                    <SettingHeader icon={APP_ICONS.CompassMath} label="Measurements" 
+                                  description="System to use for weights and distances"
+                    />
+                    <View style={styles.inputRow}>
+                      <RadioGroup 
+                        onChangeFn={this.switchSystem}
+                        selected={this.system}
+                        labels={["Imperial", "Metric"]}
+                        values={[SYSTEM_TYPE_US, SYSTEM_TYPE_METRIC]}
+                        labelStyle={{color: highTextColor, fontSize: 18}}
+                        justify='start'
+                        inline
+                        itemHeight={30}
+                        radioFirst
+                      />
+                    </View>
+                  </View>           
+                </SlideDownView>
+              </FadeInView>       
+              <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                        duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                <SlideDownView startValue={-150} endValue={0} open={this.openItems} 
+                          duration={SCROLL_DOWN_DURATION}>
+                  <View style={[cardLayout, styles.cardCustom]}>
                     <SettingHeader icon={APP_ICONS.FolderOpenOutline} label="Groups" 
-                      description="Treks are separated into groups. The rest of the settings apply only to this group:"
+                      description="Treks are organized into groups. The rest of the settings apply only to this group:"
                     />
                     <View style={styles.inputRow}>     
                       <IconButton 
                         iconSize={groupSelectIconSize}
-                        icon="FolderOpenOutline"
+                        icon="ListChoice"
                         style={{...navItem, ...styles.groupSelectButtonStyle}}
                         raised
                         borderColor={navItemBorderColor}
@@ -795,8 +811,8 @@ class Settings extends Component<{
                         onPressFn={this.getDifferentGroup}
                       />
                       <Text style={{color: highTextColor, fontSize: 20,marginLeft: 5, width: 150}}>
-                        {this.enterGroup ? "New" : this.group}</Text>
-                      {(!this.enterGroup && haveGroups) &&
+                        {this.newGroup ? "New" : this.group}</Text>
+                      {(!this.newGroup && haveGroups) &&
                         <View style={styles.addIconArea}>
                           <TouchableNativeFeedback
                             background={TouchableNativeFeedback.Ripple(rippleColor, false)}
@@ -809,38 +825,6 @@ class Settings extends Component<{
                         </View>
                       }
                     </View>
-                    {this.enterGroup &&
-                      <View style={[styles.rowLayout, {marginLeft: 30}]}>
-                        <View style={{width: 175}}>
-                          <TextInputField
-                            style={[styles.textInputItem, styles.inputTextStyle]}
-                            inputWidth={175}
-                            onChangeFn={(text : string) => this.setNewGroup(text)}
-                            kbType='default'
-                            placeholderValue={this.newGroup}
-                            autoFocus
-                          /> 
-                        </View>
-                        <View style={styles.addIconArea}>
-                          <TouchableNativeFeedback
-                            background={TouchableNativeFeedback.Ripple(rippleColor, false)}
-                            onPress={this.cancelNewGroup}
-                          >
-                            <View style={styles.groupActionButton}>
-                              <Text style={[styles.button, {color: cancelColor}]}>CANCEL</Text>
-                            </View>
-                          </TouchableNativeFeedback>
-                          <TouchableNativeFeedback
-                            background={TouchableNativeFeedback.Ripple(rippleColor, false)}
-                            onPress={this.addNewGroup}
-                          >
-                            <View style={styles.groupActionButton}>
-                              <Text style={[styles.button, {color: okChoiceColor}]}>ADD</Text>
-                            </View>
-                          </TouchableNativeFeedback>
-                        </View>
-                      </View>
-                    }
                   </View>  
                 </SlideDownView>
               </FadeInView>       
@@ -868,31 +852,7 @@ class Settings extends Component<{
                 <SlideDownView startValue={-130} endValue={0} open={this.openItems} 
                           duration={SCROLL_DOWN_DURATION}>
                   <View style={[cardLayout, styles.cardCustom]}>
-                    <SettingHeader icon={APP_ICONS.CompassMath} label="Measurements" 
-                                  description="System to use for weights and distances in this group"
-                    />
-                    <View style={styles.inputRow}>
-                      <RadioGroup 
-                        onChangeFn={this.switchSystem}
-                        selected={this.system}
-                        labels={["Imperial", "Metric"]}
-                        values={["US", "Metric"]}
-                        labelStyle={{color: highTextColor, fontSize: 18}}
-                        justify='start'
-                        inline
-                        itemHeight={30}
-                        radioFirst
-                      />
-                    </View>
-                  </View>           
-                </SlideDownView>
-              </FadeInView>       
-              <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
-                        duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
-                <SlideDownView startValue={-130} endValue={0} open={this.openItems} 
-                          duration={SCROLL_DOWN_DURATION}>
-                  <View style={[cardLayout, styles.cardCustom]}>
-                    <SettingHeader icon={APP_ICONS.Scale} label="Weight" 
+                    <SettingHeader icon={APP_ICONS.BathroomScale} label="Weight" 
                                   description="Weight to use for this group"
                     />
                     <View style={styles.inputRow}>
@@ -908,19 +868,25 @@ class Settings extends Component<{
                   </View>           
                 </SlideDownView>
               </FadeInView>       
-              <View style={[cardLayout, styles.cardCustom]}>
-                <SettingHeader icon={APP_ICONS.WomanGirl} label="Height" 
-                               description="Height to use for this group"
-                />
-                <View style={styles.inputRow}>
-                  <TextInputField
-                    style={[styles.textInputItem, styles.numberInput, styles.inputTextStyle]}
-                    onChangeFn={this.useHeightForStrides}
-                    placeholderValue={this.heightStr}
-                  />
-                  <Text style={styles.unitsText}>{STRIDE_UNIT_CHOICES[this.system]}</Text>
-                </View>
-              </View>           
+              <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                        duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                <SlideDownView startValue={-130} endValue={0} open={this.openItems} 
+                          duration={SCROLL_DOWN_DURATION}>
+                  <View style={[cardLayout, styles.cardCustom]}>
+                    <SettingHeader icon={APP_ICONS.WomanGirl} label="Height" 
+                                  description="Height to use for this group"
+                    />
+                    <View style={styles.inputRow}>
+                      <TextInputField
+                        style={[styles.textInputItem, styles.numberInput, styles.inputTextStyle]}
+                        onChangeFn={this.useHeightForStrides}
+                        placeholderValue={this.heightStr}
+                      />
+                      <Text style={styles.unitsText}>{STRIDE_UNIT_CHOICES[this.system]}</Text>
+                    </View>
+                  </View>           
+                </SlideDownView>
+              </FadeInView>       
               <View style={[cardLayout, styles.cardCustom]}>
                 <SettingHeader icon={APP_ICONS.Walk} label="Walking" 
                                description="Walking stride length for this group"
@@ -928,8 +894,8 @@ class Settings extends Component<{
                 <View style={styles.inputRow}>
                   <TextInputField
                     style={[styles.textInputItem, styles.numberInput, styles.inputTextStyle]}
-                    onChangeFn={(text) => this.setStrideLength('Walk', text)}
-                    placeholderValue={this.strideLengthStr['Walk']}
+                    onChangeFn={(text) => this.setStrideLength(TREK_TYPE_WALK, text)}
+                    placeholderValue={this.strideLengthStr[TREK_TYPE_WALK]}
                   />
                   <Text style={styles.unitsText}>{STRIDE_UNIT_CHOICES[this.system]}</Text>
                 </View>
@@ -941,21 +907,8 @@ class Settings extends Component<{
                 <View style={styles.inputRow}>
                   <TextInputField
                     style={[styles.textInputItem, styles.numberInput, styles.inputTextStyle]}
-                    onChangeFn={(text) => this.setStrideLength('Run', text)}
-                    placeholderValue={this.strideLengthStr['Run']}
-                  />
-                  <Text style={styles.unitsText}>{STRIDE_UNIT_CHOICES[this.system]}</Text>
-                </View>
-              </View>           
-              <View style={[cardLayout, styles.cardCustom]}>
-                <SettingHeader icon={APP_ICONS.Bike} label="Biking" 
-                               description="Bike tire outer diameter for this group"
-                />
-                <View style={styles.inputRow}>
-                  <TextInputField
-                    style={[styles.textInputItem, styles.numberInput, styles.inputTextStyle]}
-                    onChangeFn={(text) => this.setStrideLength('Bike', text)}
-                    placeholderValue={this.strideLengthStr['Bike']}
+                    onChangeFn={(text) => this.setStrideLength(TREK_TYPE_RUN, text)}
+                    placeholderValue={this.strideLengthStr[TREK_TYPE_RUN]}
                   />
                   <Text style={styles.unitsText}>{STRIDE_UNIT_CHOICES[this.system]}</Text>
                 </View>
@@ -967,8 +920,8 @@ class Settings extends Component<{
                 <View style={styles.inputRow}>
                   <TextInputField
                     style={[styles.textInputItem, styles.numberInput, styles.inputTextStyle]}
-                    onChangeFn={(text) => this.setStrideLength('Hike', text)}
-                    placeholderValue={this.strideLengthStr['Hike']}
+                    onChangeFn={(text) => this.setStrideLength(TREK_TYPE_HIKE, text)}
+                    placeholderValue={this.strideLengthStr[TREK_TYPE_HIKE]}
                   />
                   <Text style={styles.unitsText}>{STRIDE_UNIT_CHOICES[this.system]}</Text>
                 </View>

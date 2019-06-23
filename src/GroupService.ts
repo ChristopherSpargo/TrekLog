@@ -14,18 +14,17 @@ export interface WeightObj {
 export interface SettingsObj {
   group:         string,         // group these settings are for
   type:         TrekType,
-  measurementSystem: MeasurementSystemType,
   height:       number,
   strideLengths: TrekTypeDataNumeric,
   weights:       WeightObj[],
   packWeight:   number,
-  theme?:        ThemeType,
 }
 
 
 export interface GroupsObj {
   groups:     string[],
   lastGroup:  string,
+  measurementSystem: MeasurementSystemType,
   theme:      ThemeType
 }
 
@@ -103,6 +102,16 @@ export class GroupSvc {
     return this.groups.theme;
   }
 
+  // set the measurementSystem property of the GroupsObj
+  setMeasurementSystem = (system: MeasurementSystemType) => {
+    this.groups.measurementSystem = system;
+  }
+
+  // get the theme property of the GroupsObj
+  getMeasurementSystem = () => {
+    return this.groups.measurementSystem;
+  }
+
   // read the settings file for the given group
   readGroupSettings = (group: string) => {
     return new Promise((resolve, reject) => {
@@ -142,7 +151,8 @@ export class GroupSvc {
     return this.groups.lastGroup;
   }
 
-  getGroupSelection = (pickerOpenFn : Function, currGroup: string, heading: string, allowNew = false) => {
+  getGroupSelection = (pickerOpenFn : Function, currGroup: string, heading: string, 
+    allowNew = false, nameTest: RegExp) => {
     let names = [];
     let values = [];
 
@@ -155,10 +165,36 @@ export class GroupSvc {
 
     return new Promise<any>((resolve, reject) => {
       this.modalSvc.openRadioPicker({heading: heading, selectionNames: selNames,
-      selectionValues: selValues, selection: currGroup,
+      selectionValues: selValues, selection: currGroup, itemTest: nameTest,
       openFn: pickerOpenFn})
       .then((newGroup) => {
         resolve(newGroup);
+      })
+      .catch(() => {
+        reject('NO_SELECTION') 
+      })
+    })
+  }
+
+  getGroupSelections = (pickerOpenFn : Function, currGroups: string[], heading: string) => {
+    let selNames = [...this.groups.groups];
+    let selections = [];
+
+    selections.length = selNames.length;
+    selections.fill(false);
+    currGroups.forEach((group) => selections[selNames.indexOf(group)] = true);
+    return new Promise<any>((resolve, reject) => {
+      this.modalSvc.openCheckboxPicker({heading: heading, selectionNames: selNames,
+      selections: selections,
+      openFn: pickerOpenFn})
+      .then((newSelections) => {
+        let newGroups = [];
+        newSelections.forEach((value,i) => {
+          if(value) { 
+            newGroups.push(selNames[i]);
+          }
+        })
+        resolve(newGroups);
       })
       .catch(() => {
         reject('NO_SELECTION') 
@@ -172,6 +208,10 @@ export class GroupSvc {
     return this.saveGroups();
   }
 
+  // return true if there are groups in the groupList
+  haveGroups = () => {
+    return this.groups.groups.length > 0;
+  }
   // return true if the given name is in the list of groups
   isGroup = (name: string) : boolean => {
     return this.groups.groups.indexOf(name) !== -1;

@@ -273,6 +273,7 @@ class DashBoard extends Component<{
     const calsLabel = this.showTotalCalories ? 'Calories' : 'Calories/Min';
     const stepsLabel = this.showStepsPerMin ? 'Steps/Min' : 'Steps';
     const minItemWidth = 120;
+    const groupLabel = this.fS.groupList.length > 1 ? "Multiple" : this.tInfo.group;
     const { highTextColor, trekLogBlue, disabledTextColor, mediumTextColor,
             rippleColor } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
 
@@ -472,7 +473,7 @@ class DashBoard extends Component<{
       <View style={styles.container}>
         {(!haveTreks && !this.tInfo.resObj && this.fS.filterRuns) &&
           <View style={{height: 205}}>
-            <Text style={styles.noMatches}>Nothing To Display for {this.tInfo.group}</Text>
+            <Text style={styles.noMatches}>Nothing To Display for {groupLabel}</Text>
           </View>
         }
         {(haveTreks && this.fS.filterRuns) &&

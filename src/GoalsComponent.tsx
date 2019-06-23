@@ -9,7 +9,7 @@ import { TrekInfo } from './TrekInfoModel'
 import { ToastModel } from './ToastModel';
 import { TREKLOG_GOALS_KEY } from './App';
 import { UtilsSvc } from './UtilsService';
-import { ModalModel } from './ModalModel';
+import { ModalModel, CONFIRM_INFO } from './ModalModel';
 import Waiting from './WaitingComponent';
 import { GoalsSvc } from './GoalsService';
 import { GoalDisplayObj } from './GoalsService';
@@ -172,11 +172,10 @@ class Goals extends Component<{
   // delete the selected goal from the list
   @action
   resetGoal = (index: number) => {
-    const {infoConfirmColor, infoConfirmTextColor} = this.props.uiTheme.palette[this.tI.colorTheme];
     let g = this.gS.goalList[index];
 
     this.props.modalSvc.simpleOpen({heading: "Reset Goal", headingIcon: "History",
-      headingStartColor: infoConfirmColor, headingTextColor: infoConfirmTextColor,
+      dType: CONFIRM_INFO,
       content: "Reset effective date to TODAY for:", bigContent: '"' + this.gS.formatGoalStatement(g) + '"', 
       cancelText: 'CANCEL', okText: 'RESET'})
     .then(() => {
@@ -192,13 +191,11 @@ class Goals extends Component<{
     this.gS.setEditObjFields(this.gS.goalList[index]);
     this.gS.editGoalIndex = index;
     this.gS.setGoalEditMode('Edit');
-    // this.setOpenGoals(false);        
     this.props.navigation.navigate('GoalEditor', {title: 'Edit Goal'});
   }
 
   // Show the details of the given GoalDisplayObj
   showGoalDetails = (gdo: GoalDisplayObj) => {
-    // this.setOpenGoals(false);        
     this.props.navigation.navigate('GoalDetail', {title: this.gS.formatGoalStatement(gdo.goal), detailObj: gdo});
   }
 
@@ -207,7 +204,6 @@ class Goals extends Component<{
     this.gS.setNewDITGoalObj('');
     this.gS.editGoalIndex = -1;
     this.gS.setGoalEditMode('New');
-    // this.setOpenGoals(false);        
     this.props.navigation.navigate('GoalEditor', {title: 'New Goal', onAddFn: this.setTitleParam});
   }
 
@@ -249,10 +245,8 @@ class Goals extends Component<{
           } = this.props.uiTheme.palette[this.tI.colorTheme];
     const { cardLayout, pageTitle } = this.props.uiTheme;
             const displayList = this.gS.displayList && this.gS.displayList.length > 0;
-    const ribbonIconSize = 40;
-    const ribbonLabelTextSize = 16;
-    const startOffset = -110 * (this.gS.displayList ? this.gS.displayList.length : 0);
-    const fadeDuration = 200 * (this.gS.displayList ? this.gS.displayList.length : 0);
+    const iconSize = 40;
+    const iconLabelTextSize = 16;
 
     const styles=StyleSheet.create({
       container: { ... StyleSheet.absoluteFillObject, backgroundColor: pageBackground },
@@ -260,6 +254,8 @@ class Goals extends Component<{
         // borderBottomWidth: 1,
         justifyContent: "space-between",
         paddingBottom: 0,
+        paddingTop: 0,
+        paddingLeft: 0,
         marginTop: 0,
         marginBottom: 0,
         paddingRight: 0,
@@ -278,25 +274,23 @@ class Goals extends Component<{
       },
       goalDate: {
         color: mediumTextColor,
-        paddingRight: 15,
-        paddingLeft: 5,
         fontSize: 16
       },
       goalText: {
         color: highTextColor,
         fontSize: 20
       },
-      ribbonArea: {
-        width: ribbonIconSize,
-        height: ribbonIconSize,
+      iconArea: {
+        width: iconSize,
+        height: iconSize,
         marginRight: 5,
         backgroundColor: "transparent",
       },
       progressLabel: {
-        width: ribbonIconSize + 5,
+        width: iconSize + 5,
         marginBottom: 10,
         marginTop: -4,
-        fontSize: ribbonLabelTextSize,
+        fontSize: iconLabelTextSize,
         fontWeight: "200",
         color: highTextColor,
         textAlign: "center",
@@ -320,6 +314,10 @@ class Goals extends Component<{
       speedDialTrigger: {
         backgroundColor: pageBackground,
       },
+      buttonArea: {
+        marginTop: 10,
+        marginLeft: 15,
+      },
       divider: {
         flex: 1,
         borderBottomWidth: 1,
@@ -342,15 +340,15 @@ class Goals extends Component<{
               style={styles.addGoalFab}
               icon="Plus"
             />
-        <TrekLogHeader
-          titleText={this.headerTitle}
-          icon="*"
-          backButtonFn={() => this.props.navigation.dispatch(goBack)}
-          group={this.tI.group || "None"}
-          groupTextColor={disabledHeaderTextColor}
-      />
         {this.gS.dataReady &&
           <View style={styles.itemsArea}>
+            <TrekLogHeader
+              titleText={this.headerTitle}
+              icon="*"
+              backButtonFn={() => this.props.navigation.dispatch(goBack)}
+              group={this.tI.group || "None"}
+              groupTextColor={disabledHeaderTextColor}
+            />
             <View style={[cardLayout, {marginBottom: 0, paddingBottom: 15}]}>
               <Text style={[pageTitle, {color: highTextColor}]}>Status of Goals</Text>
             </View>
@@ -373,27 +371,25 @@ class Goals extends Component<{
                             rippleColor={rippleColor}
                             onPress={this.showSelectedGoal.bind(this, index)}
                           >
-                            <View>
-                              <View style={styles.rowLayout}>
+                            <View style={styles.buttonArea}>
+                              <Text style={styles.goalText}>{this.gS.formatGoalStatement(dlItem.goal)}</Text>
+                              <View style={[styles.rowLayout, {alignItems: "flex-start"}]}>
                                 <SvgIcon 
-                                  paths={APP_ICONS.Ribbon}
-                                  size={ribbonIconSize}
+                                  paths={APP_ICONS.Target}
+                                  size={iconSize}
                                   fill="url(#grad)"
                                   fillPct={this.gS.computeProgress(dlItem)}
                                   stroke={highTextColor}
                                   strokeWidth={.5}
-                                  style={styles.ribbonArea}
+                                  style={styles.iconArea}
                                 />
-                                <Text style={styles.goalText}>{this.gS.formatGoalStatement(dlItem.goal)}</Text>
+                                <Text style={styles.goalDate}>{"Set: " + this.uSvc.dateFromSortDate(dlItem.goal.dateSet)}</Text>
                               </View>
+                              <Text style={styles.progressLabel}>
+                                {Math.round(this.gS.computeProgress(dlItem) * 100) + '%'}
+                              </Text>
                               <View style={[styles.rowLayout,
-                                            {alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10}]}>
-                                <View>
-                                  <Text style={styles.progressLabel}>
-                                    {Math.round(this.gS.computeProgress(dlItem) * 100) + '%'}
-                                  </Text>
-                                  <Text style={styles.goalDate}>{"Set: " + this.uSvc.dateFromSortDate(dlItem.goal.dateSet)}</Text>
-                                </View>
+                                            {alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 10}]}>
                                 <SpeedDial
                                   icon="DotsVertical"
                                   iconColor={mediumTextColor}
@@ -422,9 +418,8 @@ class Goals extends Component<{
           </View>
         }
         {(!this.gS.dataReady) &&
-          <Waiting 
-        />
-      }
+          <Waiting/>
+        }
       </View>
     )
   }

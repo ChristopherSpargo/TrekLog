@@ -170,9 +170,17 @@ export class LocationSvc {
         //   Alert.alert('Error obtaining current location', JSON.stringify(error));
         // }, 100);
       }, gclOptions);
-  
   }
   
+  // pause or resume geolocation service
+  pauseGeolocation = (pause: boolean) => {
+    if (pause) {
+      BackgroundGeolocation.stop();
+    } else {
+      BackgroundGeolocation.start();
+    }
+  }
+
   // stop the geolocation service
   stopGeolocation() {
     this.geolocationIsRunning = false;

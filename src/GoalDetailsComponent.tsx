@@ -438,7 +438,7 @@ class GoalDetails extends Component<{
 
     const { mediumTextColor, pageBackground, dividerColor, highTextColor, navItemBorderColor,
             navIconColor, itemMeetsGoal, itemMissesGoal, listIconColor } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
-    const { cardLayout, controlsArea, navItem, navIcon, pageTitle } = this.props.uiTheme;
+    const { cardLayout, controlsArea, navItemWithLabel, navItemLabel, navIcon, pageTitle } = this.props.uiTheme;
     const dObj = this.detailObj;
     const validDisplayObj = dObj !== undefined && dObj.items.length > 0;
     const statusBarHt = 0;
@@ -623,12 +623,12 @@ class GoalDetails extends Component<{
                         </View>
                       </View>
                     }
-                    {!chartForTreks &&
+                    {(!chartForTreks) &&
                       <View>
                         <View style={styles.rowBetween}>
                           <View style={styles.rowStart}>
                             <SvgIcon 
-                              paths={APP_ICONS.Ribbon}
+                              paths={APP_ICONS.Certificate}
                               size={infoIconSize}
                               fill="url(#grad)"
                               fillPct={this.gS.computeProgress(dObj)}
@@ -676,13 +676,15 @@ class GoalDetails extends Component<{
               <IconButton 
                 iconSize={NAV_ICON_SIZE}
                 icon="Map"
-                style={navItem}
+                style={navItemWithLabel}
                 borderColor={navItemBorderColor}
                 iconStyle={navIcon}
                 color={navIconColor}
                 raised
                 onPressFn={this.setActiveNav}
                 onPressArg="Map"
+                label="Map"
+                labelStyle={navItemLabel}
               />
             </View>
           }

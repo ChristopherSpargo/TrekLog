@@ -124,7 +124,7 @@ class TrekLabelForm extends React.Component<{
   render() {
 
     const mData = this.props.modalSvc.lfData;
-    const { controlsArea, cardLayout, roundedTop, navItem, navIcon } = this.props.uiTheme;
+    const { controlsArea, cardLayout, roundedTop, navItemWithLabel, navItemLabel, navIcon } = this.props.uiTheme;
     const { highTextColor, dividerColor, mediumTextColor, navIconColor, pageBackground, navItemBorderColor,
             trekLogBlue, contrastingMask_3 } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
     const defHIcon = mData.headingIcon || "Edit";
@@ -273,23 +273,27 @@ class TrekLabelForm extends React.Component<{
                     <IconButton 
                       iconSize={navIconSize}
                       icon="ArrowBack"
-                      style={navItem}
+                      style={navItemWithLabel}
                       borderColor={navItemBorderColor}
                       iconStyle={navIcon}
                       color={navIconColor}
                       raised
                       onPressFn={this.dismiss}
+                      label="Cancel"
+                      labelStyle={navItemLabel}
                     />
                   }
                     <IconButton 
                       iconSize={navIconSize}
                       icon="CheckMark"
-                      style={navItem}
+                      style={navItemWithLabel}
                       iconStyle={navIcon}
                       borderColor={navItemBorderColor}
                       color={navIconColor}
                       raised
                       onPressFn={this.close}
+                      label="Save"
+                      labelStyle={navItemLabel}
                     />
                 </View>
               }

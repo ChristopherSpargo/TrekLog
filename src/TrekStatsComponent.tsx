@@ -45,7 +45,10 @@ function TrekStats({
   logging,
   trekType,
   interval = undefined,
-  intervalData = undefined
+  intervalData = undefined,
+  bgImage = undefined,
+  format = undefined,
+  sysChangeFn = undefined,
 }) {
   const uiTheme: any = useContext(UiThemeContext);
   const tInfo: TrekInfo = useContext(TrekInfoContext);
@@ -279,16 +282,24 @@ function TrekStats({
 
   const {
     highTextColor,
-    trekLogBlue,
     selectOnFilm,
+    selectOnTheme,
     mediumTextColor,
     secondaryColor,
     pageBackground,
     disabledTextColor,
     rippleColor
   } = uiTheme.palette[tInfo.colorTheme];
-  const carIconSize = 14;
+  const small = format === 'small';
+  const carIconSize = small ? 12 : 14;
   const minItemWidth = 135;
+  const timeFontSie = small ? 28 : 90
+  const statLabelFontSize = small ? 16 : 22;
+  const statValueFontSize = small ? 22 : 50;
+  const statUnitsFontSize = small ? 18 : 30;
+  const statUnitsMargin = small ? 0 : 8;
+  const selectColor = bgImage ? selectOnFilm : selectOnTheme;
+  const switchSys = sysChangeFn || tInfo.switchMeasurementSystem;
 
   const styles = StyleSheet.create({
     container: {
@@ -305,11 +316,11 @@ function TrekStats({
       flexDirection: "row",
       justifyContent: "center",
       minWidth: minItemWidth,
-      paddingBottom: 10
+      paddingBottom: 5
     },
     statLabelText: {
       color: mediumTextColor,
-      fontSize: 22
+      fontSize: statLabelFontSize
     },
     statValue: {
       minWidth: minItemWidth,
@@ -322,12 +333,12 @@ function TrekStats({
     },
     statValueText: {
       color: highTextColor,
-      fontSize: 50
+      fontSize: statValueFontSize
     },
     statUnitsText: {
       color: highTextColor,
-      marginBottom: 8,
-      fontSize: 30
+      marginBottom: statUnitsMargin,
+      fontSize: statUnitsFontSize
     },
     bigStats: {
       alignItems: "center",
@@ -365,7 +376,7 @@ function TrekStats({
             <Text
               style={[
                 styles.statLabelText,
-                props.switchFn ? { color: selectOnFilm } : {}
+                props.switchFn ? { color: selectColor } : {}
               ]}
             >
               {props.item.label}
@@ -388,12 +399,12 @@ function TrekStats({
     <View style={styles.bigStats}>
       <StatItem
         item={{ value: formattedDuration(), units: "", label: "Time" }}
-        valueStyle={{ fontSize: 90 }}
+        valueStyle={{ fontSize: timeFontSie }}
       />
       <View style={styles.bigStatPair}>
         <StatItem
           item={formattedDist()}
-          switchFn={tInfo.switchMeasurementSystem}
+          switchFn={switchSys}
         />
         {logging && <StatItem item={formattedCurrentSpeed()} />}
         {!logging && (
@@ -403,7 +414,7 @@ function TrekStats({
           />
         )}
       </View>
-      <View style={styles.bigStatPair}>
+      <View style={[styles.bigStatPair, {marginTop: small ? 10 : 0}]}>
         <StatItem
           item={formattedCals()}
           showDriving={true}

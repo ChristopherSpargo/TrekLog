@@ -3,24 +3,28 @@ import { Alert } from 'react-native';
 import { LatLng } from 'react-native-maps';
 import BackgroundGeolocation from '@mauron85/react-native-background-geolocation';
 
-import { UtilsSvc, CM_PER_INCH, LB_PER_KG, M_PER_FOOT} from './UtilsService';
+import { UtilsSvc,LB_PER_KG, M_PER_FOOT} from './UtilsService';
 import { GroupsObj, GroupSvc, SettingsObj } from './GroupService';
 import { WeatherData } from './WeatherSvc';
 import { StorageSvc } from './StorageService';
-import { ModalModel } from './ModalModel';
-import { uiTheme, COLOR_THEME_DARK, ThemeType, COLOR_THEME_LIGHT } from './App';
+import { ModalModel, CONFIRM_INFO } from './ModalModel';
+import { COLOR_THEME_DARK, ThemeType, COLOR_THEME_LIGHT } from './App';
+import { Course } from './CourseService';
+import { CourseTrackingMethod } from './TrackingMethodComponent';
 
 // Class containing information about and service functions for a Trek
 
-export const CURR_DATA_VERSION = '5.2';   // version 2 added weather conditions data
-                                          // version 3 added hiking data (packWeight)
-                                          // version 4 converted to storing with smaller key names
-                                          // version 4.2 store calories computation
-                                          // version 4.3 store drivingACar status
-                                          // version 4.4 change calorie calculation
-                                          // version 5.0 start using files instead of AsyncData
-                                          // version 5.1 start storing images in Pictures/TrekLog directory
-                                          // version 5.2 truncate speed values to 4 significant digits
+export const CURR_DATA_VERSION = '5.3';   
+  // version 2 added weather conditions data
+  // version 3 added hiking data (packWeight)
+  // version 4 converted to storing with smaller key names
+  // version 4.2 store calories computation
+  // version 4.3 store drivingACar status
+  // version 4.4 change calorie calculation
+  // version 5.0 start using files instead of AsyncData
+  // version 5.1 start storing images in Pictures/TrekLog directory
+  // version 5.2 truncate speed values to 4 significant digits
+  // version 5.3 set start point time to 0 and duration to end point time
 
 export type MapType = "none" | "standard" | "satellite" | "hybrid" | "terrain" | "mutedStandard";
 
@@ -48,6 +52,7 @@ export const TREK_SELECT_BITS = {
 export const CALC_VALUES_INTERVAL = 3;  // number of seconds between updates of 'current' values (speedNow, etc.)
 export const MAX_TIME_SINCE = 3;        // max seconds since last GPS point before we punt on current values
 
+
 export const START_VIB = 250;
 export const STOP_VIB =  500;
 
@@ -71,7 +76,7 @@ export interface NumericRange {
   range: number
 }
 
-export const BACKGROUND_IMAGES = 2;
+export const BACKGROUND_IMAGES = 1;
 
 export const IMAGE_TYPE_PHOTO = 1;
 export const IMAGE_TYPE_VIDEO = 2;
@@ -129,6 +134,7 @@ export interface TrekObj {
     trekImages ?:   TrekImageSet[],     // pictures/videos taken while logging
     calories ?:     number,             // calories burned
     drivingACar ?:  boolean,            // true if user was driving a car for the trek
+    course ?:       string,             // course association
 }
 
 export interface TrekTypeDataNumeric  {
@@ -142,6 +148,27 @@ export interface TrekTimeInterval {
   duration:       number,
   distance:       number,
   speed:          number,
+}
+
+export interface TrackingObject {
+  courseName: string,           // name of the course used for tracking
+  method: CourseTrackingMethod, // method used for tracking
+  goalValue: number,            // goal time (sec) or speed/rate (mps)
+  pointList: TrekPoint[],       // point data to use for computing the tracking movement
+  path: LatLng[],               // path to show on screen of the course being tracked
+  markerLocation: TrekPoint,    // current point on the course path for the marker
+  markerValue: number,          // current value of data being tracked (dist or time)
+  duration: number,             // duration of course
+  distance: number,             // distance of course
+  type: string,                 // type of data to track (distance or time)
+  maxValue: number,             // max value to end tracking
+  incrementValue: number,       // amount to move marker every interval
+  initialValue: number,         // starting point for marker on course path
+  timerInterval: number,        // milliseconds between each marker movement
+  startTime: number             // when timer was started milliseconds
+  header?:  string,             // header for the tracking status display
+  timeDiff: number,             // current time differential with trek
+  distDiff: number              // current dist differential with trek
 }
 
 export interface RestoreObject {
@@ -159,7 +186,6 @@ export interface RestoreObject {
   units ?:              string,
   lastTimeUnits ?:      string,
   lastDistUnits ?:      string,
-  statsOpen ?:          boolean,
   layoutOpts ?:         string,
   dtMin ?:              string,
   dtMax ?:              string,
@@ -179,11 +205,20 @@ export interface RestoreObject {
   showMapInLog ?:       boolean,
   colorTheme ?:         ThemeType,
   backgroundImage ?:    number,
+  trackingObj?:         TrackingObject,
+  trekTimerPaused ?:    boolean,
+  trackingMethod  ?:    CourseTrackingMethod,
+  trackinigValue  ?:    number,
+  trackingCourse  ?:    Course,
 }
 
 export type MeasurementSystemType = "US" | "Metric";
+export const SYSTEM_TYPE_METRIC = 'Metric';
+export const SYSTEM_TYPE_US = 'US';
+export const SWITCH_MEASUREMENT_SYSTEM = {US: 'Metric', Metric: 'US'};
+
 export const DEFAULT_STRIDE_LENGTHS : TrekTypeDataNumeric = // stridelengths are stored in cm
-  {Walk: 0, Run: 0, Bike: 31 * CM_PER_INCH * 3.1416, Hike: 0};
+  {Walk: 0, Run: 0, Bike: 0, Hike: 0};
 export const STRIDE_CONVERSION_FACTORS = {Walk: 1, Run: 1, Bike: 3.1416, Hike: 1}
 export const STRIDE_UNIT_CHOICES = {US: 'in', Metric: 'cm'};
 export const WEIGHT_UNIT_CHOICES = {US: 'lb', Metric: 'kg'};
@@ -196,7 +231,7 @@ export const SMALL_DIST_UNITS = {mi: 'ft', km: 'm'};
 export const SMALL_DIST_LONG_NAMES = {US: 'feet', Metric: 'meters'};
 export const SPEED_UNIT_CHOICES = {US: 'mph', Metric: 'kph'};
 export const DIST_UNIT_GRAPH_CHOICES = {US: 'miles', Metric: 'kilometers'};
-export const SMALL_DIST_CUTOFF = 165; //meters
+export const SMALL_DIST_CUTOFF = 325; //meters
 
 export const TREK_TYPE_CHOICES = [ TREK_TYPE_WALK, TREK_TYPE_RUN, TREK_TYPE_BIKE, TREK_TYPE_HIKE ];
 export const TREK_VERBS_OBJ = {Walk: 'Walking', Run: 'Running', Bike: 'Biking', Hike: 'Hiking'};
@@ -207,7 +242,39 @@ export const PLURAL_STEP_NAMES = {Walk: 'Steps', Run: 'Strides', Bike: 'Steps', 
 
 export const PACK_APPLIES_TO = {Hike: true};
 export const SWITCH_SPEED_AND_TIME = {speed: 'time', time: 'speed'};
-export const SWITCH_MEASUREMENT_SYSTEM = {US: 'Metric', Metric: 'US'};
+
+export const INVALID_NAMES = [
+  'new', 'courses', 'groups', 'settings', 'goals', 'treklog', 'course', 'cancel'
+]
+
+export const FAKE_SELECTION = '#none';
+export const RESP_OK = 'OK';
+export const RESP_CANCEL = 'CANCEL';
+export const RESP_NO_MATCH = 'PATH DOES NOT MATCH\n';
+export const RESP_BAD_LENGTH = 'WRONG PATH LENGTH\n';
+export const RESP_HAS_LINK = 'LINK ALREADY PRESENT';
+
+export const MSG_LINK_NOT_ADDED = 'LINK NOT ADDED\n';
+export const MSG_LINK_NOT_CHANGED = 'LINK NOT CHANGED\n';
+export const MSG_LINK_NOT_REMOVED = 'LINK NOT REMOVED\n';
+export const MSG_LINK_ADDED = 'COURSE LINK ADDED\n';
+export const MSG_REMOVE_LINK_ERROR = 'ERORR REMOVING LINK\n';
+export const MSG_REMOVE_EFFORT = 'ERORR REMOVING EFFORT\n';
+export const MSG_HAS_LINK = 'ALREADY LINKED\n';
+export const MSG_NO_EFFORT = 'EFFORT NOT FOUND\n';
+export const MSG_EFFORT_PATH = 'EFFORT PATH READ FAIL\n';
+export const MSG_UPDATING_TREK = 'ERROR UPDATING TREK\N';
+export const MSG_COURSE_READ = 'COURSE READ FAIL\n';
+export const MSG_COURSE_WRITE = 'COURSE WRITE FAIL\n';
+export const MSG_EFFORT_READ = 'EFFORT READ FAIL\n';
+export const MSG_EFFORT_WRITE = 'EFFORT WRITE FAIL\n';
+export const MSG_NEW_EFFORT = 'FAIL TO CREATE EFFORT\n';
+export const MSG_NO_LIST = "NO LIST\n";
+export const MSG_COURSE_LIST_READ = "COURSE LIST READ ERROR\n";
+export const MSG_COURSE_LIST_WRITE = "COURSE LIST WRITE ERROR\n";
+export const MSG_STARTING_LOC = 'BAD STARTING LOCATION\n';
+export const MSG_NEW_COURSE_RECORD = 'NEW COURSE RECORD\n';
+
 
 export class TrekInfo {
 
@@ -220,13 +287,13 @@ export class TrekInfo {
               endTime = '';
   @observable type : TrekType;
               weight = 0;
-  @observable packWeight;
+  @observable packWeight : number;
               strideLength = 0;
   @observable conditions : WeatherData;
-  @observable duration;
-  @observable trekDist;
+  @observable duration : number;
+  @observable trekDist : number;
               totalGpsPoints = 0;
-              pointList : TrekPoint[];
+              pointList : TrekPoint[] = [];
               hills;
               elevations;
               elevationGain;
@@ -237,10 +304,12 @@ export class TrekInfo {
               trekImages : TrekImageSet[];
               calories = 0;
               drivingACar = false;
+  @observable course : string;
 
 // properties used for program state
   @observable appReady;
   @observable measurementSystem : MeasurementSystemType;
+  @observable trekPointCount;
   @observable logging;
   @observable layoutOpts;
   @observable timerOn;
@@ -251,7 +320,6 @@ export class TrekInfo {
   @observable limitsActive;
   @observable timeLimit;
   @observable distLimit;
-  @observable statsOpen;
   @observable timeframe;                          // time frame used to select summaries and reviews
   @observable trekCount;
   @observable averageSpeed;
@@ -265,20 +333,27 @@ export class TrekInfo {
   @observable showTotalCalories;                  // Flag to switch between showing Calories and Calories/Min
   @observable speedDialZoom;
   @observable trekImageCount;                     // Number of images/videos in this trek 
-  @observable trekPointCount;                     // Number of GPS points currently in the trek path
   @observable showMapInLog   : boolean;
   @observable pendingReview : boolean;
   @observable colorTheme : ThemeType;
   @observable showMapControls;
   @observable currentBackground;
+  @observable trackingMarkerLocation : TrekPoint;
+  @observable trackingDiffTime : number;
+  @observable trackingDiffDist : number;
+  @observable trackingValue : number;             // value associated with tracking method
+  @observable trackingMethod : CourseTrackingMethod;   // method being used to track progress .vs. course
 
   startMS = 0;                                    // trek start time in milliseconds
   trekTimerId = 0;                                // id for the 1-second timer used during logging
+  trekTimerPaused = false;                        // flag to pause timer when save/discard dialog displayed
   initialLoc : LatLng;                            // location detected when TrekLog first starts
   strideLengths = DEFAULT_STRIDE_LENGTHS;         // array of lengths used to compute steps/revs by trek type
   calculatedValuesTimer = CALC_VALUES_INTERVAL;   // counter used to keep certain display values updated
   resObj : RestoreObject;                         // state object used to restore log session if app terminated
+  trackingObj : TrackingObject;                   // object that holds tracking marker information       
 
+  trackingCourse : Course;                        // course selected to track
 
   allTreks : TrekObj[] = [];                      // All treks maintained in memory for performance
   updateMap = true;                               // Flag used to limit trek map updates
@@ -309,6 +384,7 @@ export class TrekInfo {
     weight: 0,                                    // in kg
     packWeight: 0,                                // in kg
   }
+  // badPointList : number[];                     // **Debug
 
   constructor ( private utilsSvc: UtilsSvc, private storageSvc: StorageSvc, private modalSvc: ModalModel,
     private groupSvc: GroupSvc ) {
@@ -320,17 +396,18 @@ export class TrekInfo {
   initializeObservables = () => {
     this.appReady = false;
     this.dataReady = false;
+    this.trekPointCount = 0;
     this.date = '';
     this.startTime = '';
     this.type = 'Walk';
     this.group = '';
     this.packWeight = 0;
     this.logging = false;
-    this.pointList = [];
     this.duration = 0;
     this.trekDist = 0;
     this.setTrekLabel('');
     this.setTrekNotes('');
+    this.setCourseLink(undefined);
     this.timerOn = false;
     this.trekSaved = false;
     this.averageSpeed = 'N/A';
@@ -347,19 +424,22 @@ export class TrekInfo {
     this.conditions = undefined;
     this.timeframe = 'TWeek';
     this.typeSelections = 0;
-    this.defaultMapType = 'theme' as MapType;
+    this.defaultMapType = 'standard';
     this.limitsActive = false;
     this.timeLimit = 0;
     this.distLimit = 0;
-    this.statsOpen = false;
     this.trekImageCount = 0;
     this.intervals = undefined;
     this.speedDialZoom = true;
-    this.trekPointCount = 0;
     this.showMapInLog = false;
     this.pendingReview = false;
     this.setColorTheme(COLOR_THEME_DARK);
     this.setCurrentBackground(0);
+    this.clearTrackingObj();
+    this.setTrackingDiffTime(0);
+    this.setTrackingDiffDist(0);
+    this.setTrackingValue(0);
+    this.setTrackingMethod('courseTime');
   }
 
   // read the Settings object and initialize the corresponding properties. Also read the list of treks.
@@ -376,23 +456,24 @@ export class TrekInfo {
             .then((groups : GroupsObj) => {
               // set the current use to the most recent group
               this.setColorTheme(groups.theme || COLOR_THEME_DARK);
+              this.setMeasurementSystem(groups.measurementSystem);
               this.setTrekLogGroupProperties(groups.lastGroup || groups.groups[0])
               .then((status) => {
                 this.pendingInit = false;
                 resolve(status)
               })
               .catch(() => {
+                // Error reading settings for group
                 this.pendingInit = false;
                 this.settingsFound = "NO_SETTINGS";
                 reject('NO_SETTINGS');
-                // Error reading settings for group
               })
             })
             .catch (() => {
+              // Error reading list of groups
               this.pendingInit = false;
               this.settingsFound = "NO_GROUPS";
               reject('NO_GROUPS');
-              // Error reading list of groups
             })      
           // })
         }
@@ -410,7 +491,6 @@ changeGroupSettings = (newSettings: SettingsObj) => {
   this.defaultTrekType = newSettings.type;
   this.updateType(newSettings.type);   // set the underlying default trek type
   this.updateGroup(newSettings.group);
-  this.updateMeasurementSystem(newSettings.measurementSystem)
   this.updateStrideLengths(newSettings.strideLengths);
   this.strideLength = newSettings.strideLengths[this.type];
   this.weight = newSettings.weights[newSettings.weights.length-1].weight;
@@ -430,8 +510,8 @@ setTrekLogGroupProperties = (group: string, settings ?: SettingsObj) => {
         .then((result : SettingsObj) => {
           newSettings = result;
           this.changeGroupSettings(newSettings);
-          this.groupSvc.saveGroups(newSettings.group)
-          .then(() => resolve(this.readAllTreks(group)))
+          this.groupSvc.saveGroups(newSettings.group)   // set new last group in groups object
+          .then(() => resolve(this.readAllTreks([group])))
           .catch((err) => reject('Error: SAVE_GROUPS:\n' + err))
         })
         .catch((err) => {
@@ -441,25 +521,24 @@ setTrekLogGroupProperties = (group: string, settings ?: SettingsObj) => {
       else {
         this.changeGroupSettings(newSettings);
         this.groupSvc.saveGroups(newSettings.group)
-        .then(() => resolve(this.readAllTreks(group)))
+        .then(() => resolve(this.readAllTreks([group])))
         .catch((err) => reject('Error: SAVE_GROUPS:\n' + err))
     }
   })
 }
 
-// read populate the allTreks array with the treks for the given group
-readAllTreks = (group: string) => {
-  const {infoConfirmColor, infoConfirmTextColor} = uiTheme.palette[this.colorTheme];
+// populate the allTreks array with the treks for the given groups
+readAllTreks = (groups: string[]) => {
   return new Promise<string> ((resolve, _reject) => {
-    this.storageSvc.readAllTrekFiles(group)
+    // this.setDataReady(false);
+    this.storageSvc.readAllTrekFiles(groups)
     .then((result) => {
       this.allTreks = result.list;
       this.setTrekCount();
       if (result.upgraded > 0){
         this.modalSvc.simpleOpen({heading: 'Data Upgraded', 
               content: "Upgraded " + result.upgraded + " treks to match the current TrekLog version.", 
-              okText: 'OK', headingStartColor: infoConfirmColor, 
-              headingTextColor: infoConfirmTextColor, headingIcon: 'Delete'});
+              okText: 'OK', dType: CONFIRM_INFO, headingIcon: 'Update'});
       }
       this.setDataReady(true);
       resolve('OK');
@@ -500,6 +579,7 @@ readAllTreks = (group: string) => {
       trekImages:   this.trekImages,
       calories:     this.calories,
       drivingACar:  this.drivingACar,
+      course:       this.course,
     }
     if (!noPointList){
       savObj.pointList =    this.pointList;
@@ -524,8 +604,7 @@ readAllTreks = (group: string) => {
     this.duration       = data.duration;
     this.trekDist       = data.trekDist;
     this.totalGpsPoints = data.totalGpsPoints;
-    this.pointList      = data.pointList;
-    this.setTrekPointCount();
+    this.setPointList(data.pointList);
     this.elevations     = data.elevations;
     this.elevationGain  = data.elevationGain;
     // this.hills          = data.hills;
@@ -537,6 +616,7 @@ readAllTreks = (group: string) => {
     this.trekImages     = data.trekImages;
     this.calories       = data.calories;
     this.drivingACar    = data.drivingACar;
+    this.course         = data.course;
     this.setTrekImageCount(this.getTrekImageCount());
     this.updateCalculatedValues(true);
   }
@@ -560,7 +640,6 @@ readAllTreks = (group: string) => {
       lastTimeUnits:      this.lastTimeUnits,
       lastDistUnits:      this.lastDistUnits,
       layoutOpts:         this.layoutOpts,
-      statsOpen:          this.statsOpen,
       dtMin:              this.dtMin,
       dtMax:              this.dtMax,
       defaultTrekType:    this.defaultTrekType,
@@ -579,22 +658,27 @@ readAllTreks = (group: string) => {
       showMapInLog:       this.showMapInLog,
       colorTheme:         this.colorTheme,
       backgroundImage:    this.currentBackground,
+      trekTimerPaused:    this.trekTimerPaused,
+      trackingObj:        this.trackingObj,
+      trackingMethod:     this.trackingMethod,
+      trackinigValue:     this.trackingValue,
+      trackingCourse:     this.trackingCourse,
     }
     return rObj;
   }
 
   @action
   restoreLogState = (resObj: RestoreObject) => {
-    BackgroundGeolocation.getLocations((dataPts) => {
+      this.setDataReady(false);
+      BackgroundGeolocation.getLocations((dataPts) => {
         BackgroundGeolocation.startTask(taskKey => {
-          this.setDataReady(false);
           this.startMS =            resObj.startMS;
           // first, rebuild the pointList from the Geolocation service
           resObj.trek.pointList = dataPts.map((pt) => {
             return ({l:{a: pt.latitude, o: pt.longitude}, 
                      t: Math.round((pt.time - this.startMS) / 1000), s: pt.speed}) as TrekPoint;
           })
-          this.updateMeasurementSystem(resObj.measurementSystem);
+          this.setMeasurementSystem(resObj.measurementSystem);
           this.setTrekProperties(resObj.trek);
           this.updateStrideLengths(resObj.strideLengths);
           this.setColorTheme(resObj.colorTheme);
@@ -609,7 +693,6 @@ readAllTreks = (group: string) => {
           this.units =              resObj.units;
           this.lastTimeUnits =      resObj.lastTimeUnits;
           this.lastDistUnits =      resObj.lastDistUnits;
-          this.setStatsOpen(resObj.statsOpen);
           this.dtMin =              resObj.dtMin;
           this.dtMax =              resObj.dtMax;
           this.defaultTrekType =    resObj.defaultTrekType;
@@ -622,11 +705,15 @@ readAllTreks = (group: string) => {
           this.setDefaultMapType(resObj.defaultMapType);
           this.currentGroupSettings.weight = this.weight;            // from setTrekProperties
           this.currentGroupSettings.packWeight = this.packWeight;    // "
-          // this.updateCalculatedValues(true);
           this.setSaveDialogOpen(resObj.saveDialogOpen);
           this.setTrekLabelFormOpen(resObj.trekLabelFormOpen);
           this.setCancelDialogOpen(resObj.cancelDialogOpen);
           this.setShowMapInLog(resObj.showMapInLog);
+          this.setTrekTimerPaused(resObj.trekTimerPaused);
+          this.trackingObj = resObj.trackingObj;
+          this.setTrackingValue(resObj.trackinigValue);
+          this.setTrackingMethod(resObj.trackingMethod);
+          this.trackingCourse = resObj.trackingCourse;
           this.readAllTreks(this.group);                             // this will set dataReady to true
           BackgroundGeolocation.endTask(taskKey);
         });
@@ -636,12 +723,11 @@ readAllTreks = (group: string) => {
   }
 
   // Save the given trek object to the database and optionally add entry to in-memory list of treks.
-  saveTrek = (trek: TrekObj, addEntry = 'add') : Promise<string> => {
+  saveTrek = (trek: TrekObj, addEntry : "add" | "update" | "none" = 'update') : Promise<string> => {
 
     return new Promise((resolve, reject) => {
       if (trek.pointList === undefined || trek.pointList.length === 0) { reject('Empty Trek'); }
-      if ( addEntry === 'add' ) { this.addAllTreksEntry(trek); }
-      if ( addEntry === 'update' ) { this.updateAllTreksEntry(trek); }
+      if ( addEntry !== 'update' ) { this.updateAllTreksList(trek, addEntry); }
       this.storageSvc.storeTrekData(trek)
       .then(() => {
         resolve('Ok');
@@ -696,17 +782,79 @@ readAllTreks = (group: string) => {
     }
   }
 
-  // update the entry for the given trek in the allTreks array
+  // update/add the entry for the given trek in the allTreks array
   @action 
-  updateAllTreksEntry = (trek: TrekObj) => {
+  updateAllTreksList = (trek: TrekObj, updateType = 'update') => {
     let id = this.getTrekId(trek);
     let i = this.allTreks.findIndex((t) => this.getTrekId(t) === id);
     if (i !== -1) {
       this.allTreks[i] = trek; // replace allTreks list entry
+    } else {
+      if(updateType === 'add'){
+        this.addAllTreksEntry(trek);  // add it if not found
+      }
     }
   }
 
   ////////////////////////////////////////// End of Treks Database Handling
+
+  // clear the trackingObj and trackingMarkerLocation
+  clearTrackingObj = () => { 
+    this.setTrackingMarkerLocation(undefined);
+    this.trackingObj = undefined;   
+  }
+
+  // update selected values of the trackingObj
+  updateTrackingObj = (updates: any) => {
+    this.trackingObj = {...this.trackingObj, ...updates};
+  }
+
+  // set the value of the trackingMarkerLocation property
+  @action
+  setTrackingMarkerLocation = (loc?: TrekPoint) => { 
+    this.trackingMarkerLocation = loc;
+  }
+
+  // set the value of the trackingDiffTime property
+  @action
+  setTrackingDiffTime = (diff: number) => { 
+    this.trackingDiffTime = diff;
+  }
+
+  // set the value of the trackingDiffDist property
+  @action
+  setTrackingDiffDist = (diff: number) => { 
+    this.trackingDiffDist = diff;
+  }
+
+  @action
+  setTrackingValue = (value: number) => {
+    this.trackingValue = value;
+  }
+
+  @action
+  setTrackingMethod = (value: CourseTrackingMethod) => {
+    this.trackingMethod = value;
+  }
+
+  @action
+  setTrackingValueInfo = (info: {value: number, method: CourseTrackingMethod}) => {
+    this.setTrackingValue(info.value);
+    this.setTrackingMethod(info.method);
+  }
+
+  // clear properties related to course tracking
+  clearTrackingItems = () => {
+    this.trackingCourse = undefined;
+    this.clearTrackingObj();
+    this.setTrackingDiffDist(undefined);
+    this.setTrackingDiffTime(undefined);
+  }
+
+  // set the value of the trekTimerPaused property
+  setTrekTimerPaused = (status: boolean) => {
+    this.trekTimerPaused = status;
+  }
 
   // set the current background image
   @action
@@ -765,12 +913,6 @@ readAllTreks = (group: string) => {
     this.appReady = status;
   }
 
-  // set the value of the statsOpen property
-  @action
-  setStatsOpen = (status: boolean) => {
-    this.statsOpen = status;
-  }
-
   // set the value of the showMap property
   @action
   setShowMapInLog = (status: boolean) => {
@@ -797,6 +939,13 @@ readAllTreks = (group: string) => {
     this.units = info.units;
   }
 
+  // return the type of limit on the trek in progress. return undefined if no limit.
+  trekLimitType = () :string => {
+    if (this.distLimit) { return 'Dist'; }
+    if (this.timeLimit) { return 'Time'; }
+    return undefined;
+  }
+
   @action
   // set packWeight (assume kilos)
   updatePackWeight = (value: number) => {
@@ -807,6 +956,12 @@ readAllTreks = (group: string) => {
   // set packWeight (convert to kilos if necessary)
   setPackWeight = (value: number) => {
     this.packWeight = this.measurementSystem === 'US' ? (value / LB_PER_KG) : value;
+  }
+
+  @action
+  // set course 
+  setCourseLink = (name: string) => {
+    this.course = name;
   }
 
   // set packWeight from the info object (convert to kilos if nec)
@@ -945,7 +1100,7 @@ readAllTreks = (group: string) => {
   // set the data properties related to elevations for this trek
   @action
   setElevationProperties = () : Promise<string> => {
-    let path = this.pointList.map((pt) =>{ return {latitude: pt.l.a, longitude: pt.l.o}; }); // copy just the LatLng data from trek path
+    let path = this.utilsSvc.cvtPointListToLatLng(this.pointList); // use the LatLng version of the path
     return new Promise((resolve, reject) => {
       this.utilsSvc.getElevationsArray(path, this.trekDist)
       .then((data : ElevationData[]) =>{
@@ -993,7 +1148,7 @@ readAllTreks = (group: string) => {
     } else {
       newIndx = currSet.images.length > imageIndex ? imageIndex : imageIndex - 1;
     }
-    this.saveTrek(this.getSaveObj(), 'update');
+    this.saveTrek(this.getSaveObj());
     this.setTrekImageCount(this.getTrekImageCount());
     this.storageSvc.removeDataItem(delUri)
     .then(() => {})
@@ -1048,16 +1203,15 @@ readAllTreks = (group: string) => {
       title += ' at ' +  this.utilsSvc.formatTime(image.time);
     }
     return title;
-}
+  }
 
   // set the value of the trekPointCount property
   @action
   setTrekPointCount = () => {
-    this.trekPointCount = this.pointListLength();
+    this.trekPointCount = this.pointList.length;
   }
 
   // set the pointList property
-  @action
   setPointList = (list: TrekPoint[]) => {
     this.pointList = list;
     this.setTrekPointCount();
@@ -1075,12 +1229,12 @@ readAllTreks = (group: string) => {
 
   // Return the last point in the trek or undefined if no points
   lastPoint = () => {
-    return this.trekPointCount === 0 ? undefined : this.pointList[this.trekPointCount - 1];
+    return this.pointList.length === 0 ? undefined : this.pointList[this.pointList.length - 1];
   }
 
   // return the distance units for the current system
-  distUnits = () => {
-    return DIST_UNIT_CHOICES[this.measurementSystem];
+  distUnits = (sys: MeasurementSystemType = this.measurementSystem) => {
+    return DIST_UNIT_CHOICES[sys];
   }
 
   // return the distance units for the current system
@@ -1099,8 +1253,8 @@ readAllTreks = (group: string) => {
   }
 
   // return the speed units for the current system
-  speedUnits = () => {
-    return SPEED_UNIT_CHOICES[this.measurementSystem];
+  speedUnits = (sys: MeasurementSystemType = this.measurementSystem) => {
+    return SPEED_UNIT_CHOICES[sys];
   }
   
   // set the value of the duration property
@@ -1118,7 +1272,6 @@ readAllTreks = (group: string) => {
   // compute and update various display values
   @action
   updateCalculatedValues = (force = false) => {
-    // if (force || this.statsOpen){
       this.updateSpeedNow();
       this.updateAverageSpeed();
       this.updateCurrentCalories(force);
@@ -1183,14 +1336,14 @@ readAllTreks = (group: string) => {
 
   // Set the measurement system to the given value
   @action
-  updateMeasurementSystem = (value: MeasurementSystemType) => {
+  setMeasurementSystem = (value: MeasurementSystemType) => {
     this.measurementSystem = value;
   }
 
   // Switch the measurement system that values are displayed in
   @action
   switchMeasurementSystem = () => {
-    this.updateMeasurementSystem(SWITCH_MEASUREMENT_SYSTEM[this.measurementSystem] as MeasurementSystemType);
+    this.setMeasurementSystem(SWITCH_MEASUREMENT_SYSTEM[this.measurementSystem] as MeasurementSystemType);
     this.updateCalculatedValues(true);
   }
 
@@ -1281,8 +1434,8 @@ readAllTreks = (group: string) => {
   }
 
   // Return the trek distance formatted for display with appropriate units
-  formattedDist = (dist = this.trekDist) => {
-    return this.utilsSvc.formatDist(dist, DIST_UNIT_CHOICES[this.measurementSystem]);
+  formattedDist = (dist = this.trekDist, system = this.measurementSystem) => {
+    return this.utilsSvc.formatDist(dist, DIST_UNIT_CHOICES[system]);
   }
 
   // Return the number of steps represented by the trek distance
@@ -1310,7 +1463,7 @@ readAllTreks = (group: string) => {
   formattedCurrentSpeed = (system = this.measurementSystem, mpsOnly = false) => {
     let speed = 0;
     let point : TrekPoint;
-    let pll = this.trekPointCount;
+    let pll = this.pointList.length;
     let speedMPS = 0;
 
     if ((pll > 0) && this.timerOn) {
@@ -1355,6 +1508,7 @@ readAllTreks = (group: string) => {
 
 
   // return the starting (First) or current (Last) altitude for the Trek
+  // TODO: save elevation range with trek to avoid computing every time
   formattedTrekElevation = (pos: string) : string => {
     let elev;
 

@@ -23,15 +23,16 @@ export const SORT_DIRECTIONS = ["Ascend", "Descend"];
 export const SORT_DIRECTION_OTHER = { Ascend: "Descend", Descend: "Ascend" };
 
 export interface GoalObj {
-  dateSet: string;
-  category: string;
-  timeframe: string;
-  activity: string;
-  metric: string;
-  metricValue: number;
-  metricUnits: string;
-  testValue: number;
-  testUnits: string;
+  dateSet: string;                // date goal established
+  category: string;               // goal type (performance or consistency)
+  timeframe: string;              // effective date
+  activity: string;               // activity being measured (Walk, Run, Burn, Trek, etc.)
+  metric: string;                 // Distance or Count (currently not used)
+  metricValue: number;            // how many occurences, how many miles, etc.
+  metricUnits: string;            // what's being counted (miles, occurrences, calories)
+  testValue: number;              // time limit period count 
+  testUnits: string;              // limit units (minutes, hours, weekly)
+  course?: string,                // course to use as metric value and units
 }
 
 export interface GoalInterval {
@@ -64,6 +65,7 @@ export interface GoalsFilterObj {
   dateMax: string;
   sortBy: SortByTypes;
   sortDirection: string;
+  course: string;
 }
 
 export const DIT_GOAL_CAT = "Distance in Time";
@@ -71,11 +73,17 @@ export const CA_GOAL_CAT = "Cumulative Activity";
 export type GoalType = "Distance in Time" | "Cumulative Activity";
 export const GoalTypesArray = [DIT_GOAL_CAT, CA_GOAL_CAT];
 export const GoalLabelsArray = ["Performance", "Consistency"];
+export const GoalCommentsArray = [
+  `Performance goals track performance of an activity over a specific distance in a given time ` +
+  `limit.\ne.g. 'Run 2 miles in 12 min'\ne.g. 'Bike LongLakeRoad in 2 hr 30 min'`,
+  `Consistency goals track occurrences of activity or accumulations of metrics like calories or ` +
+  `steps over a period of time.\ne.g. 'Bike 100 miles per week'\ne.g. 'Hike SillyMtnTrail twice per month'`
+]
 
 export const DITTimeframe = "Some Day";
-export const DITActivityTypesArray = ["Walk", "Run", "Bike", "Hike"];
+export const DITActivityTypesArray = ["Walk", "Run", "Bike", "Hike", "Trek"];
 export const DITMetric = "Distance";
-export const DITGoalMetricUnitsArray = ["meters", "kilometers", "miles"];
+export const DITGoalMetricUnitsArray = ["meters", "kilometers", "miles", "course"];
 export const DITTestUnitsArray = ["seconds", "minutes", "hours"];
 
 export const CATimeframe = "Always";
@@ -92,11 +100,11 @@ export const CAGoalMetricUnitsArray = [
   "meters",
   "kilometers",
   "miles",
-  "times",
-  "minutes",
-  "hours",
+  "occurrences",
+  "time",
   "calories",
-  "steps"
+  "steps",
+  "course"
 ];
 export const CABurnGoalMetricUnitsArray = ["calories"];
 export const CATestUnitsArray = ["daily", "weekly", "monthly"];
@@ -128,12 +136,14 @@ export class GoalsSvc {
   @observable goalMetricUnits: string;
   @observable goalTestValue: string;
   @observable goalTestUnits: string;
+  @observable goalCourse: string;
 
   displayList: GoalDisplayObj[] = [];
   goalList: GoalObj[];
   runAfterProcessGoals: Function[] = [];
   editGoalIndex: number = -1;
   barGraphData: BarData[] = [];
+  filterCourse: string;
 
   filter: GoalsFilterObj;
 
@@ -167,6 +177,7 @@ export class GoalsSvc {
     this.goalMetricUnits = "";
     this.goalTestValue = "";
     this.goalTestUnits = "";
+    this.goalCourse = undefined;
   };
 
   // return an object with the current filter values
@@ -182,7 +193,8 @@ export class GoalsSvc {
           ? ""
           : this.utilsSvc.formatSortDate(this.dateMax, "11:59 PM"),
       sortBy: this.sortBy,
-      sortDirection: this.sortDirection
+      sortDirection: this.sortDirection,
+      course: this.filterCourse
     };
   };
 
@@ -338,7 +350,8 @@ export class GoalsSvc {
       this.updateFSO();
       ft = this.filter.type;
       this.trekInfo.allTreks.forEach((t, index) => {
-        if ((ft === "" || t.type === ft) && t.sortDate >= this.filter.dateMin) {
+        if ((ft === "" || t.type === ft) && (t.sortDate >= this.filter.dateMin) &&
+            (this.filter.course === undefined || this.filter.course === t.course)) {
           treks.push(index);
         }
       });
@@ -356,7 +369,8 @@ export class GoalsSvc {
   validGoal = () => {
     return (
       this.goalActivity !== "" &&
-      this.goalMetricValue !== "" &&
+      (this.goalMetricValue !== "" || 
+        (this.goalCategory === DIT_GOAL_CAT && this.goalMetricUnits === "course")) &&
       this.goalMetricUnits !== "" &&
       this.goalTestUnits !== "" &&
       (this.goalCategory === CA_GOAL_CAT || this.goalTestValue !== "")
@@ -370,33 +384,55 @@ export class GoalsSvc {
     if (g.activity !== "") {
       switch (g.category) {
         case DIT_GOAL_CAT:
-          stmt =
+          if (g.metricUnits === 'course') {
+            stmt =
+            g.activity +
+            " " +
+            (!g.course ? "_" : g.course) +
+            " in " +
+            (g.testValue === 0 ? "_" : this.utilsSvc.timeFromSeconds(
+                                          this.utilsSvc.convertToSeconds(g.testValue, g.testUnits), 'hms'))
+          } else {
+            stmt =
             g.activity +
             " " +
             (g.metricValue === 0 ? "_" : g.metricValue) +
             " " +
             g.metricUnits +
             " in " +
-            (g.testValue === 0 ? "_" : g.testValue) +
-            " " +
-            g.testUnits;
+            (g.testValue === 0 ? "_" : this.utilsSvc.timeFromSeconds(
+                                          this.utilsSvc.convertToSeconds(g.testValue, g.testUnits), 'hms'))
+          } 
           break;
         case "Cumulative Activity":
-          stmt =
+          if (g.metricUnits === 'course') {
+            stmt =
             g.activity +
             " " +
-            (g.metricValue === 0 ? "_" : g.metricValue) +
+            (!g.course ? "_" : g.course) +
             " " +
-            g.metricUnits +
+            (g.metricValue === 0 ? "_" : g.metricValue) +
+            " times " + 
+            g.testUnits;
+          } else {
+            stmt =
+            g.activity +
+            " " +
+            (g.metricValue === 0 ? "_" : 
+              (g.metricUnits === 'time' ? 
+               this.utilsSvc.timeFromSeconds(g.metricValue, 'hms') : 
+               g.metricValue + " " + g.metricUnits)) +
             " " +
             g.testUnits;
+          }
           break;
         default:
       }
-      stmt = stmt.replace(/ 1 hours/gi, " 1 hour");
-      stmt = stmt.replace(/ 1 minutes/gi, " 1 minute");
-      stmt = stmt.replace(/ 1 seconds/gi, " 1 second");
+      // stmt = stmt.replace(/ 1 hours/gi, " 1 hour");
+      // stmt = stmt.replace(/ 1 minutes/gi, " 1 minute");
+      // stmt = stmt.replace(/ 1 seconds/gi, " 1 second");
       stmt = stmt.replace(/ 1 calories/gi, " 1 calorie");
+      stmt = stmt.replace(/ occurrences/gi, " times");
       stmt = stmt.replace(/ 1 times/gi, " once");
       stmt = stmt.replace(/ 2 times/gi, " twice");
       stmt = stmt.replace(/ 1 miles/gi, " 1 mile");
@@ -418,10 +454,11 @@ export class GoalsSvc {
     this.goalActivity = goal.activity;
     this.goalTimeframe = goal.timeframe;
     this.goalMetric = goal.metric;
-    this.goalMetricUnits = goal.metricUnits;
+    this.goalMetricUnits = goal.metricUnits === 'times' ? 'occurrences' : goal.metricUnits;
     this.goalMetricValue = goal.metricValue ? goal.metricValue.toString() : "";
     this.goalTestUnits = goal.testUnits;
     this.goalTestValue = goal.testValue ? goal.testValue.toString() : "";
+    this.goalCourse = goal.course === "" ? undefined : goal.course;
   };
 
   setNewDITGoalObj = (val: string) => {
@@ -436,8 +473,9 @@ export class GoalsSvc {
           metric: DITMetric,
           metricUnits: DIST_UNIT_LONG_NAMES[this.trekInfo.measurementSystem],
           metricValue: 0,
-          testUnits: "minutes",
-          testValue: 0
+          testUnits: "time",
+          testValue: 0,
+          course: undefined
         } as GoalObj);
         break;
       case CA_GOAL_CAT:
@@ -450,12 +488,14 @@ export class GoalsSvc {
           metricUnits: "times",
           metricValue: 0,
           testUnits: "weekly",
-          testValue: 0
+          testValue: 0,
+          course: undefined
         } as GoalObj);
         break;
       default:
     }
   };
+
   // return a GoalObj object from the individual edit fields
   getGoalObj = (): GoalObj => {
     return {
@@ -464,11 +504,12 @@ export class GoalsSvc {
       timeframe: this.goalTimeframe,
       activity: this.goalActivity,
       metric: this.goalMetric,
-      metricUnits: this.goalMetricUnits,
+      metricUnits: this.goalMetricUnits === 'occurrences' ? 'times' : this.goalMetricUnits,
       metricValue:
         this.goalMetricValue !== "" ? parseFloat(this.goalMetricValue) : 0,
       testValue: this.goalTestValue !== "" ? parseFloat(this.goalTestValue) : 0,
-      testUnits: this.goalTestUnits
+      testUnits: this.goalTestUnits,
+      course: this.goalCourse
     };
   };
 
@@ -529,6 +570,7 @@ export class GoalsSvc {
     this.setDateMin(this.utilsSvc.dateFromSortDateYY(g.dateSet));
     this.setDateMax("");
     this.setTrekType(/Burn|Trek/gi.test(g.activity) ? "" : g.activity);
+    this.filterCourse = g.course;
     treks = this.filterAndSort();
     gdo.numTreks = treks.length;
 
@@ -629,7 +671,8 @@ export class GoalsSvc {
         break;
       case "steps":
         v = this.utilsSvc.computeStepCount(t.trekDist, t.strideLength);
-        break;
+        break;      
+      case "course":  
       case "times":
         v = 1;
         break;
@@ -641,6 +684,7 @@ export class GoalsSvc {
       case "minutes":
       case "hours":
       case "seconds":
+      case "time":
         v = this.utilsSvc.convertTime(t.duration, g.metricUnits);
         break;
       default:
@@ -651,26 +695,30 @@ export class GoalsSvc {
   // Process the given trek against the given Distance in Time goal.
   // Add a trek item to the display item list.
   processTrekDIT = (t: number, gdo: GoalDisplayObj) => {
-    let mVal = this.utilsSvc.convertToMeters(
-      gdo.goal.metricValue,
-      gdo.goal.metricUnits
-    );
     let qualifies = false;
 
-    // if (t.trekDist >= mVal){  // distance long enough?
-    let tVal = this.utilsSvc.convertToSeconds(
-      gdo.goal.testValue,
-      gdo.goal.testUnits
-    );
-    qualifies =
-      this.trekInfo.allTreks[t].trekDist >= mVal &&
-      tVal * (this.trekInfo.allTreks[t].trekDist / mVal) >=
-        this.trekInfo.allTreks[t].duration;
+    switch(gdo.goal.metricUnits){
+      case 'course':
+        qualifies = this.trekInfo.allTreks[t].duration <= gdo.goal.testValue;
+        break;
+      default:
+        let mVal = this.utilsSvc.convertToMeters(
+          gdo.goal.metricValue,
+          gdo.goal.metricUnits
+        );
+        let tVal = this.utilsSvc.convertToSeconds(
+          gdo.goal.testValue,
+          gdo.goal.testUnits
+        );
+        qualifies =
+          this.trekInfo.allTreks[t].trekDist >= mVal &&
+          tVal * (this.trekInfo.allTreks[t].trekDist / mVal) >=
+            this.trekInfo.allTreks[t].duration;
+    }
     if (qualifies) {
       gdo.timesMet++;
     }
     gdo.items.push({ trek: t, meetsGoal: qualifies });
-    // }
   };
 
   // Build a list of interval dates {start: sortDate, end: sortDate} for the given goal
@@ -724,11 +772,16 @@ export class GoalsSvc {
     dist: number,
     time: number
   ): number => {
-    let m = this.utilsSvc.convertToMeters(mValue, mUnits);
-    if (dist < m / 100) {
-      return 0;
+    switch(mUnits){
+      case 'course':
+        return time;
+      default:
+        let m = this.utilsSvc.convertToMeters(mValue, mUnits);
+        if (dist < m / 100) {
+          return 0;
+        }
+        return time * (m / dist);
     }
-    return time * (m / dist);
   };
 
   // Find the relevant numeric range for the given goalDisplayObj
@@ -767,6 +820,7 @@ export class GoalsSvc {
                 maxV = v;
               }
               break;
+            case "course":
             case "times":
               v = 1;
               if (v < minV) {
@@ -778,6 +832,7 @@ export class GoalsSvc {
               break;
             case "hours":
             case "minutes":
+            case 'time':
               v = this.utilsSvc.convertTime(t.duration, metric);
               if (v < minV) {
                 minV = v;
@@ -878,8 +933,11 @@ export class GoalsSvc {
     const DITGoal = gdo.goal.category === DIT_GOAL_CAT;
     const { trekLogGreen } = uiTheme.palette[this.trekInfo.colorTheme];
 
-    if (gdo.goal.category === DIT_GOAL_CAT) {
+    if (gdo.goal.category === DIT_GOAL_CAT && gdo.goal.metricUnits !== 'course') {
       metric = "rate";
+    }
+    if (gdo.goal.category === DIT_GOAL_CAT && gdo.goal.metricUnits === 'course') {
+      metric = "rateCourse";
     }
     if (metric === "times" && !this.intervalGraph) {
       metric = this.trekInfo.longDistUnits();
@@ -909,10 +967,16 @@ export class GoalsSvc {
                 .getRoundedDist(t.trekDist, metric)
                 .toString();
               break;
+            case "course":
             case "times":
               v = 1;
               barItem.value = v + dataAdjust;
               barItem.label1 = v.toString();
+              break;
+            case "time":
+              v = t.duration;
+              barItem.value = v + dataAdjust;
+              barItem.label1 = this.utilsSvc.timeFromSeconds(v);
               break;
             case "hours":
               v = this.utilsSvc.convertTime(t.duration, metric);
@@ -928,6 +992,11 @@ export class GoalsSvc {
               v = this.utilsSvc.computeStepCount(t.trekDist, t.strideLength);
               barItem.value = v + dataAdjust;
               barItem.label1 = v.toString();
+              break;
+            case "rateCourse":
+              v = t.duration;
+              barItem.value = v + dataAdjust; // add adjustment to avoid 0-height bars
+              barItem.label1 = this.utilsSvc.timeFromSeconds(v);
               break;
             case "rate":
               v = this.timeForDistance(
@@ -948,7 +1017,6 @@ export class GoalsSvc {
               break;
             case "calories":
               if (t.calories === null) {
-                alert(t.type + "\n" + t.date + "\n");
               }
               v = t.calories === null ? 0 : t.calories;
               barItem.value = v + dataAdjust;
@@ -986,10 +1054,14 @@ export class GoalsSvc {
                   .getRoundedDist(m, metric)
                   .toString();
                 break;
+              case "course":
               case "calories":
               case "steps":
               case "times":
                 barItem.label1 = intSum.toString();
+                break;
+              case "time":
+                barItem.label1 = this.utilsSvc.timeFromSeconds(Math.round(intSum));
                 break;
               case "hours":
                 barItem.label1 = (Math.round(intSum * 10) / 10).toString();
@@ -1043,8 +1115,13 @@ export class GoalsSvc {
 
     switch (g.category) {
       case DIT_GOAL_CAT:
-        msg =
+        if(g.metricUnits === 'course'){
+          msg =
+          "Time to " + g.activity + " course";
+        } else {
+          msg =
           "Time to " + g.activity + " " + g.metricValue + " " + g.metricUnits;
+        }
         msg = msg.replace(/Trek /gi, "trek ");
         msg = msg.replace(/Walk /gi, "walk ");
         msg = msg.replace(/Run /gi, "run ");
@@ -1054,7 +1131,8 @@ export class GoalsSvc {
         break;
       case CA_GOAL_CAT:
         if (this.intervalGraph) {
-          msg = g.metricUnits + " " + g.activity + " " + g.testUnits;
+          msg = (g.metricUnits === 'course') ? 'times ' : '';
+          msg += g.metricUnits + " " + g.activity + " " + g.testUnits;
         } else {
           let iDates = this.getIntervalDates(gdo.items, interval);
           let metric = g.metricUnits;

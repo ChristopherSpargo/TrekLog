@@ -29,11 +29,20 @@ import {
   TREK_TYPE_WALK,
   TREK_TYPE_RUN,
   TREK_TYPE_HIKE,
-  TREK_TYPE_CHOICES
+  TREK_TYPE_CHOICES,
+  MSG_NO_LIST,
+  MSG_LINK_ADDED,
+  MSG_LINK_NOT_ADDED,
+  RESP_NO_MATCH,
+  RESP_BAD_LENGTH,
+  RESP_CANCEL,
+  MSG_NEW_COURSE_RECORD,
+  RESP_OK
 } from "./TrekInfoModel";
 import { ToastModel } from "./ToastModel";
-import { ModalModel } from "./ModalModel";
+import { ModalModel, CONFIRM_INFO } from "./ModalModel";
 import TrekLimitsForm, { LimitsObj } from "./TrekLimitsComponent";
+import TrackingMethodForm from './TrackingMethodComponent';
 import {
   M_PER_MILE,
   LB_PER_KG,
@@ -43,7 +52,7 @@ import {
 } from "./UtilsService";
 import { WeatherSvc } from "./WeatherSvc";
 import { GoalObj, GoalsSvc, GoalDisplayItem } from "./GoalsService";
-import { CONTROLS_HEIGHT, NAV_ICON_SIZE, HEADER_HEIGHT } from "./App";
+import { CONTROLS_HEIGHT, NAV_ICON_SIZE, HEADER_HEIGHT, TREKLOG_FILENAME_REGEX, COLOR_THEME_LIGHT } from "./App";
 import SpeedDial, { SpeedDialItem } from "./SpeedDialComponent";
 import TrekLogHeader from "./TreklogHeaderComponent";
 import { StorageSvc } from "./StorageService";
@@ -56,6 +65,8 @@ import { GroupSvc } from "./GroupService";
 import RadioPicker from './RadioPickerComponent';
 import SvgButton from './SvgButtonComponent';
 import { APP_ICONS } from './SvgImages';
+import { FilterSvc } from "./FilterService";
+import { CourseSvc, Course } from "./CourseService";
 
 
 const goBack = NavigationActions.back();
@@ -71,6 +82,8 @@ const goBack = NavigationActions.back();
   "loggingSvc",
   "utilsSvc",
   "groupSvc",
+  "filterSvc",
+  "courseSvc",
   "uiTheme"
 )
 @observer
@@ -86,6 +99,8 @@ class LogTrek extends Component<
     loggingSvc?: LoggingSvc;
     utilsSvc?: UtilsSvc;
     groupSvc?: GroupSvc;
+    filterSvc?: FilterSvc;
+    courseSvc?: CourseSvc;
     uiTheme?: any;
     navigation?: any;
   },
@@ -93,25 +108,25 @@ class LogTrek extends Component<
 > {
   @observable limitFormOpen: boolean;
   @observable limitFormDone: string;
-  @observable waitingForElevData: boolean;
+  @observable trackingMethodFormOpen: boolean;
+  @observable trackingMethodFormDone: string;
+  @observable waitingForSomething: string;
   @observable radioPickerOpen;
+  @observable coursePickerOpen;
+  @observable courseToTrack: Course;
 
   _didFocusSubscription;
   _willBlurSubscription;
 
   trekInfo = this.props.trekInfo;
   glS = this.props.locationSvc;
+  fS = this.props.filterSvc;
   logSvc = this.props.loggingSvc;
   uiTheme = this.props.uiTheme;
   activeNav = "";
   limitProps: LimitsObj = {} as LimitsObj;
   typeSDRef: RefObject<SpeedDial>;
 
-  // static navigationOptions = () => {
-  //   return {
-  //         header: null,
-  //   };
-  // };
 
   constructor(props) {
     super(props);
@@ -140,6 +155,8 @@ class LogTrek extends Component<
         this.props.storageSvc.removeRestoreObj();
         this.trekInfo.resObj = ro;
         this.trekInfo.restoreLogState(ro);
+        this.props.courseSvc.getCourseList(ro.measurementSystem);
+        this.trekInfo.setMeasurementSystem(ro.measurementSystem);
         this.trekInfo.setAppReady(true);
         this.logSvc.smoothTrek();
         if (ro.timerOn) {
@@ -147,6 +164,9 @@ class LogTrek extends Component<
         }
         if (ro.timeLimit) {
           this.startLimitTimer();
+        }
+        if (ro.trackingObj){
+          this.logSvc.restartTrackingMarker(ro.trackingObj)
         }
         this.logSvc.watchGeolocationPosition(this.gotPos, false);
         if (ro.showMapInLog) {
@@ -170,7 +190,9 @@ class LogTrek extends Component<
         this.trekInfo
           .init()
           .then(() => {
+            this.props.courseSvc.getCourseList();
             this.trekInfo.setAppReady(true);
+            this.trekInfo.clearTrackingItems();
             // Get the current GPS position so the log map shows where we are
             this.glS.getCurrentLocation(
               location => {
@@ -184,6 +206,7 @@ class LogTrek extends Component<
             );
           })
           .catch(err => {
+            this.props.courseSvc.getCourseList();
             this.trekInfo.setAppReady(true);
             // need to create a use or enter settings
             alert(err)
@@ -228,8 +251,12 @@ class LogTrek extends Component<
   initializeObservables = () => {
     this.limitFormOpen = false;
     this.limitFormDone = "";
-    this.waitingForElevData = false;
+    this.trackingMethodFormOpen = false;
+    this.trackingMethodFormDone = "";
+    this.setWaitingForSomething('');
+    this.setCoursePickerOpen(false);
     this.setRadioPickerOpen(false);
+    this.setCourseToTrack(undefined);
   };
 
   checkBackButton = () => {
@@ -241,10 +268,6 @@ class LogTrek extends Component<
   };
 
   onBackButtonPressAndroid = () => {
-    const { infoConfirmColor, infoConfirmTextColor } = this.uiTheme.palette[
-      this.props.trekInfo.colorTheme
-    ];
-
     if (this.trekInfo.logging || this.trekInfo.pendingReview) {
       if (this.trekInfo.saveDialogOpen) {
         return true;
@@ -265,8 +288,7 @@ class LogTrek extends Component<
           cancelText: "NO",
           okText: "YES",
           headingIcon: this.trekInfo.type,
-          headingStartColor: infoConfirmColor,
-          headingTextColor: infoConfirmTextColor
+          dType: CONFIRM_INFO
         })
         .then(() => {
           this.trekInfo.setCancelDialogOpen(false);
@@ -279,6 +301,8 @@ class LogTrek extends Component<
           if (labelFormOpen) {
             this.logSvc.openLabelForm();
           }
+          else {
+          }
         });
       return true;
     } else {
@@ -287,6 +311,7 @@ class LogTrek extends Component<
   };
 
   init = () => {
+    StatusBar.setHidden(true, "none");
     if (
       this.trekInfo.appReady &&
       !this.trekInfo.pendingInit &&
@@ -298,6 +323,7 @@ class LogTrek extends Component<
         .then(() => {
           this.logSvc.resetTrek();
           this.trekInfo.clearTrek();
+          this.trekInfo.clearTrackingItems();
           this.logSvc.setDate();
           this.trekInfo.setShowMapInLog(false);
         })
@@ -312,6 +338,12 @@ class LogTrek extends Component<
           }
         });
     }
+  };
+
+  // set the open status of the coursePickerOpen component
+  @action
+  setCoursePickerOpen = (status: boolean) => {
+    this.coursePickerOpen = status;
   };
 
   // call the colorTheme swap function and then reset the header params
@@ -337,10 +369,28 @@ class LogTrek extends Component<
     this.limitFormDone = value;
   };
 
+  // set the value of the courseToTrack property
+  @action
+  setCourseToTrack = (course: Course) => {
+    this.courseToTrack = course;
+  }
+
+  // set the value of the trackingMethodFormOpen property
+  @action
+  setTrackingMethodFormOpen = (status: boolean) => {
+    this.trackingMethodFormOpen = status;
+  };
+
+  // set the value of the trackingMethodFormDone property
+  @action
+  setTrackingMethodFormDone = (value: string) => {
+    this.trackingMethodFormDone = value;
+  };
+
   // set the value of the waitingForElevData property
   @action
-  setWaitingForElevData = (status: boolean) => {
-    this.waitingForElevData = status;
+  setWaitingForSomething = (msg: string) => {
+    this.waitingForSomething = msg;
   };
 
   // set the value of the pendingPreview property
@@ -357,11 +407,13 @@ class LogTrek extends Component<
 
   // change the current group
   getDifferentGroup = () => {
-    this.props.groupSvc.getGroupSelection(this.setRadioPickerOpen, this.trekInfo.group, 'Select A Group')
+    this.props.groupSvc.getGroupSelection(this.setRadioPickerOpen, this.trekInfo.group, 'Select A Group',
+                                        false, TREKLOG_FILENAME_REGEX)
     .then((newGroup) => {
       this.trekInfo.setTrekLogGroupProperties(newGroup)
       .then((result) => {
-        if(result === 'OK'){
+        if(result === RESP_OK){
+          this.fS.clearGroupList();
         }
       })
     })
@@ -382,7 +434,7 @@ class LogTrek extends Component<
         this.trekInfo.limitTrekDone = true;
         this.stopLimitedTrek();
       }
-      if (this.trekInfo.trekPointCount === 1) {
+      if (this.trekInfo.pointList.length === 1) {
         requestAnimationFrame(() => {
           this.logSvc.setLayoutOpts("Current");
         });
@@ -402,9 +454,6 @@ class LogTrek extends Component<
 
   // Stop the logging process. If there is something to save, confirm intentions with the user
   stopLogging = () => {
-    const { infoConfirmColor, infoConfirmTextColor } = this.uiTheme.palette[
-      this.props.trekInfo.colorTheme
-    ];
     let noPts = this.trekInfo.pointListEmpty() && !this.trekInfo.resObj;
     let saveText = noPts ? "Abort" : "Save";
     let discardText = noPts ? " has been aborted." : " has been discarded.";
@@ -427,15 +476,15 @@ class LogTrek extends Component<
         deleteText: noPts ? undefined : "DISCARD",
         okText: saveText.toUpperCase(),
         headingIcon: this.trekInfo.type,
-        headingTextColor: infoConfirmTextColor,
-        headingStartColor: infoConfirmColor
+        dType: CONFIRM_INFO,
       })
       .then(resp => {
         this.trekInfo.setSaveDialogOpen(false);
         this.logSvc.stopTrek();
         this.finalizeTrek();
-        if (resp === "SAVE" && this.trekInfo.trekPointCount !== 0) {
+        if (resp === "SAVE" && this.trekInfo.pointList.length !== 0) {
           this.willSaveTrek();
+          this.glS.shutDownGeolocation();
         } else {
           // DISCARD or ABORT
           this.abortLogging(discardText);
@@ -449,7 +498,8 @@ class LogTrek extends Component<
 
   abortLogging = discardText => {
     this.glS.shutDownGeolocation();
-    this.closeStatsAndDetails();
+    this.trekInfo.trackingCourse = undefined;
+    this.trekInfo.trackingObj = undefined;
     this.props.storageSvc.removeRestoreObj();
     this.trekInfo.resObj = undefined;
     this.trekInfo.setLimitsActive(false);
@@ -472,7 +522,7 @@ class LogTrek extends Component<
   willSaveTrek = () => {
     this.setPendingReview(true);
     this.trekInfo.setLimitsActive(false);
-    this.setWaitingForElevData(true);
+    this.setWaitingForSomething('Obtaining Elevation Data...');
     this.trekInfo
       .setElevationProperties() // call Elevation API to get elevations
       .then(() => {
@@ -495,13 +545,13 @@ class LogTrek extends Component<
       .getWeatherData({ type: "W", pos: { latitude: loc.a, longitude: loc.o } })
       .then(data => {
         this.trekInfo.updateConditions(data);
-        this.setWaitingForElevData(false);
+        this.setWaitingForSomething('');
         // get the trek label
         this.setTrekLabel();
       })
       .catch(() => {
         this.trekInfo.updateConditions(undefined);
-        this.setWaitingForElevData(false);
+        this.setWaitingForSomething('');
         // get the trek label
         this.setTrekLabel();
       });
@@ -521,15 +571,52 @@ class LogTrek extends Component<
 
   // finish up saving the log
   finishTrekLog = () => {
-    this.glS.shutDownGeolocation();
+    let tObj = this.trekInfo.trackingObj;
+    if (tObj) {
+      // add an effort entry to the course
+      this.props.courseSvc.addCourseEffort(tObj.courseName, this.trekInfo.getSaveObj(), 
+                                     tObj.method, tObj.goalValue)
+      .then((result) => {
+        switch(result.resp){
+          case MSG_NEW_COURSE_RECORD:
+            this.props.toastSvc.toastOpen({
+              tType: "Success",
+              content: result.resp + 'for: ' + tObj.courseName + 
+                      ' (' + this.props.utilsSvc.timeFromSeconds(result.info) + ')',
+              time: 5000
+            });
+            break;
+          case RESP_BAD_LENGTH:
+          case RESP_NO_MATCH:
+            this.props.toastSvc.toastOpen({
+              tType: "Error",
+              content: MSG_LINK_NOT_ADDED + result.resp + 'for course: ' + tObj.courseName
+            });
+            break;
+          case RESP_OK:
+          default:
+            this.props.toastSvc.toastOpen({
+              tType: "Success",
+              content: MSG_LINK_ADDED + this.trekInfo.type + 
+                       ' added as effort for:\n' + 'courst: ' + tObj.courseName,
+              time: 5000
+            });
+        }
+        this.saveAndNotify();
+      })
+    } else {
+      this.saveAndNotify();
+    }
+  }
+
+  saveAndNotify = () => {
     this.saveTrek();
     this.props.storageSvc.removeRestoreObj();
     this.trekInfo.resObj = undefined;
     this.logSvc.setLayoutOpts("All");
     this.openGoalNotification();
-    this.updateStatsOpen(false);
     this.trekInfo.setSpeedDialZoom(false);
-  };
+  }
 
   // user is finished with post-log review
   reviewFinished = () => {
@@ -643,6 +730,26 @@ class LogTrek extends Component<
     this.closeLimitForm();
   };
 
+  // Open the Trek Limits form using HIKE parameters
+  openTrackingMethodForm = () => {
+    this.setTrackingMethodFormOpen(true);
+  };
+
+  // Start the logging process for a Hike.
+  startTrekWithTracking = (start: boolean) => {
+    this.setTrackingMethodFormDone("");
+    if (start) {
+      this.trekInfo.trackingCourse = this.courseToTrack;
+      this.startLogging()
+      this.setTrackingMethodFormOpen(false);
+    } else {
+      this.setTrackingMethodFormOpen(false);
+      setTimeout(() => {
+        this.setCourseToTrack(undefined);
+      }, 500);
+    }
+  }
+
   // Vibrate a start warning sequence then a longer single vibration from 2-3 seconds later to indicate START.
   giveVibrationStartSignal = () => {
     this.props.toastSvc.toastOpen({
@@ -651,8 +758,6 @@ class LogTrek extends Component<
     });
     Vibration.vibrate(START_VIB, false);
     if (this.trekInfo.timeLimit !== 0) {
-      this.logSvc.updateDuration(0);
-      this.logSvc.setStartTime(); // Update start time to after recieve inital GPS point
       this.startLimitTimer();
     }
   };
@@ -660,9 +765,11 @@ class LogTrek extends Component<
   // Start a timer to watch for the timeLimit to expire on a timed Trek
   startLimitTimer = () => {
     this.trekInfo.limitTimerId = window.setInterval(() => {
+      // check for time of last point being after the time limit (seconds)
+      let lastPt = this.trekInfo.lastPoint();
       if (
         !this.trekInfo.limitTrekDone &&
-        new Date().getTime() - this.trekInfo.startMS >= this.trekInfo.timeLimit
+        lastPt && lastPt.t >= this.trekInfo.timeLimit
       ) {
         this.trekInfo.limitTrekDone = true;
         this.stopLimitedTrek();
@@ -676,7 +783,6 @@ class LogTrek extends Component<
     this.props.toastSvc.toastOpen({
       tType: "Error",
       content: "Stop " + TREK_VERBS_OBJ[this.trekInfo.type],
-      time: 3000
     });
     Vibration.vibrate(STOP_VIB, false);
   };
@@ -686,9 +792,11 @@ class LogTrek extends Component<
     this.trekInfo.computeCalories();
     this.trekInfo.updateTrekSaved(true); // denote save issue done
     this.trekInfo
-      .saveTrek(this.trekInfo.getSaveObj())
+      .saveTrek(this.trekInfo.getSaveObj(),'add')
       .then(() => {
-        this.trekInfo.updateTimeframe('TWeek');
+        if(this.fS.isInGroupList(this.trekInfo.group)){
+          this.trekInfo.updateTimeframe('TWeek');
+        }
         this.props.toastSvc.toastOpen({
           tType: "Success",
           content: this.trekInfo.type + " has been saved."
@@ -708,21 +816,7 @@ class LogTrek extends Component<
     }
     this.logSvc.resetTrek();
     this.trekInfo.clearTrek();
-    this.closeStatsAndDetails();
-  };
-
-  // Update the value of the statsOpen property
-  @action
-  updateStatsOpen = (status: boolean) => {
-    this.trekInfo.setUpdateMap(true);
-    this.trekInfo.setStatsOpen(status);
-  };
-
-  // Close the NumbersBar
-  @action
-  closeStatsAndDetails = () => {
-    this.trekInfo.setUpdateMap(true);
-    this.trekInfo.statsOpen = false;
+    this.trekInfo.clearTrackingItems();
   };
 
   openGoalNotification = () => {
@@ -761,15 +855,63 @@ class LogTrek extends Component<
   sdSelected = (sel: string) => {
     if (TREK_TYPE_CHOICES.indexOf(sel) !== -1) {
       this.selectTrekType(sel as TrekType);
-    } else {
-      this.setActiveNav(sel);
-    }
+    } 
+    this.setActiveNav(sel);
   };
 
   selectTrekType = (value: TrekType) => {
     this.props.navigation.setParams({ icon: value });
     this.trekInfo.updateType(value);
   };
+
+  // prepare to track performance against prior effort on this course
+  setToTrackCourse = () => {
+    this.props.courseSvc.getCourseSelection(this.setCoursePickerOpen, '#none', 'Select Course To Challenge')
+    .then((sel) => {
+      if(sel !== '#none'){            // will return given item if user hits OK with no valid selection
+        this.props.courseSvc.getCourse(sel)
+        .then((course : Course) => {
+          this.setWaitingForSomething('Verifying starting location...');
+          this.props.locationSvc.getCurrentLocation(
+            (location: Location) => {
+              this.setWaitingForSomething('');
+              let d = this.props.courseSvc.checkStartPosition(
+                    {latitude: location.latitude, longitude: location.longitude}, 
+                                              course.definingEffort.subject.points);
+              if( d > 50) {
+                this.props.toastSvc.toastOpen({
+                  tType: "Error",
+                  content: 'Too far from start of course\n' + course.name + ' (' + 
+                              this.props.utilsSvc.formatDist(d, this.trekInfo.distUnits()) + ').',
+                });
+              } else {
+                this.setCourseToTrack(course);
+                this.openTrackingMethodForm();
+              }
+            },
+            { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 }
+          );
+        })
+        .catch((err) => {
+          this.props.toastSvc.toastOpen({
+            tType: "Error",
+            content: 'Error reading course: ' + err 
+          });
+        })
+      }
+    })
+    .catch((resp) => {
+      switch(resp){
+        case MSG_NO_LIST:
+          this.props.toastSvc.toastOpen({
+            tType: "Error",
+            content: resp + 'No courses defined.',
+          });
+        case RESP_CANCEL:
+        default:
+      }
+    })    // cancel or no list
+  }
 
   // respond to action from controls
   setActiveNav = val => {
@@ -782,23 +924,25 @@ class LogTrek extends Component<
         case "StartT":
           this.openTimeLimitsForm();
           break;
+        case "Hike":
         case "StartH":
           this.openPackWeightForm();
           break;
         case "StartD":
           this.openDistLimitsForm();
           break;
+        case "StartC":
+          this.setToTrackCourse();
+          break;
         case "Stop":
           this.stopLogging();
           break;
+        case "Courses":
         case "Summary":
         case "Goals":
         case "Settings":
           this.trekInfo.updateDashboard = false;
           this.props.navigation.navigate(val);
-          break;
-        case "Stats":
-          this.updateStatsOpen(!this.trekInfo.statsOpen);
           break;
         case "ReviewDone":
           this.reviewFinished();
@@ -808,6 +952,12 @@ class LogTrek extends Component<
           break;
         case "LimitsContinue":
           this.setLimitFormDone("Close");
+          break;
+        case "TrackingDone":
+          this.setTrackingMethodFormDone("Dismiss");
+          break;
+        case "TrackingContinue":
+          this.setTrackingMethodFormDone("Close");
           break;
         case "ShowMap":
           this.trekInfo.setShowMapInLog(true);
@@ -837,7 +987,7 @@ class LogTrek extends Component<
       if (reviewOk) {
         label = "Finished";
       } else {
-        if (this.trekInfo.trekPointCount) {
+        if (this.trekInfo.pointList.length) {
           let sp = this.trekInfo.formattedCurrentSpeed(
             this.trekInfo.measurementSystem,
             true
@@ -865,24 +1015,10 @@ class LogTrek extends Component<
 
   // set up the items for the pre-trek actions speedDial
   // allow user to change trek type and set a time or distance limit
-  getSdActions = (): SpeedDialItem[] => {
+  getSdTypeActions = (): SpeedDialItem[] => {
     let type = this.trekInfo.type;
     let actions: SpeedDialItem[] = [];
-    const altColor = this.uiTheme.palette[this.props.trekInfo.colorTheme]
-      .trekLogBlue;
 
-    actions.push({
-      icon: "CompassMath",
-      label: "Dist",
-      value: "StartD",
-      bColor: altColor
-    });
-    actions.push({
-      icon: "TimerSand",
-      label: "Time",
-      value: "StartT",
-      bColor: altColor
-    });
     if (type !== TREK_TYPE_WALK) {
       actions.push({ icon: "Walk", label: "Walk", value: "Walk" });
     }
@@ -899,27 +1035,55 @@ class LogTrek extends Component<
     return actions;
   };
 
+  // set up the items for the pre-trek actions speedDial
+  // allow user to change trek type and set a time or distance limit
+  getSdOtherActions = (): SpeedDialItem[] => {
+    let actions: SpeedDialItem[] = [];
+    const altColor = this.uiTheme.palette[this.props.trekInfo.colorTheme]
+      .trekLogBlue;
+
+    actions.push({
+      icon: "CompassMath",
+      label: "Dist",
+      value: "StartD",
+      bColor: altColor
+    });
+    actions.push({
+      icon: "TimerSand",
+      label: "Time",
+      value: "StartT",
+      bColor: altColor
+    });
+    actions.push({
+      icon: "Course",
+      label: "Course",
+      value: "StartC",
+      bColor: altColor
+    });
+
+    return actions;
+  };
+
   render() {
     const numPts = this.trekInfo.trekPointCount;
-    const appOk = true; //this.trekInfo.appReady || !this.trekInfo.resObj;
     const bgImage = this.trekInfo.haveBackgroundImage();
-    const limitsOk = appOk && this.limitFormOpen;
+    const limitsOk = this.limitFormOpen || this.trackingMethodFormOpen;
     const stopOk =
-      appOk &&
       !limitsOk &&
-      !this.waitingForElevData &&
+      !this.waitingForSomething &&
       (this.trekInfo.timerOn ||
         this.trekInfo.logging ||
         this.trekInfo.limitsActive);
     const startOk =
-      appOk && !limitsOk && !stopOk && !this.trekInfo.pendingReview;
+      !limitsOk && !stopOk && !this.trekInfo.pendingReview;
     const reviewOk =
-      appOk && !limitsOk && !stopOk && this.trekInfo.pendingReview;
-    const { controlsArea, navItem, navIcon } = this.uiTheme;
+      !limitsOk && !stopOk && this.trekInfo.pendingReview;
+    const { controlsArea, navItem, navIcon, navItemWithLabel, navItemLabel } = this.uiTheme;
     const {
       secondaryColorTrans,
       secondaryColor,
       mediumTextColor,
+      highTextColor,
       headerBackgroundColor,
       dividerColor,
       headerTextColor,
@@ -930,8 +1094,10 @@ class LogTrek extends Component<
       pageBackground,
       pageBackgroundFilm,
       disabledTextColor,
+      headerBorderColor,
       disabledHeaderTextColor
     } = this.uiTheme.palette[this.props.trekInfo.colorTheme];
+    const lightTheme = this.props.trekInfo.colorTheme === COLOR_THEME_LIGHT;
     const navIconSize = NAV_ICON_SIZE;
     const bigButtonSize = 150;
     const bigIconSize = 64;
@@ -941,9 +1107,11 @@ class LogTrek extends Component<
     const bgColor = bgImage ? pageBackgroundFilm : pageBackground;
     const hbgColor = bgImage ? pageBackgroundFilm : headerBackgroundColor;
     const tColor = bgImage ? mediumTextColor : headerTextColor;
+    const nlColor = (bgImage && lightTheme) ? highTextColor : navIconColor
     const disabledGroupTextColor = bgImage ? disabledTextColor : disabledHeaderTextColor; 
 
-    const sdActions: SpeedDialItem[] = this.getSdActions();
+    const sdTypeActions: SpeedDialItem[] = this.getSdTypeActions();
+    const sdOtherActions: SpeedDialItem[] = this.getSdOtherActions();
 
     const styles = StyleSheet.create({
       container: {
@@ -967,12 +1135,11 @@ class LogTrek extends Component<
         width: bigButtonSize,
         backgroundColor: bgColor,
         borderRadius: bigButtonSize / 2,
-      }
+      },
+      navLabelColor: {
+        color: nlColor,
+      },
     });
-
-    const cBorder = this.trekInfo.statsOpen
-      ? { borderTopColor: "transparent" }
-      : {};
 
     return (
       <View style={[styles.container]}>
@@ -989,15 +1156,27 @@ class LogTrek extends Component<
           backgroundColor={hbgColor}
           textColor={tColor}
           position="absolute"
-          borderBottomColor={bgImage ? dividerColor : "transparent"}
+          borderBottomColor={bgImage ? dividerColor : headerBorderColor}
         />
         <RadioPicker pickerOpen={this.radioPickerOpen}/>
-        {this.waitingForElevData && (
-          <Waiting msg="Obtaining elevation data..." />
+        <RadioPicker pickerOpen={this.coursePickerOpen}/>
+        {this.waitingForSomething !== '' && (
+          <Waiting msg={this.waitingForSomething} />
         )}
         {numPts === 0 && this.trekInfo.logging && (
           <Waiting msg="Obtaining current position..." />
         )}
+        {this.courseToTrack && 
+          <TrackingMethodForm
+            open={this.trackingMethodFormOpen}
+            done={this.trackingMethodFormDone}
+            method={'courseTime'}
+            value={0}
+            closeFn={this.startTrekWithTracking}
+            onChangeFn={this.trekInfo.setTrackingValueInfo}
+            course={this.courseToTrack}
+          />
+        }
         <TrekLimitsForm
           open={this.limitFormOpen}
           done={this.limitFormDone}
@@ -1008,12 +1187,6 @@ class LogTrek extends Component<
             style={{width: iWidth, height: iHeight}}
           />
         }
-        {bgImage && this.trekInfo.currentBackground === 1 &&
-          <Image source={require('../src/assets/desert2a.jpg')} 
-            style={{width: iWidth, height: iHeight}}
-          />
-        }
-        {appOk && (
           <View
             style={[
               styles.container,
@@ -1047,24 +1220,12 @@ class LogTrek extends Component<
                 />
               </View>
             )}
-            {numPts === 0 &&
-              !this.trekInfo.logging &&
-              this.trekInfo.type === "Hike" && (
-                <SpeedDial
-                  icon="Sack"
-                  bottom={80}
-                  selectFn={() => this.setActiveNav("StartH")}
-                  style={styles.speedDialTrigger}
-                  iconSize="Large"
-                />
-              )}
             {numPts === 0 && !this.trekInfo.logging && (
               <SpeedDial
-                ref={this.typeSDRef}
                 icon={this.trekInfo.type}
-                raised={bgImage ? undefined : true}
+                // raised={bgImage ? undefined : true}
                 bottom={15}
-                items={sdActions}
+                items={sdTypeActions}
                 selectFn={this.sdSelected}
                 itemIconsStyle={{ backgroundColor: pageBackground }}
                 style={styles.speedDialTrigger}
@@ -1072,6 +1233,23 @@ class LogTrek extends Component<
                 horizontal={true}
                 autoClose={5000}
                 iconSize="Large"
+                fadeOut={5000}
+              />
+            )}
+            {numPts === 0 && !this.trekInfo.logging && (
+              <SpeedDial
+                icon={'DotsVertical'}
+                // raised={bgImage ? undefined : true}
+                bottom={85}
+                items={sdOtherActions}
+                selectFn={this.sdSelected}
+                itemIconsStyle={{ backgroundColor: pageBackground }}
+                style={styles.speedDialTrigger}
+                menuColor="transparent"
+                horizontal={true}
+                autoClose={5000}
+                iconSize="Large"
+                fadeOut={5000}
               />
             )}
             <View
@@ -1082,17 +1260,21 @@ class LogTrek extends Component<
               }}
             >
               {numPts > 0 && (
-                <TrekStats logging={stopOk} trekType={this.trekInfo.type} />
+                <TrekStats 
+                  logging={stopOk} 
+                  trekType={this.trekInfo.type} 
+                  bgImage={bgImage} 
+                  format='big'
+                />
               )}
             </View>
           </View>
-        )}
         {startOk && !reviewOk && (
-          <View style={[controlsArea, cBorder, styles.caAdjust]}>
-            <IconButton
+          <View style={[controlsArea, styles.caAdjust]}>
+            {/* <IconButton
               iconSize={navIconSize}
               icon="PartCloudyDay"
-              style={navItem}
+              style={navItemWithLabel}
               iconStyle={navIcon}
               borderColor={navItemBorderColor}
               color={navIconColor}
@@ -1100,133 +1282,169 @@ class LogTrek extends Component<
               disabled={false}
               onPressFn={this.setActiveNav}
               onPressArg="Conditions"
-            />
+              label="Weather"
+              labelStyle={[navItemLabel, styles.navLabelColor]}
+            /> */}
             <IconButton
               iconSize={navIconSize}
-              icon="ChartDonut"
-              style={navItem}
+              icon="PieChart"
+              style={navItemWithLabel}
               raised
               iconStyle={navIcon}
               borderColor={navItemBorderColor}
               color={navIconColor}
               onPressFn={this.setActiveNav}
               onPressArg="Summary"
+              label="Summary"
+              labelStyle={[navItemLabel, styles.navLabelColor]}
             />
             <IconButton
               iconSize={navIconSize}
-              icon="Trophy"
-              style={navItem}
+              icon="Course"
+              style={navItemWithLabel}
+              iconStyle={navIcon}
+              borderColor={navItemBorderColor}
+              color={navIconColor}
+              raised
+              disabled={false}
+              onPressFn={this.setActiveNav}
+              onPressArg="Courses"
+              label="Courses"
+              labelStyle={[navItemLabel, styles.navLabelColor]}
+            />
+            <IconButton
+              iconSize={navIconSize}
+              icon="Target"
+              style={navItemWithLabel}
               iconStyle={navIcon}
               borderColor={navItemBorderColor}
               color={navIconColor}
               raised
               onPressFn={this.setActiveNav}
               onPressArg="Goals"
+              label="Goals"
+              labelStyle={[navItemLabel, styles.navLabelColor]}
             />
             <IconButton
               iconSize={navIconSize}
               icon="Settings"
-              style={navItem}
+              style={navItemWithLabel}
               iconStyle={navIcon}
               borderColor={navItemBorderColor}
               color={navIconColor}
               raised
               onPressFn={this.setActiveNav}
               onPressArg="Settings"
+              label="Settings"
+              labelStyle={[navItemLabel, styles.navLabelColor]}
             />
           </View>
         )}
         {stopOk && (
-          <View style={[controlsArea,styles.caAdjust, cBorder]}>
+          <View style={[controlsArea,styles.caAdjust]}>
             <IconButton
               iconSize={navIconSize}
               icon="Stop"
-              style={navItem}
+              style={navItemWithLabel}
               borderColor={trekLogRed}
               raised
               iconStyle={navIcon}
               color={navIconColor}
               onPressFn={this.setActiveNav}
               onPressArg="Stop"
-            />
+              label="Stop"
+              labelStyle={[navItemLabel, styles.navLabelColor]}
+           />
             {numPts > 0 && (
               <IconButton
                 iconSize={navIconSize}
                 icon="Camera"
-                style={navItem}
+                style={navItemWithLabel}
                 iconStyle={navIcon}
                 borderColor={navItemBorderColor}
                 color={navIconColor}
                 raised
-                onPressFn={this.props.locationSvc.getGeolocationConfig}
-                // onPressFn={this.setActiveNav}
-                // onPressArg="UseCamera"
-              />
+                // onPressFn={this.props.locationSvc.getGeolocationConfig}
+                onPressFn={this.setActiveNav}
+                onPressArg="UseCamera"
+                label="Camera"
+                labelStyle={[navItemLabel, styles.navLabelColor]}
+                />
             )}
             {numPts > 0 && (
               <IconButton
                 iconSize={navIconSize}
                 icon="Map"
-                style={navItem}
+                style={navItemWithLabel}
                 iconStyle={navIcon}
                 borderColor={navItemBorderColor}
                 color={navIconColor}
                 raised
                 onPressFn={this.setActiveNav}
                 onPressArg="ShowMap"
-              />
+                label="Map"
+                labelStyle={[navItemLabel, styles.navLabelColor]}
+                />
             )}
           </View>
         )}
         {reviewOk && (
-          <View style={[controlsArea, styles.caAdjust, cBorder]}>
+          <View style={[controlsArea, styles.caAdjust]}>
             <IconButton
               iconSize={navIconSize}
               icon="ArrowBack"
-              style={navItem}
+              style={navItemWithLabel}
               iconStyle={navIcon}
               raised
               borderColor={navItemBorderColor}
               color={navIconColor}
               onPressFn={this.setActiveNav}
               onPressArg="ReviewDone"
+              label="Done"
+              labelStyle={[navItemLabel, styles.navLabelColor]}
             />
             <IconButton
               iconSize={navIconSize}
               icon="Map"
-              style={navItem}
+              style={navItemWithLabel}
               iconStyle={navIcon}
               borderColor={navItemBorderColor}
               color={navIconColor}
               raised
               onPressFn={this.setActiveNav}
               onPressArg="ShowMap"
+              label="Map"
+              labelStyle={[navItemLabel, styles.navLabelColor]}
             />
           </View>
         )}
         {limitsOk && (
-          <View style={[controlsArea, styles.caAdjust, cBorder]}>
+          <View style={[controlsArea, styles.caAdjust]}>
             <IconButton
               iconSize={navIconSize}
               icon="ArrowBack"
-              style={navItem}
+              style={navItemWithLabel}
               iconStyle={navIcon}
               raised
               borderColor={navItemBorderColor}
               color={navIconColor}
               onPressFn={this.setActiveNav}
-              onPressArg="LimitsDone"
+              onPressArg={this.trackingMethodFormOpen ? "TrackingDone" : "LimitsDone"}
+              label="Cancel"
+              labelStyle={[navItemLabel, styles.navLabelColor]}
             />
             <IconButton
               iconSize={navIconSize}
               icon="Play"
-              style={navItem}
+              style={navItemWithLabel}
               borderColor={trekLogGreen}
               iconStyle={navIcon}
               raised
               color={navIconColor}
               onPressFn={this.setActiveNav}
-              onPressArg="LimitsContinue"
+              onPressArg={this.trackingMethodFormOpen ? "TrackingContinue" : "LimitsContinue"}
+              label="Start"
+              labelStyle={[navItemLabel, styles.navLabelColor]}
             />
           </View>
         )}

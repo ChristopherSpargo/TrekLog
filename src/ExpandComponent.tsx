@@ -49,7 +49,7 @@ export class ExpandView extends React.Component<{
       this.state.fadeAnim,            // The animated value to drive
       {
         toValue: this.props.startValue,    // Animate to starting Y position
-        duration: 10,            
+        duration: 300,            
         useNativeDriver: true,         
       }
     ).start();                        // Starts the animation

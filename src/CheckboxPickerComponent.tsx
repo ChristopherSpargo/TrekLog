@@ -8,30 +8,30 @@ import {
   TouchableNativeFeedback,
   Dimensions
 } from "react-native";
+// import { RectButton, TouchableWithoutFeedback, TouchableNativeFeedback,
+//          ScrollView } from 'react-native-gesture-handler';
 
 import {
   CONFIRM_Z_INDEX,
   BACKDROP_Z_INDEX,
   ModalSvcContext,
   TrekInfoContext,
-  UiThemeContext,
-  HEADER_HEIGHT,
-  CONTROLS_HEIGHT
+  UiThemeContext
 } from "./App";
 import { APP_ICONS } from "./SvgImages";
-import RadioGroup from "./RadioGroupComponent";
+import CheckboxGroup from './CheckboxGroupComponent';
 import SvgIcon from "./SvgIconComponent";
 import { ModalModel } from "./ModalModel";
 import { TrekInfo } from './TrekInfoModel';
 
 // dialog used for item selection from a list
 
-function RadioPicker({pickerOpen}) {
+function CheckboxPicker({pickerOpen}) {
   const modalSvc: ModalModel = useContext(ModalSvcContext);
   const uiTheme: any = useContext(UiThemeContext);
   const trekInfo: TrekInfo = useContext(TrekInfoContext);
-  const mData = modalSvc.rpData;
-  const [selection, setSelection] = useState();
+  const mData = modalSvc.cpData;
+  const [selections, setSelections] = useState([]);
 
   const { height } = Dimensions.get("window");
   const {
@@ -41,18 +41,18 @@ function RadioPicker({pickerOpen}) {
     contrastingMask_3,
     pageBackground,
     rippleColor,
-    disabledTextColor,
-    primaryColor
+    primaryColor,
+    disabledTextColor
   } = uiTheme.palette[trekInfo.colorTheme];
   const { cardLayout, roundedTop, roundedBottom, footerButton, footerButtonText } = uiTheme;
   const headerHeight = 50;
-  const okDisabled = selection === '#new#';
+  const canClose = this.allowNone || haveSelections();
 
   const styles = StyleSheet.create({
     container: { ...StyleSheet.absoluteFillObject },
     formArea: {
-      marginTop: 20 + HEADER_HEIGHT,
-      marginBottom: 20 + CONTROLS_HEIGHT,
+      marginTop: 60,
+      marginBottom: 40,
       marginHorizontal: 20,
       backgroundColor: "transparent",
     },
@@ -68,8 +68,8 @@ function RadioPicker({pickerOpen}) {
       paddingTop: 0,
       paddingBottom: 0,
       paddingLeft: 0,
-      paddingRight: 10,
-      maxHeight: height - (40 + CONTROLS_HEIGHT + HEADER_HEIGHT),
+      paddingRight: 0,
+      maxHeight: height - 100,
       zIndex: CONFIRM_Z_INDEX,
       backgroundColor: pageBackground,
     },
@@ -77,7 +77,7 @@ function RadioPicker({pickerOpen}) {
       flexDirection: "row",
       alignItems: "flex-end",
       height: headerHeight,
-      paddingLeft: 25,
+      paddingLeft: 30,
       paddingBottom: 5,
       borderStyle: "solid",
       borderBottomColor: dividerColor,
@@ -91,8 +91,7 @@ function RadioPicker({pickerOpen}) {
     },
     body: {
       flexDirection: "column",
-      paddingTop: 3,
-      paddingBottom: 13,
+      paddingVertical: 8
     },
     bodyText: {
       fontSize: 16,
@@ -116,44 +115,45 @@ function RadioPicker({pickerOpen}) {
       backgroundColor: cardLayout.backgroundColor
     },
     rgItem: {
-      paddingTop: 10,
+      paddingVertical: 5,
       backgroundColor: pageBackground,
-      paddingRight: 0,
-      paddingLeft: 0,
-      marginLeft: 25,
+      paddingRight: 15,
+      paddingLeft: 30,
     },
     rgLabel: {
       color: highTextColor,
       fontSize: 20,
-      paddingLeft: 10,
-      paddingRight: 10,
+      paddingLeft: 30,
+      paddingRight: 30,
       flex: 1
     }
   });
 
   useEffect(() => {
-    if (mData.selection && !selection){
-      setSelection(mData.selection);
+    if (mData.selections.length && !selections.length){
+      setSelections([...mData.selections]);
     }
   });
 
-  function checkSelection(selText: string){
-    if(mData.selectionValues.indexOf(selText) === -1){
-      close(selText);      // new value entered and user hit ADD
-    } else {
-      setSelection(selText);
-    }
+  // see if there are anu selections
+  function haveSelections() {
+    return selections.indexOf(true) !== -1;
+  }
+
+  // toggle the selection at index
+  function changeSelections(sels: boolean[]) {
+    setSelections([...sels]);
   }
 
   // call the resolve method
-  function close(txt?: string) {
-    let result = txt || selection;
+  function close() {
+    let result = selections;
     setTimeout(() => {
       modalSvc
-        .closeRadioPicker(400)
+        .closeCheckboxPicker(400)
         .then(() => {
-          setSelection('');     // clear the local selection so it will be updated from mData in useEffect
-          modalSvc.rpData.resolve(result);
+          setSelections([]);     // clear the local selections so it will be updated from mData in useEffect
+          modalSvc.cpData.resolve(result);
         })
         .catch(() => {});
     }, 200);
@@ -164,10 +164,10 @@ function RadioPicker({pickerOpen}) {
     // setSelection(mData.selection);   
     setTimeout(() => {
       modalSvc
-        .closeRadioPicker(400)
+        .closeCheckboxPicker(400)
         .then(() => {
-          setSelection('');     // clear the local selection so it will be updated from mData in useEffect
-          modalSvc.rpData.reject("CANCEL");
+          setSelections([]);     // clear the local selection so it will be updated from mData in useEffect
+          modalSvc.cpData.reject("CANCEL");
         })
         .catch(() => {});
     }, 200);
@@ -198,20 +198,17 @@ function RadioPicker({pickerOpen}) {
                   </View>
                   <ScrollView>
                     <View style={styles.body}>
-                      <RadioGroup
-                        onChangeFn={checkSelection}
-                        selected={selection}
+                      <CheckboxGroup
+                        onChangeFn={changeSelections}
+                        selections={selections}
                         itemStyle={styles.rgItem}
-                        values={mData.selectionValues}
                         labels={mData.selectionNames}
-                        comments={mData.selectionComments}
-                        itemTest={mData.itemTest}
                         labelStyle={styles.rgLabel}
                         vertical={true}
                         align="start"
                         inline
                         itemHeight={40}
-                        radioFirst
+                        checkboxFirst
                       />
                     </View>
                   </ScrollView>
@@ -230,11 +227,11 @@ function RadioPicker({pickerOpen}) {
                     </TouchableNativeFeedback>
                     <TouchableNativeFeedback
                       background={TouchableNativeFeedback.Ripple(rippleColor, true)}
-                      onPress={okDisabled ? undefined : () => close()}
+                      onPress={canClose ? close : undefined}
                     >
                       <View style={[footerButton, { height: headerHeight }]}>
                         <Text
-                          style={[footerButtonText, { color: okDisabled ? disabledTextColor : primaryColor }]}
+                          style={[footerButtonText, { color: canClose ? primaryColor : disabledTextColor }]}
                         >
                           {mData.okText}
                         </Text>
@@ -251,4 +248,4 @@ function RadioPicker({pickerOpen}) {
   ))
 }
 
-export default RadioPicker;
+export default CheckboxPicker;

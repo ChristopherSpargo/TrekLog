@@ -1,10 +1,10 @@
 import { observable, action } from 'mobx';
 import { LatLng } from 'react-native-maps';
 
-import { TrekInfo, TrekTimeInterval, TrekPoint, NumericRange, SHORT_TO_LONG_DIST_NAMES,
+import { TrekInfo, TrekTimeInterval, TrekPoint, NumericRange, TrekType,
           } from './TrekInfoModel'
 import { BarData, BarGraphInfo } from './FilterService';
-import { UtilsSvc } from './UtilsService';
+import { UtilsSvc, DRIVING_A_CAR_MET, ACTIVITY_SPEEDS } from './UtilsService';
 
 export interface DistAndPoint {
   dist: number,
@@ -14,6 +14,36 @@ export interface SegmentAndPoint {
   segIndex: number,
   point: LatLng
 }
+
+export const RANGE_COLORS = ['#4d4dff', '#00cc00', '#ffff00', '#ff9900', '#ff3300'];
+export interface RateRangeLine {
+  lineSegment: LatLng[], 
+  fillColor: string, 
+  duration: number
+}
+
+export interface RateRangePathsObj {
+  lines: RateRangeLine[],
+  legend: {title: string, ranges: { start: string, end: string, color: string }[]}
+}
+
+export interface TrekValueRangesObj {
+  items: {value: number, duration: number}[], 
+  ranges: number[], 
+  dataRange: NumericRange
+}
+
+export type RangeDataType = "speed" | "calories";
+
+export interface RateRangeInfoObj {
+  rangeType:  RangeDataType,  // type of rate ranges to create
+  pointList:  TrekPoint[],    // points to use for paths
+  weight:     number,         // weight to use for calorie calculations
+  packWeight: number,         // packWeight to use for calories
+  hills:      string,         // hills category for calories
+  type:       TrekType        // activity type for calories
+}
+
 
 export const SAVED_UNITS = "saved";
 export const INTERVALS_UNITS = "intervals";
@@ -87,6 +117,7 @@ export class IntervalSvc {
     ((v.longitude - w.longitude) * (v.longitude - w.longitude)) }
 
   // return the distance squared between a point (p) and a line segment(v,w)
+  // and the point on the segment nearest to the given point
   distToSegmentSquared = (p: LatLng, v: LatLng, w: LatLng) : DistAndPoint => {
     let l2 = this.dist2(v, w);
     if (l2 == 0) return {dist: this.dist2(p, v), point: v};
@@ -141,7 +172,7 @@ export class IntervalSvc {
   } 
 
   intervalLabel = (index: number) : string => {
-    let lUnits = SHORT_TO_LONG_DIST_NAMES[this.intervalData.displayUnits];
+    let lUnits = this.intervalData.displayUnits;
     return this.utilsSvc.formatDist(this.intervalData.endDists[index], lUnits);
   }
   
@@ -334,7 +365,7 @@ export class IntervalSvc {
                           startTimes: [], endDists: [], elevs: [], times: [], speeds: [], cals: [] };
     iData = this.intervalData;
     if(this.units === 'minutes'){
-      timeInts = this.utilsSvc.getTrekTimeIntervals(tempPts, iDist);
+      timeInts = this.utilsSvc.getTrekTimeIntervals(tempPts, iDist );
     }
     iData.displayUnits = this.getIntervalDisplayUnits(this.units);
     if (tempPts.length > 0) {
@@ -499,7 +530,7 @@ export class IntervalSvc {
         case "Calories":
           barItem.value = intData.cals[i];
           barItem.label1 = intData.cals[i].toString();
-          if(isNaN(intData.cals[i])){ alert(JSON.stringify(intData.segPoints[i]))}
+          // if(isNaN(intData.cals[i])){ alert(JSON.stringify(intData.segPoints[i]))}
           break;
         default:
           barItem.value = 0;
@@ -510,6 +541,148 @@ export class IntervalSvc {
     }
   }
 
+  // for the given trek, build polyLine segments showing the selected data (speed or calories/min) 
+  // displayed as different colors for different ranges of the data values.
+  // first analyze the trek points and determine reasonable ranges for the selected data.
+  // next create groupings of points as they change value ranges.
+  // make sure to impose a resonable minimum on duration in a new range.
+  // return an array of {lineSegment: LatLng[], fillColor: string} and a 
+  // Legend object with {title: string, ranges: {start: string, end: string, color: string}[]}
+  buildRateRangePaths = (rrInfo: RateRangeInfoObj) : RateRangePathsObj => {
+    let result : RateRangePathsObj = {lines: [], legend:{title: '', ranges: []}};
+    let rangeInfo : TrekValueRangesObj = this.defineTrekValueRanges(rrInfo);
+    let numRanges = rangeInfo.ranges.length + 1;
+
+    if (rangeInfo === undefined) {return undefined;}
+
+    // first, lets build the legend
+    result.legend.title = rrInfo.rangeType === 'speed' ? ('Speed (' + this.trekInfo.speedUnits() + ')') : 
+                                                          'Calories/Min';
+    for(let i=0; i<=rangeInfo.ranges.length; i++) {
+      let start = i === 0 ? rangeInfo.dataRange.min : rangeInfo.ranges[i-1];
+      let end = i === rangeInfo.ranges.length ? rangeInfo.dataRange.max : rangeInfo.ranges[i];
+      result.legend.ranges.push({start: this.getDisplayValue(start, rrInfo.rangeType, false), 
+                                 end: this.getDisplayValue(end, rrInfo.rangeType, false), 
+                                 color: RANGE_COLORS[i + 5 - numRanges]})
+    }
+
+    // now, process the point data into line segments per data ranges
+    let minDur = 5; // minDuration || Math.max(trek.duration/50, 20);
+    let items = rangeInfo.items;
+    let ranges = rangeInfo.ranges;
+    let currRangeIndex = this.utilsSvc.findRangeIndex(items[0].value, ranges);
+    let thisItemIndex;
+    let currRangeDuration = 0;
+    let points = rrInfo.pointList;
+    let currLine = 0;
+    result.lines.push({lineSegment: [], fillColor: RANGE_COLORS[currRangeIndex + 5 - numRanges], duration: 0})
+    for(let i=0; i<rangeInfo.items.length; i++) {
+      thisItemIndex = this.utilsSvc.findRangeIndex(items[i].value, ranges);
+      if (thisItemIndex === currRangeIndex || thisItemIndex === -1){  // watch out for bad data
+        currRangeDuration += items[i].duration;
+        result.lines[currLine].lineSegment.push({latitude: points[i].l.a, longitude: points[i].l.o});
+      } else {
+        currRangeIndex = thisItemIndex;
+        result.lines[currLine].lineSegment.push({latitude: points[i].l.a, longitude: points[i].l.o});
+        if (currRangeDuration >= minDur) {    
+
+          // time in this range was long enough, finish line and start next
+          result.lines[currLine].duration = currRangeDuration;
+          result.lines.push({lineSegment: [], fillColor: RANGE_COLORS[currRangeIndex + 5 - numRanges], duration: 0});
+          currLine++;
+          result.lines[currLine].lineSegment.push({latitude: points[i].l.a, longitude: points[i].l.o});
+          currRangeDuration = items[i].duration;
+        } else {
+          
+          // time in this range was NOT long enough, switch current segment to new range
+          result.lines[currLine].fillColor = RANGE_COLORS[currRangeIndex + 5 - numRanges];
+          currRangeDuration += items[i].duration;
+        }
+      }
+    }
+    result.lines[currLine].duration = currRangeDuration;
+
+    return result;
+  }
+
+  // return the given value formatted for display with units optional
+  getDisplayValue = (val: number, type: RangeDataType, showUnits: boolean ) : string => {
+    switch(type){
+      case 'speed':
+        if (showUnits){
+          return this.utilsSvc.formatAvgSpeed(this.trekInfo.measurementSystem, val, 1);
+        }
+        return this.utilsSvc.computeRoundedAvgSpeed(this.trekInfo.measurementSystem, val, 1).toString();
+      case 'calories':
+        let precision = val < 10 ? 10 : 1;
+        let newVal = Math.round(val * precision) / precision;
+        if (showUnits){
+          return newVal.toString() + ' /min';
+        }
+        return newVal.toString();
+      defalut:
+        return '';
+    }
+  }
+
+  // given a TrekObj, define an array of item values at each point in the trek and
+  // an array of ranges for the items
+  defineTrekValueRanges = (rrInfo: RateRangeInfoObj) : TrekValueRangesObj => {
+    let itemRanges = [];
+    let itemList : {value: number, duration: number}[] = [];
+    let valueRange : NumericRange = {max: -5000, min: 100000, range: 0};
+    let points = rrInfo.pointList;
+    let lastPtIndex = points.length - 1;
+
+    if (points.length === 0) { return undefined; }
+    switch (rrInfo.rangeType) {
+      case 'speed':
+        // get speeds at every point
+        for(let i=0; i<=lastPtIndex; i++) {
+          let val = points[i].s;
+          if (val > valueRange.max){ valueRange.max = val; }
+          if (val < valueRange.min){ valueRange.min = val; }
+          itemList.push({value: val,
+                          duration: i === lastPtIndex ? 0 : (points[i + 1].t - points[i].t)});
+          };
+        break;
+      case 'calories':
+        // get calories burned/minute at every point
+        let metTable = this.utilsSvc.getMETTable(rrInfo.type, rrInfo.packWeight)
+        let hIndex = this.utilsSvc.getHillsIndex(rrInfo.hills);
+        let speedIndex, currMET, calRate;
+        let weight = rrInfo.weight;
+        let pWt = rrInfo.packWeight || 0;
+        for(let i=0; i<rrInfo.pointList.length; i++) {
+          calRate = 0;
+          speedIndex = this.utilsSvc.findRangeIndex(points[i].s, ACTIVITY_SPEEDS);
+          if (speedIndex !== -1) {
+            currMET = metTable[speedIndex][hIndex];
+            calRate = currMET * (weight + (currMET === DRIVING_A_CAR_MET ? 0 : pWt)) / 60;
+          }
+          if (calRate > valueRange.max){ valueRange.max = calRate; }
+          if (calRate < valueRange.min){ valueRange.min = calRate; }
+          itemList.push({value: calRate, 
+                         duration: i === lastPtIndex ? 0 : (points[i + 1].t - points[i].t)});
+        };
+        break;
+      default:
+        return {items: [], ranges: [], dataRange: {max: 0, min: 0, range: 0}};
+    }
+    
+    // now determine some ranges for the data in the itemList
+    valueRange.range = valueRange.max - valueRange.min;
+    let nRanges = valueRange.range >= 15 ? 5 : 3;
+    let rSize = valueRange.range / nRanges;
+    let precision = valueRange.range < 1 ? 100 : (valueRange.range > 10 ? 1 : 10);
+    let rTop = Math.round((valueRange.min + rSize) * precision) / precision;
+    for(let i=1; i<nRanges; i++) {
+      itemRanges.push(rTop);
+      rTop = Math.round((valueRange.min + (rSize * (i+1))) * precision) / precision;
+    }
+
+    return {items: itemList, ranges: itemRanges, dataRange: valueRange};
+  } 
 
 }
 

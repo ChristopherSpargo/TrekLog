@@ -1,7 +1,8 @@
 import { LaLo, TrekPoint, TrekType, TrekTimeInterval, MeasurementSystemType, SMALL_DIST_UNITS,
          ElevationData, TREK_TYPE_WALK, TREK_TYPE_RUN, TREK_TYPE_BIKE, TREK_TYPE_HIKE, 
-         NumericRange, TrekObj } from './TrekInfoModel'
+         NumericRange, SMALL_DIST_CUTOFF } from './TrekInfoModel'
 import { LatLng } from 'react-native-maps';
+import { TREK_LIMIT_TYPE_TIME } from './LoggingService';
 import { ELEVATION_API_URL, GOOGLE_MAPS_API_KEY, MAX_ELEVATION_SAMPLES_PER_REQUEST } from './AppInfo'
 
 export interface TimeFrame {
@@ -462,11 +463,14 @@ export class UtilsSvc {
     return fd;
   };
   
-    // convert the distance given in meters to a value rounded to the selected precision in the given units
-    getRoundedDist = (dist: number, units: string, noSmall = false) : number => {
-      let precision = 10;
+  // convert the distance given in meters to a value rounded to the selected precision in the given units
+  getRoundedDist = (dist: number, units: string, noSmall = false) : number => {
+    let precision = 10;
 
-      if (!noSmall && (dist < 165) && (units in SMALL_DIST_UNITS)) { units = SMALL_DIST_UNITS[units]; }
+    if (!noSmall && (dist < SMALL_DIST_CUTOFF) && (units in SMALL_DIST_UNITS)) { 
+      units = SMALL_DIST_UNITS[units]; 
+    }
+    if (dist !== 0) {
       switch (units) {
         case 'ft':
           dist = Math.round(dist / M_PER_FOOT); // just display whole feet
@@ -490,11 +494,14 @@ export class UtilsSvc {
               break;
         default:
       }
+    }
     return dist;
   }
 
   formatDist = (dist: number, units: string, noSmall = false) : string => {
-    if (!noSmall && (dist < 165) && (units in SMALL_DIST_UNITS)) { units = SMALL_DIST_UNITS[units]; }
+    if (!noSmall && (dist < SMALL_DIST_CUTOFF) && (units in SMALL_DIST_UNITS)) { 
+      units = SMALL_DIST_UNITS[units]; 
+    }
     return (this.getRoundedDist(dist, units, noSmall) + ' ' + units);
   }
 
@@ -552,13 +559,32 @@ export class UtilsSvc {
     return 'N/A';
   }
 
-  // return a time formatted as h:mm:ss from the given time in seconds
-  timeFromSeconds = (sec: number) => {
+  // return a time formatted as 'h:mm:ss' if colons, 'hhmmss' if 6digit or 'NN hr NN min NN sec' if hms
+  // from the given time in seconds
+  timeFromSeconds = (sec: number, format : "hms" | "colons" | "6digit" = 'colons') => {
     sec = Math.round(sec);
     let s = sec % 60;
     let m = Math.trunc(sec / 60) % 60;
     let h = Math.trunc(sec / 3600);
-    return ((h ? h + ':' : '') + (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s);
+    let lzm = m < 10 ? '0' : '';
+    let lzs = s < 10 ? '0' : '';
+    let tsh = m || s ? ' ' : '';
+    let tsm = s ? ' ' : '';
+    switch(format){
+      case 'hms':
+        if(sec === 0){ return '_'; }
+        return ((h ? (h + ' hr' + tsh) : '') + (m ? (m + ' min' + tsm) : '') + (s ? (s + ' sec') : ''));
+      case 'colons':
+        return ((h ? h + ':' : '') + lzm + m + ':' + lzs + s);
+      case '6digit':
+        if(sec === 0){ return ''; }
+        let hStr = '' + (h ? h : '');
+        let mStr = hStr ? (lzm + m) : (m ? m : '');
+        let sStr = mStr ? (lzs + s) : (s ? s : '');
+        return hStr + mStr + sStr;
+      default:
+        return ''; 
+    }
   }
 
   // convert the given time to seconds from the given units
@@ -569,6 +595,7 @@ export class UtilsSvc {
       case 'minutes':
         return time * 60;
       case 'seconds':
+      case 'time':
       default:
         return time;
     }
@@ -582,6 +609,7 @@ export class UtilsSvc {
       case 'minutes':
         return secs / 60;
       case 'seconds':
+      case 'time':
       default:
         return secs;
     }
@@ -813,7 +841,6 @@ export class UtilsSvc {
             result.length--;  // ending value of all but last segment will be repeated by starting value of the next
           }
         })
-        // alert(elevData.length + '|' + result.length + '|' + '|' + segStart + '|' + JSON.stringify(result))
         resolve(result);
       })
       .catch((err) => {
@@ -827,7 +854,6 @@ export class UtilsSvc {
       this.getPathElevations(path, samples)     // compose and send request to Elevation API
       .then((res : any) => {
         if (res.status !== 'OK') { 
-          // alert(res.status + '|' + path.length + '|' + samples);
           reject(res.status);         // some problem reported from Elevation API
         }
         res.results.forEach((point) => {
@@ -933,65 +959,6 @@ export class UtilsSvc {
     return range;
   }
 
-  // given a TrekObj, define an array of item values at each point in the trek and
-  // an array of ranges for the items
-  defineTrekValueRanges = (trek: TrekObj, item: string) : 
-                          {items: {value: number, duration: number}[], ranges: number[], dataRange: NumericRange}  => {
-    let itemRanges = [];
-    let itemList : {value: number, duration: number}[] = [];
-    let valueRange : NumericRange = {max: -5000, min: 100000, range: 0};
-    let points = trek.pointList;
-    let lastPtIndex = points.length - 1;
-
-    switch (item) {
-      case 'speed':
-        // get speeds at every point
-        for(let i=0; i<=lastPtIndex; i++) {
-          let val = points[i].s;
-          if (val > valueRange.max){ valueRange.max = val; }
-          if (val < valueRange.min){ valueRange.min = val; }
-            itemList.push({value: val,
-                         duration: (i === lastPtIndex ? trek.duration : points[i + 1].t) - points[i].t});
-        };
-        break;
-      case 'calories':
-        // get calories burned/minute at every point
-        let metTable = this.getMETTable(trek.type, trek.packWeight)
-        let hIndex = this.getHillsIndex(trek.hills);
-        let speedIndex, currMET, calRate;
-        let weight = trek.weight;
-        let pWt = trek.packWeight || 0;
-        for(let i=0; i<trek.pointList.length; i++) {
-          calRate = 0;
-          speedIndex = this.findRangeIndex(points[i].s, ACTIVITY_SPEEDS);
-          if (speedIndex !== -1) {
-            currMET = metTable[speedIndex][hIndex];
-            calRate = currMET * (weight + (currMET === DRIVING_A_CAR_MET ? 0 : pWt)) / 60;
-          }
-          if (calRate > valueRange.max){ valueRange.max = calRate; }
-          if (calRate < valueRange.min){ valueRange.min = calRate; }
-          itemList.push({value: calRate, 
-                         duration: (i === lastPtIndex ? trek.duration : points[i + 1].t) - points[i].t});
-        };
-        break;
-      default:
-        return {items: [], ranges: [], dataRange: {max: 0, min: 0, range: 0}};
-    }
-    
-    // now determine some ranges for the data in the itemList
-    valueRange.range = valueRange.max - valueRange.min;
-    let nRanges = valueRange.range >= 15 ? 5 : 3;
-    let rSize = valueRange.range / nRanges;
-    let precision = valueRange.range < 1 ? 100 : (valueRange.range > 10 ? 1 : 10);
-    let rTop = Math.round((valueRange.min + rSize) * precision) / precision;
-    for(let i=1; i<nRanges; i++) {
-      itemRanges.push(rTop);
-      rTop = Math.round((valueRange.min + (rSize * (i+1))) * precision) / precision;
-    }
-
-    return {items: itemList, ranges: itemRanges, dataRange: valueRange};
-  } 
-
   // given a value and a list of numbers (sorted ascending) return the index of
   // the interval of the 2 numbers the value falls between
   // return 0 if value is less than first list item
@@ -999,7 +966,7 @@ export class UtilsSvc {
   // return -1 if invalid value (undefined)
   findRangeIndex = (val: number, list: number[]) : number => {
     if(val === undefined || val === null) {
-      alert("Invalid Speed:\n" + val)
+      // alert("Invalid Speed:\n" + val)
       return -1;}
     let lLen = list.length;
     for (let i=0; i<lLen; i++) {
@@ -1051,6 +1018,38 @@ export class UtilsSvc {
     return iData;
   }
 
+  // return a copy of the given trek path truncated to the given limit for the given property type (time, dist)
+  truncateTrekPath = (points: TrekPoint[], limit: number, type: string) : TrekPoint[] => {
+    let accum = 0;
+    let val = 0;
+    let timeLimit = type === TREK_LIMIT_TYPE_TIME;
+    let tempPts = this.copyTrekPath(points); // copy path data
+    const nPts = tempPts.length;
+    let t : number, d : number, part : number, newP : LaLo;
+    
+    if (tempPts.length > 0) {
+      for(let i=1; i<nPts; i++){
+        t = tempPts[i].t - tempPts[i-1].t;            // duration of next segment
+        d = this.calcDistLaLo(tempPts[i-1].l, tempPts[i].l);  // distance of next segment
+        val = timeLimit ? t : d;
+        if (accum + val >= limit) {                  // will this point complete the limit?
+          part = (limit - accum) / val;              // what % of the value for this segment do we need?
+          let newPTime = Math.round(t * part + tempPts[i - 1].t);
+          // now get a point that is 'part' % into the distance between these 2 points
+          newP = this.pointWithinSegment(tempPts[i-1].l, tempPts[i].l, part);
+          tempPts[i - 1].l = newP;            // make this the starting point of the next segment and reprocess
+          tempPts[i - 1].t = newPTime;        // update the time for this point
+          tempPts.length = i;
+          break;
+        }
+        else {
+          accum += val;            // increase accumulator
+        }
+      }
+    }
+    return tempPts;
+  }
+
   // make a deep copy of the trek path  (slice makes a shallow copy)
   copyTrekPath = (pointList: TrekPoint[]) : TrekPoint[] => {
     let pathCopy : TrekPoint[] = [];
@@ -1070,6 +1069,16 @@ export class UtilsSvc {
     return pathCopy;
   }
 
+  // return a LatLng[] from the given TrekPoint[]
+  cvtPointListToLatLng = (pointList: TrekPoint[]) : LatLng[] => {
+    let pathCopy : LatLng[] = [];
+
+    if (pointList.length) {
+      pathCopy =  pointList.map((pt) => { return {latitude: pt.l.a, longitude: pt.l.o}} )
+    }
+    return pathCopy;
+  }
+
   // divide the given pointList into small time intervals and compute calories by interval
   // choose time interval according to given overall duration of pointList
   // return: the rounded calorie sum
@@ -1085,7 +1094,6 @@ export class UtilsSvc {
     if (duration < 300) { iTime = 15; }   // choose a shorter value for very short durations ( < 5 min )
     if (duration > 3600) { iTime = 60; }  // choose a longer value for very long durations ( > 60 min )
     let iList = this.getTrekTimeIntervals(pointList, iTime);
-    // alert('Time Intervals :\n' + JSON.stringify(iList) + '\n Count: ' + iList.length);
     let cals = 0;
     if (hills === 'Unknown' || hills === 'Flat') { hills = 'Level'; }
     let hIndex = ['Level', 'Moderate', 'Difficult', 'Extreme'].indexOf(hills);
@@ -1231,6 +1239,7 @@ export class UtilsSvc {
 
   // round the given value to 4 significant digits
   fourSigDigits = (val: number) : number => {
+    if (val === undefined || val === null) { return 0; }
     return Math.round(val * 10000) / 10000;
   }
 

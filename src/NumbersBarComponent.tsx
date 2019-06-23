@@ -6,7 +6,7 @@ import { observer, inject } from "mobx-react";
 import { TrekInfo } from "./TrekInfoModel";
 import { UtilsSvc } from "./UtilsService";
 import SlideUpView from "./SlideUpComponent";
-import { IntervalData } from "./SelectedTrekComponent";
+import { IntervalData } from "./IntervalSvc";
 import {
   NUMBERS_BAR_Z_INDEX,
   INVISIBLE_Z_INDEX,
@@ -15,7 +15,6 @@ import {
 } from "./App";
 import TrekStats from "./TrekStatsComponent";
 
-export const TREK_LABEL_HEIGHT = 45;
 @inject("trekInfo", "utilsSvc", "uiTheme")
 @observer
 class NumbersBar extends Component<
@@ -25,6 +24,9 @@ class NumbersBar extends Component<
     open?: boolean; // display is visible if true
     interval?: number; // currently selected interval (if any)
     intervalData?: IntervalData; // interval data for trek (if any)
+    bgImage?: boolean;  // true if being displayed over an image
+    format?: string;    // small or big size display
+    sysChangeFn?: Function // function to call for measurementSystem change
     uiTheme?: any;
     utilsSvc?: UtilsSvc;
     trekInfo?: TrekInfo; // object with all non-gps information about the Trek
@@ -67,20 +69,20 @@ class NumbersBar extends Component<
     const { height } = Dimensions.get("window");
     const {
       highTextColor,
-      trekLogBlue,
-      dividerColor,
       disabledTextColor,
-      pageBackground
+      secondaryColor,
+      matchingMask_8,
     } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
     const { cardLayout, roundedTop } = this.props.uiTheme;
     const tInfo = this.props.trekInfo;
+    const small = this.props.format === 'small';
     const labelText = tInfo.trekLabel
       ? tInfo.trekLabel
       : tInfo.timerOn
       ? tInfo.type + " in progress"
       : "No Label";
     const noLabel = labelText === "No Label";
-    const nHt = height - CONTROLS_HEIGHT - HEADER_HEIGHT;
+    const nHt = small ? 220 : (height - CONTROLS_HEIGHT - HEADER_HEIGHT);
     const statsAreaHt = nHt;
     const areaHeight = statsAreaHt + CONTROLS_HEIGHT;
 
@@ -114,46 +116,22 @@ class NumbersBar extends Component<
         backgroundColor: "transparent",
         zIndex: this.zValue
       },
-      statItem: {
-        marginRight: 0,
-        marginLeft: 0,
-        flex: 1,
-        paddingLeft: 10,
-        paddingRight: 10,
-        alignItems: "flex-end",
-        flexDirection: "row",
-        justifyContent: "space-between"
-      },
-      borderRt: {
-        borderRightWidth: 1,
-        borderColor: dividerColor,
-        borderStyle: "solid"
-      },
-      title: {
-        color: highTextColor,
-        fontSize: 18,
-        textAlign: "center"
-      },
-      selectable: {
-        color: trekLogBlue
-      },
-      value: {
-        fontSize: 22,
-        fontWeight: "300",
-        color: highTextColor
-      },
       label: {
-        height: TREK_LABEL_HEIGHT,
         paddingBottom: 10,
-        flexDirection: "row",
-        justifyContent: "center",
-        alignItems: "flex-end"
+        paddingTop: 5,
+        flexDirection: "column",
+        justifyContent: "flex-start",
+        alignItems: "center"
       },
       labelText: {
-        fontSize: 20,
+        fontSize: small ? 18 : 20,
         fontStyle: noLabel ? "italic" : "normal",
         fontWeight: "bold",
         color: noLabel ? disabledTextColor : highTextColor
+      },
+      intervalText: {
+        fontSize: small ? 14 : 16,
+        color: secondaryColor,
       }
     });
 
@@ -161,7 +139,7 @@ class NumbersBar extends Component<
       <View style={styles.container}>
         <View style={[styles.statusArea, roundedTop]}>
           <SlideUpView
-            bgColor={pageBackground}
+            bgColor={matchingMask_8}
             startValue={areaHeight}
             endValue={0}
             open={this.props.open}
@@ -171,11 +149,13 @@ class NumbersBar extends Component<
             <View style={[cardLayout, styles.cardCustom, roundedTop]}>
               <View style={[styles.label]}>
                 <Text style={styles.labelText}>{labelText}</Text>
+                {(this.props.interval !== undefined && this.props.interval >= 0) &&
+                  <Text style={styles.intervalText}>{'Interval ' + (this.props.interval + 1)}</Text>
+                }
               </View>
               <View
                 style={{
                   flex: 1,
-                  justifyContent: "space-around",
                   alignItems: "center"
                 }}
               >
@@ -184,6 +164,8 @@ class NumbersBar extends Component<
                   trekType={tInfo.type}
                   interval={this.props.interval}
                   intervalData={this.props.intervalData}
+                  format={this.props.format}
+                  sysChangeFn={this.props.sysChangeFn}
                 />
               </View>
             </View>

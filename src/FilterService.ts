@@ -10,7 +10,6 @@ export type SortDirection = "Ascend" | "Descend";
 export const SORT_DIRECTIONS = ['Ascend', 'Descend'];
 export const SORT_DIRECTION_OTHER = {Ascend: 'Descend', Descend: 'Ascend'};
 export const SORT_DIRECTION_ICONS = {Ascend: 'ArrowUp', Descend: 'ArrowDown'}
-export const SWITCH_USER_MODES = {Basic: 'Advanced', Advanced: 'Basic'}
 
 export interface FilterSettingsObj {
   typeSels: number,
@@ -96,11 +95,10 @@ export class FilterSvc {
   @observable stepsDefMax : string;
   @observable filterRuns : number;
   @observable foundType : boolean;
+  @observable groupList : string[];
 
   filterMode = '';
   barGraphData: BarGraphInfo = {items: [], range: {max: 0, min: 0, range: 0}};
-  labelCutoff = 0;
-  graphGridMin = 0;
   filter : FilterSettingsObj;
   filteredTreks : number[] = [];   // Treks to show in graph
 
@@ -146,6 +144,7 @@ export class FilterSvc {
     this.stepsDefMax = '';
     this.setFilterRuns(0);
     this.setFoundType(false);
+    this.clearGroupList();
   }
 
   // set observable that will cause the bar graph to scroll to a bar
@@ -312,6 +311,33 @@ export class FilterSvc {
     this.filterTreks();      
   }
 
+  // add the given group to the group list
+  @action
+  addGroupListItem = (group: string) => {
+    if(this.groupList.indexOf(group) === -1) {
+      this.groupList.push(group);
+    }
+  }
+
+  // remove the given group from the group list
+  @action
+  removeGroupListItem = (group: string) => {
+    let i = this.groupList.indexOf(group);
+    if (i !== -1) {
+      this.groupList.splice(i,1);
+    }
+  }
+
+  // clear the group list
+  @action
+  clearGroupList = () => {
+    this.groupList = [];
+  }
+
+  // return true if the given group is in the groupList
+  isInGroupList = (group: string) => {
+    return this.groupList.indexOf(group) !== -1;
+  }
 
   @action
   setFilterRuns = (val: number) => {
@@ -680,7 +706,7 @@ export class FilterSvc {
   sortExistingTreks = () => {
     if (this.filteredTreks.length){
       this.updateFSO();
-      let treks = this.filteredTreks.slice();
+      let treks = [...this.filteredTreks];
       treks.sort(this.sortFunc);
       this.buildGraphData(treks);
       this.setFilteredTreks(treks);
@@ -929,52 +955,55 @@ export class FilterSvc {
     this.barGraphData.range = dataRange;
     for(let tn=0; tn<treks.length; tn++) {
       let t = this.trekInfo.allTreks[treks[tn]];
-      let barItem : BarData = {} as BarData;
-      barItem.type = t.type;
-      barItem.icon = t.type;      // show type icon above bars
-      barItem.images = t.trekImages !== undefined;
-      switch(this.show){
-        case "Dist":
-          let d = this.utilsSvc.getRoundedDist(t.trekDist, this.trekInfo.distUnits(), true);
-          barItem.value = d;
-          barItem.label1 = d.toString();
-          break;
-        case "Time":
-          barItem.value = t.duration;
-          barItem.label1 = this.utilsSvc.timeFromSeconds(t.duration);
-          break;
-        case "Date":
-          let db = this.utilsSvc.daysBetween(thisSortDate, t.sortDate)
-          barItem.value = db;
-          barItem.label1 = t.date.substr(0,5) + '/' + t.sortDate.substr(2,2);
-          barItem.label2 = t.startTime;
-          break;
-        case "Steps":
-          let s = this.utilsSvc.computeStepCount(t.trekDist, t.strideLength);
-          // let spm = this.utilsSvc.computeStepsPerMin(s, t.duration);
-          barItem.value = s;
-          barItem.label1 = s.toString();
-          break;
-        case "Speed":
-          let speed = this.utilsSvc.computeRoundedAvgSpeed(this.trekInfo.measurementSystem, t.trekDist, t.duration);
-          barItem.value = speed; 
-          barItem.label1 = speed.toString();
-          break;
-        case "Cals":
-          barItem.value = t.calories;
-          barItem.label1 = (barItem.value).toString();
-          break;
-        default:
-          barItem.value = 0;
-          barItem.label1 = '';
-          barItem.label2 = '';
-      }
-      barItem.indicator = t.date.substr(0,5); 
-      this.labelCutoff = 175;
-      this.graphGridMin = 0;
+      let barItem : BarData = this.getBarItem(t, thisSortDate, this.show);
       this.addBarGraphData(barItem);
     }
   }
+
+  getBarItem = (t: TrekObj, thisSortDate: string, show: string) : BarData => {
+    let barItem : BarData = {} as BarData;
+    barItem.type = t.type;
+    barItem.icon = t.type;      // show type icon above bars
+    barItem.images = t.trekImages !== undefined;
+    switch(show){
+      case "Dist":
+        let d = this.utilsSvc.getRoundedDist(t.trekDist, this.trekInfo.distUnits(), true);
+        barItem.value = d;
+        barItem.label1 = d.toString();
+        break;
+      case "Time":
+        barItem.value = t.duration;
+        barItem.label1 = this.utilsSvc.timeFromSeconds(t.duration);
+        break;
+      case "Date":
+        let db = this.utilsSvc.daysBetween(thisSortDate, t.sortDate)
+        barItem.value = db;
+        barItem.label1 = t.date.substr(0,5) + '/' + t.sortDate.substr(2,2);
+        barItem.label2 = t.startTime;
+        break;
+      case "Steps":
+        let s = this.utilsSvc.computeStepCount(t.trekDist, t.strideLength);
+        // let spm = this.utilsSvc.computeStepsPerMin(s, t.duration);
+        barItem.value = s;
+        barItem.label1 = s.toString();
+        break;
+      case "Speed":
+        let speed = this.utilsSvc.computeRoundedAvgSpeed(this.trekInfo.measurementSystem, t.trekDist, t.duration);
+        barItem.value = speed; 
+        barItem.label1 = speed.toString();
+        break;
+      case "Cals":
+        barItem.value = t.calories;
+        barItem.label1 = (barItem.value).toString();
+        break;
+      default:
+        barItem.value = 0;
+        barItem.label1 = '';
+        barItem.label2 = '';
+    }
+    barItem.indicator = t.date.substr(0,5); 
+    return barItem;
+}
 
   // Return the range of the selected data item in the given list of treks
   findDataRange = (list: number[], data: string, system: MeasurementSystemType) => {

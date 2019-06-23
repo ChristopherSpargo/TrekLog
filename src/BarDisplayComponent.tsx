@@ -57,6 +57,7 @@ function BarItem({
         backgroundColor: pageBackground,
       },
       bdrRt: {
+        width: barWidth +1,
         borderRightWidth: 1,
       },
       areaAbove: {
@@ -177,7 +178,7 @@ function BarDisplay({
   style,
   barWidth,
   maxBarHeight,
-  openFlag,      // flag to control the animation of the graph bars
+  openFlag=undefined,      // flag to control the animation of the graph bars
   data,         // object with information for the graph bars
   dataRange,           // range of values in the data {max,min,range}
   scrollToBar = undefined,    // index of bar to scroll to (just to update the display)
@@ -237,9 +238,6 @@ function BarDisplay({
         initialNumToRender={7}
         horizontal
         renderItem={_renderItem}
-        // getItemLayout={(_data, index) => (
-        //   {length: barWidth, offset: barWidth * index, index: index}
-        // )}
       />
     ))
 }

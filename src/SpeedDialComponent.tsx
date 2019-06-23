@@ -9,6 +9,7 @@ import SlideUpView from './SlideUpComponent';
 import SlideLeftView from './SlideLeftComponent';
 import SvgIcon from './SvgIconComponent';
 import IconButton from './IconButtonComponent';
+import FadeInTemp from './FadeInTempComponent';
 import { APP_ICONS } from './SvgImages';
 import { TrekInfo } from './TrekInfoModel';
 
@@ -26,7 +27,7 @@ class SpeedDial extends Component<{
   bottom ?: number,           // bottom of speedDial trigger (if 'top' not present)
   icon ?: string,             // icon for the trigger
   iconColor ?: string,
-  iconSize ?: string,
+  iconSize ?: string,         // size of item icons
   itemSize ?: string,         // size of slide-out menu items
   raised ?: boolean,          // elevate trigger if true
   triggerHeight ?: number,
@@ -40,6 +41,7 @@ class SpeedDial extends Component<{
   selectFn : Function,
   horizontal ?: boolean,      // true if slide-out goes to left, false if goes up
   autoClose ?: number,        // milliseconds to wait before closing
+  fadeOut ?: number,          // if present and not 0, number of milliseconds before fading out trigger
   trekInfo ?: TrekInfo,
   uiTheme ?: any
 }, {} > {
@@ -114,14 +116,16 @@ class SpeedDial extends Component<{
   render() {
 
     const propBot = this.props.bottom || 0;
-    const smallTrigger = this.props.iconSize === "Small";
-    const triggerIconSize = smallTrigger ? 24 : 30;
-    const triggerIconArea = smallTrigger ? 40 : 56;
-    const itemIconSize = smallTrigger ? 16 : 24;
-    const itemIconArea = smallTrigger ? 24 : 36;
-    const SD_ITEM_SIZE = this.props.itemSize === "Big" ? 64 : 54;
+    const smallIcons = this.props.iconSize === "Small";
+    const bigItems = this.props.itemSize === "Big";
+    const triggerIconSize = smallIcons ? 24 : 30;
+    const triggerIconArea = smallIcons ? 40 : 56;
+    const itemIconSize = !bigItems ? 16 : 24;
+    const itemIconArea = smallIcons ? 24 : 36;
+    const SD_ITEM_SIZE = bigItems ? 64 : 50;
     const SD_TRIGGER_HEIGHT = this.props.triggerHeight || 56;
-    const SD_MENU_WIDTH = smallTrigger ? 50 : 64;
+    const SD_MENU_WIDTH = smallIcons ? 50 : 64;
+    const labelAdj = bigItems ? -16 : -12;
     const { highTextColor, textOnSecondaryColor, secondaryColor, primaryColor, rippleColor, navItemBorderColor,
             matchingMask_7 } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
     const numItems = this.props.items ? this.props.items.length : undefined;
@@ -209,8 +213,8 @@ class SpeedDial extends Component<{
       },
       vBar: {
         height: SD_ITEM_SIZE,
-        paddingLeft: smallTrigger ? 5 : 5,
-        paddingRight: smallTrigger ? 5 : 5,
+        paddingLeft:  smallIcons ? 5 : 5,
+        paddingRight: smallIcons ? 5 : 5,
         paddingTop: 5,
         paddingBottom: 5,
         flexDirection: "column",
@@ -220,20 +224,21 @@ class SpeedDial extends Component<{
       },
       hBar: {
         width: SD_ITEM_SIZE,
-        paddingTop: smallTrigger ? 5 : 5,
-        paddingBottom: smallTrigger ? 5 : 5,
+        paddingTop:    smallIcons ? 3 : 3,
+        paddingBottom: smallIcons ? 5 : 8,
         paddingLeft: 5,
         paddingRight: 5,
         flexDirection: "column",
         alignItems: "center",
-        justifyContent: "center",
+        justifyContent: "flex-end",
         backgroundColor: slideoutBg,
       },
       label: {
         color: highTextColor,
         fontSize: 12,
-        fontWeight: "300",
-        textAlign: "center"
+        marginTop: labelAdj,
+        // fontWeight: "300",
+        // textAlign: "center"
       },
       firstVItem: {
         paddingTop: 10,
@@ -325,22 +330,37 @@ class SpeedDial extends Component<{
           </View>
         }
         <View style={styles.triggerArea}>
-          <BorderlessButton
-            borderless={true}
-            rippleColor={rippleColor}
-            onPress={this.toggleSpeedDial}>
-            <View style={styles.shadowArea}>
-              <SvgIcon
-                paths={APP_ICONS[triggerIcon]}
-                size={triggerIconSize}
-                fill={triggerFill}
-                style={[styles.triggerIcon, propStyle]}
-              />
-            </View>
-          </BorderlessButton>
+          {this.props.fadeOut !== undefined &&
+            <FadeInTemp onPressFn={this.toggleSpeedDial} 
+                        viewTime={this.props.fadeOut} useFirstTouch>
+              <View style={styles.shadowArea}>
+                <SvgIcon
+                  paths={APP_ICONS[triggerIcon]}
+                  size={triggerIconSize}
+                  fill={triggerFill}
+                  style={[styles.triggerIcon, propStyle]}
+                />
+              </View>
+            </FadeInTemp>
+          }
+          {this.props.fadeOut === undefined && 
+            <BorderlessButton
+              borderless={true}
+              rippleColor={rippleColor}
+              onPress={this.toggleSpeedDial}>
+              <View style={styles.shadowArea}>
+                <SvgIcon
+                  paths={APP_ICONS[triggerIcon]}
+                  size={triggerIconSize}
+                  fill={triggerFill}
+                  style={[styles.triggerIcon, propStyle]}
+                />
+              </View>
+            </BorderlessButton>
+          }
         </View>
       </View>
-    );
+    )
   }
 }
 

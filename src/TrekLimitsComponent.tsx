@@ -47,14 +47,6 @@ class TrekLimitsForm extends React.Component<{
     this.initializeObservables();
   }
 
-  // initialize all the observable properties in an action for mobx strict mode
-  @action
-  initializeObservables = () => {
-    this.value = '';
-    this.units = '';
-    this.zValue = -1;
-  }
-
   componentDidUpdate() {
     if (this.props.limits.units && (this.props.limits.units.indexOf(this.units) === -1)){
       this.setUnits(this.props.limits.defaultUnits);
@@ -74,6 +66,14 @@ class TrekLimitsForm extends React.Component<{
         default:
       }
     }
+  }
+
+  // initialize all the observable properties in an action for mobx strict mode
+  @action
+  initializeObservables = () => {
+    this.value = '';
+    this.units = '';
+    this.zValue = -1;
   }
 
   @action
@@ -195,7 +195,7 @@ class TrekLimitsForm extends React.Component<{
         width: 200,
         borderWidth: 0,
         fontWeight: "300",
-        textAlign: "center",
+        // textAlign: "center",
         fontSize: 18,
         color: highTextColor,
       },      
