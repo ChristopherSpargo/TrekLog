@@ -23,6 +23,7 @@ class SvgButton extends Component<{
   highlightColor ?: string, // color for highlight border (defaults to purple-ish)
   elevWithHighlight ?: boolean,  // true if elevate button with highlight
   svgWidthAdj ?: number,    // amount to add to the SVG width property
+  svgHeightAdj ?: number,    // amount to add to the SVG height property
   pathXAdj ?: number,       // amount to add to the path x position
   borderWidth ?: number,    // optional border width spec
 }, {} > {
@@ -49,6 +50,7 @@ class SvgButton extends Component<{
     const iconSize =  iconAreaSize - areaOffset;
     const iconOffset = this.props.borderWidth !== undefined ? this.props.borderWidth : 3;
     const propStyle = this.props.style || {};
+    const htAdj = this.props.svgHeightAdj || 0;
     const widAdj = this.props.svgWidthAdj || 0;
     const fillColor = this.props.highlightColor ? 
                       (this.props.highlight ? this.props.highlightColor : dividerColor) :
@@ -74,7 +76,7 @@ class SvgButton extends Component<{
       appIcon: {
         marginRight: 5,
         width: iconSize + widAdj,
-        height: iconSize,
+        height: iconSize + htAdj,
         backgroundColor: "transparent",
       },
     });
@@ -91,6 +93,7 @@ class SvgButton extends Component<{
                 style={styles.appIcon}
                 size={iconSize}
                 widthAdj={widAdj}
+                heightAdj={htAdj}
                 xOffset={iconOffset ? iconOffset : undefined}
                 yOffset={iconOffset ? iconOffset : undefined}
                 fill={fillColor}

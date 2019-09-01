@@ -1,5 +1,5 @@
 import { Alert } from 'react-native';
-import BackgroundGeolocation, { ConfigureOptions } from '@mauron85/react-native-background-geolocation';
+import BackgroundGeolocation, { ConfigureOptions, Location } from '@mauron85/react-native-background-geolocation';
 
 import { TrekInfo } from './TrekInfoModel'
 import { StorageSvc } from './StorageService';
@@ -157,14 +157,13 @@ export class LocationSvc {
     let finalOptions : ConfigureOptions;
   
     finalOptions =  Object.assign({}, options, configOptions);
-    // Alert.alert('Settings:', JSON.stringify(finalOptions))
     this.updateGeolocationConfig(finalOptions);
   }
   
   // get the current location
   getCurrentLocation = (gotLocation: Function, gclOptions) => {
     BackgroundGeolocation.getCurrentLocation(location => {
-      gotLocation(location );
+      gotLocation(location);
       }, () => {
         // setTimeout(() => {
         //   Alert.alert('Error obtaining current location', JSON.stringify(error));

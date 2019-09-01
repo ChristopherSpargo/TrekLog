@@ -40,9 +40,9 @@ function FadeInTempComponent({dimOpacity=undefined, fadeDuration=undefined, useF
   },[]);
 
   function callOnPressFn(){
+    showControls();
     if (onPressFn) {
       onPressFn();
-      showControls();
     }
   }
 
@@ -67,4 +67,4 @@ function FadeInTempComponent({dimOpacity=undefined, fadeDuration=undefined, useF
       
   )
 }
-export default FadeInTempComponent;
+export default React.memo(FadeInTempComponent);

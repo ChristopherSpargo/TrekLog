@@ -1,13 +1,14 @@
-import React, { useContext, useState, useEffect } from "react";
+import React, { useContext, useState, useEffect, useRef, useCallback } from "react";
 import { useObserver } from "mobx-react-lite";
 import {
   View,
   StyleSheet,
   Text,
   ScrollView,
-  TouchableNativeFeedback,
-  Dimensions
+  Dimensions,
+  BackHandler
 } from "react-native";
+import { RectButton } from 'react-native-gesture-handler'
 
 import {
   CONFIRM_Z_INDEX,
@@ -16,7 +17,6 @@ import {
   TrekInfoContext,
   UiThemeContext,
   HEADER_HEIGHT,
-  CONTROLS_HEIGHT
 } from "./App";
 import { APP_ICONS } from "./SvgImages";
 import RadioGroup from "./RadioGroupComponent";
@@ -32,6 +32,14 @@ function RadioPicker({pickerOpen}) {
   const trekInfo: TrekInfo = useContext(TrekInfoContext);
   const mData = modalSvc.rpData;
   const [selection, setSelection] = useState();
+  const bHandler = useRef(false);
+
+  const onBackButtonPressRPicker = useCallback(
+    () => {
+      dismiss();
+      return true;
+    }, [], // Tells React to memoize regardless of arguments.
+  );
 
   const { height } = Dimensions.get("window");
   const {
@@ -42,9 +50,12 @@ function RadioPicker({pickerOpen}) {
     pageBackground,
     rippleColor,
     disabledTextColor,
-    primaryColor
+    primaryColor,
+    textOnPrimaryColor
   } = uiTheme.palette[trekInfo.colorTheme];
-  const { cardLayout, roundedTop, roundedBottom, footerButton, footerButtonText } = uiTheme;
+  const { cardLayout, roundedTop, roundedBottom, footer, footerButton, 
+          footerButtonText, fontRegular 
+        } = uiTheme;
   const headerHeight = 50;
   const okDisabled = selection === '#new#';
 
@@ -52,9 +63,10 @@ function RadioPicker({pickerOpen}) {
     container: { ...StyleSheet.absoluteFillObject },
     formArea: {
       marginTop: 20 + HEADER_HEIGHT,
-      marginBottom: 20 + CONTROLS_HEIGHT,
+      marginBottom: 20,
       marginHorizontal: 20,
       backgroundColor: "transparent",
+
     },
     background: {
       ...StyleSheet.absoluteFillObject,
@@ -68,8 +80,8 @@ function RadioPicker({pickerOpen}) {
       paddingTop: 0,
       paddingBottom: 0,
       paddingLeft: 0,
-      paddingRight: 10,
-      maxHeight: height - (40 + CONTROLS_HEIGHT + HEADER_HEIGHT),
+      paddingRight: 0,
+      maxHeight: height - (40 + HEADER_HEIGHT),
       zIndex: CONFIRM_Z_INDEX,
       backgroundColor: pageBackground,
     },
@@ -82,12 +94,12 @@ function RadioPicker({pickerOpen}) {
       borderStyle: "solid",
       borderBottomColor: dividerColor,
       borderBottomWidth: 1,
-      backgroundColor: cardLayout.backgroundColor
+      backgroundColor: primaryColor,
     },
     title: {
-      color: highTextColor,
-      fontWeight: "bold",
-      fontSize: 20
+      color: textOnPrimaryColor,
+      fontFamily: fontRegular,
+      fontSize: 22
     },
     body: {
       flexDirection: "column",
@@ -98,6 +110,10 @@ function RadioPicker({pickerOpen}) {
       fontSize: 16,
       color: highTextColor
     },
+    footer: {
+      ...footer,
+      ...{borderTopColor: dividerColor, backgroundColor: pageBackground}
+    },
     rowLayout: {
       flexDirection: "row",
       alignItems: "center"
@@ -105,15 +121,6 @@ function RadioPicker({pickerOpen}) {
     colLayout: {
       flexDirection: "column",
       alignItems: "center"
-    },
-    footer: {
-      height: headerHeight,
-      flexDirection: "row",
-      alignItems: "center",
-      borderStyle: "solid",
-      borderTopColor: dividerColor,
-      borderTopWidth: 1,
-      backgroundColor: cardLayout.backgroundColor
     },
     rgItem: {
       paddingTop: 10,
@@ -123,19 +130,28 @@ function RadioPicker({pickerOpen}) {
       marginLeft: 25,
     },
     rgLabel: {
-      color: highTextColor,
-      fontSize: 20,
+      fontSize: 22,
       paddingLeft: 10,
       paddingRight: 10,
       flex: 1
     }
   });
 
-  useEffect(() => {
-    if (mData.selection && !selection){
-      setSelection(mData.selection);
+  useEffect(() => {                       // componentDidUpdate
+    if(pickerOpen && !bHandler.current) {
+      bHandler.current = true;
+      BackHandler.addEventListener('hardwareBackPress', onBackButtonPressRPicker);  
     }
-  });
+  },[pickerOpen])
+
+  useEffect(() => {                       // componentDidUpdate
+    setSelection(mData.selection);
+  },[mData.selection]);
+
+  function removeListener() {
+    bHandler.current = false;
+    BackHandler.removeEventListener('hardwareBackPress', onBackButtonPressRPicker);
+  }
 
   function checkSelection(selText: string){
     if(mData.selectionValues.indexOf(selText) === -1){
@@ -152,24 +168,28 @@ function RadioPicker({pickerOpen}) {
       modalSvc
         .closeRadioPicker(400)
         .then(() => {
-          setSelection('');     // clear the local selection so it will be updated from mData in useEffect
+          removeListener();
           modalSvc.rpData.resolve(result);
         })
-        .catch(() => {});
+        .catch(() => {
+          removeListener();
+        });
     }, 200);
   }
 
   // call the reject method
   function dismiss() {
-    // setSelection(mData.selection);   
     setTimeout(() => {
       modalSvc
         .closeRadioPicker(400)
         .then(() => {
-          setSelection('');     // clear the local selection so it will be updated from mData in useEffect
+          setSelection(mData.selection);        // replace selection
+          removeListener();
           modalSvc.rpData.reject("CANCEL");
         })
-        .catch(() => {});
+        .catch(() => {
+          removeListener();
+        });
     }, 200);
   }
 
@@ -205,6 +225,7 @@ function RadioPicker({pickerOpen}) {
                         values={mData.selectionValues}
                         labels={mData.selectionNames}
                         comments={mData.selectionComments}
+                        commentStyle={{flex: 1}}
                         itemTest={mData.itemTest}
                         labelStyle={styles.rgLabel}
                         vertical={true}
@@ -216,30 +237,30 @@ function RadioPicker({pickerOpen}) {
                     </View>
                   </ScrollView>
                   <View style={[styles.footer, roundedBottom]}>
-                    <TouchableNativeFeedback
-                      background={TouchableNativeFeedback.Ripple(rippleColor, true)}
-                      onPress={dismiss}
-                    >
-                      <View style={[footerButton, { height: headerHeight }]}>
+                    <RectButton
+                      rippleColor={rippleColor}
+                      style={{flex: 1}}
+                      onPress={dismiss}>
+                      <View style={footerButton}>
                         <Text
-                          style={[footerButtonText, { color: primaryColor }]}
+                          style={footerButtonText}
                         >
                           {mData.cancelText}
                         </Text>
                       </View>
-                    </TouchableNativeFeedback>
-                    <TouchableNativeFeedback
-                      background={TouchableNativeFeedback.Ripple(rippleColor, true)}
-                      onPress={okDisabled ? undefined : () => close()}
-                    >
-                      <View style={[footerButton, { height: headerHeight }]}>
+                    </RectButton>
+                    <RectButton
+                      rippleColor={rippleColor}
+                      style={{flex: 1}}
+                      onPress={okDisabled ? undefined : () => close()}>
+                      <View style={footerButton}>
                         <Text
-                          style={[footerButtonText, { color: okDisabled ? disabledTextColor : primaryColor }]}
+                          style={{...footerButtonText, ...{ color: okDisabled ? disabledTextColor : primaryColor }}}
                         >
                           {mData.okText}
                         </Text>
                       </View>
-                    </TouchableNativeFeedback>
+                    </RectButton>
                   </View>
                 </View>
               </View>

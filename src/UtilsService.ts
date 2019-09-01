@@ -1,28 +1,70 @@
 import { LaLo, TrekPoint, TrekType, TrekTimeInterval, MeasurementSystemType, SMALL_DIST_UNITS,
          ElevationData, TREK_TYPE_WALK, TREK_TYPE_RUN, TREK_TYPE_BIKE, TREK_TYPE_HIKE, 
-         NumericRange, SMALL_DIST_CUTOFF } from './TrekInfoModel'
+         NumericRange, SMALL_DIST_CUTOFF, STEPS_APPLY, TREK_TYPE_BOARD, TREK_TYPE_DRIVE } from './TrekInfoModel'
 import { LatLng } from 'react-native-maps';
 import { TREK_LIMIT_TYPE_TIME } from './LoggingService';
 import { ELEVATION_API_URL, GOOGLE_MAPS_API_KEY, MAX_ELEVATION_SAMPLES_PER_REQUEST } from './AppInfo'
+
+export type SortDate = string;
+export type DateInterval =  "daily" | "weekly" | "monthly" | "single";
+export interface SortDateRange {
+  start: SortDate,
+  end: SortDate
+}
+
+export type TimeFrameType = "Today" | "Yesterday" | "TWeek" | "LWeek" | "TMonth" | 
+                            "LMonth" | "All" | "Custom";
+                            
+export const TIME_FRAME_CUSTOM = 'Custom';
+
+export const TIME_FRAMES = [
+  { name: "Today", value: "Today" },
+  { name: "Yesterday", value: "Yesterday" },
+  { name: "This Week", value: "TWeek" },
+  { name: "Last Week", value: "LWeek" },
+  { name: "This Month", value: "TMonth" },
+  { name: "Last Month", value: "LMonth" },
+  { name: "All Dates", value: "All" }
+];
+
+export const TIME_FRAME_DISPLAY_NAMES = {
+  Today: "Today",
+  Yesterday: "Yesterday",
+  TWeek: "This Week",
+  LWeek: "Last Week",
+  TMonth: "This Month",
+  LMonth: "Last Month",
+  All: "All Dates",
+  Custom: "Dates"
+};
+
+export const TIME_FRAMES_NEXT = {
+  Today: "Yesterday",
+  Yesterday: "TWeek",
+  TWeek: "LWeek",
+  LWeek: "TMonth",
+  TMonth: "LMonth",
+  LMonth: "All"
+};
 
 export interface TimeFrame {
   start: string,      // start date (localTimeString)
   end: string         // end date (localTimeString)
 }
 
-const dayNames = [
+export const DayNames = [
   "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"
 ];
 
-const dayAbbreviations = [
+export const DayAbbreviations = [
   "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"
 ];
 
-const monthNames = [
+export const MonthNames = [
   "January", "February", "March", "April", "May", "June", "July", "August",
   "September", "October", "November", "December"
 ]
-const monthAbbreviations = [
+export const MonthAbbreviations = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug",
   "Sep", "Oct", "Nov", "Dec"
 ]
@@ -130,14 +172,21 @@ export const RACE_BIKING_MET_M          = 12.0;
 export const RACE_BIKING_MET_D          = 12.0; 
 export const RACE_BIKING_MET_E          = 12.0; 
 export const HIKING_MET                 = 6.0;
-export const HIKING_MET_M               = 6.0;
-export const HIKING_MET_D               = 6.0;
-export const HIKING_MET_E               = 6.0;
+export const HIKING_MET_M               = 7.0;
+export const HIKING_MET_D               = 9.0;
+export const HIKING_MET_E               = 13.0;
 export const HIKING_WITH_PACK_MET       = 7.8;
-export const HIKING_WITH_PACK_MET_E     = 7.8;
 export const HIKING_WITH_PACK_MET_M     = 7.8;
-export const HIKING_WITH_PACK_MET_D     = 7.8;
-
+export const HIKING_WITH_PACK_MET_D     = 11.7;
+export const HIKING_WITH_PACK_MET_E     = 15;
+export const MODERATE_BOARDING_MET      = 5.0;
+export const MODERATE_BOARDING_MET_M    = 5.0;
+export const MODERATE_BOARDING_MET_D    = 5.0;
+export const MODERATE_BOARDING_MET_E    = 5.0;
+export const VIGOROUS_BOARDING_MET      = 6.0;
+export const VIGOROUS_BOARDING_MET_M    = 6.0;
+export const VIGOROUS_BOARDING_MET_D    = 6.0;
+export const VIGOROUS_BOARDING_MET_E    = 6.0;
 export const DRIVING_A_CAR_MET          = 2.5;
 
 export const ACTIVITY_SPEEDS = [
@@ -273,12 +322,62 @@ export const HIKING_WITH_PACK_METS = [
   [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET]
 ]
 
+export const BOARDING_METS = [
+  [STANDING_OR_SITTING_MET, STANDING_OR_SITTING_MET, STANDING_OR_SITTING_MET,STANDING_OR_SITTING_MET],
+  [MODERATE_BOARDING_MET, MODERATE_BOARDING_MET_M, MODERATE_BOARDING_MET_D, MODERATE_BOARDING_MET_E],
+  [MODERATE_BOARDING_MET, MODERATE_BOARDING_MET_M, MODERATE_BOARDING_MET_D, MODERATE_BOARDING_MET_E],
+  [MODERATE_BOARDING_MET, MODERATE_BOARDING_MET_M, MODERATE_BOARDING_MET_D, MODERATE_BOARDING_MET_E],
+  [MODERATE_BOARDING_MET, MODERATE_BOARDING_MET_M, MODERATE_BOARDING_MET_D, MODERATE_BOARDING_MET_E],
+  [MODERATE_BOARDING_MET, MODERATE_BOARDING_MET_M, MODERATE_BOARDING_MET_D, MODERATE_BOARDING_MET_E],
+  [MODERATE_BOARDING_MET, MODERATE_BOARDING_MET_M, MODERATE_BOARDING_MET_D, MODERATE_BOARDING_MET_E],
+  [MODERATE_BOARDING_MET, MODERATE_BOARDING_MET_M, MODERATE_BOARDING_MET_D, MODERATE_BOARDING_MET_E],
+  [VIGOROUS_BOARDING_MET, VIGOROUS_BOARDING_MET, VIGOROUS_BOARDING_MET, VIGOROUS_BOARDING_MET],
+  [VIGOROUS_BOARDING_MET, VIGOROUS_BOARDING_MET, VIGOROUS_BOARDING_MET, VIGOROUS_BOARDING_MET],
+  [VIGOROUS_BOARDING_MET, VIGOROUS_BOARDING_MET, VIGOROUS_BOARDING_MET, VIGOROUS_BOARDING_MET],
+  [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET],
+  [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET],
+  [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET],
+  [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET],
+  [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET]
+]
+
+export const BOARDING_ACTIVITIES_BY_SPEED = [
+  'Boarding', 'Boarding', 'Boarding', 'Boarding', 'Boarding', 'Boarding', 'Boarding', 'Boarding', 'Boarding',
+  'Boarding', 'Boarding', 'Driving', 'Driving', 'Driving', 'Driving', 'Driving'
+]
+
+export const DRIVING_METS = [
+  [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET],
+  [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET],
+  [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET],
+  [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET],
+  [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET],
+  [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET],
+  [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET],
+  [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET],
+  [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET],
+  [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET],
+  [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET],
+  [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET],
+  [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET],
+  [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET],
+  [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET],
+  [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET]
+]
+
+export const DRIVING_ACTIVITIES_BY_SPEED = [
+  'Driving', 'Driving', 'Driving', 'Driving', 'Driving', 'Driving', 'Driving', 'Driving', 'Driving', 'Driving', 
+  'Driving', 'Driving', 'Driving', 'Driving', 'Driving', 'Driving'
+]
+
 
 export const ACTIVITY_BY_SPEED = {
   Walk: WALKING_ACTIVITIES_BY_SPEED, 
   Run:  RUNNING_ACTIVITIES_BY_SPEED, 
   Bike: BIKING_ACTIVITIES_BY_SPEED,
-  Hike: HIKING_ACTIVITIES_BY_SPEED
+  Hike: HIKING_ACTIVITIES_BY_SPEED,
+  Board: BOARDING_ACTIVITIES_BY_SPEED,
+  Drive: DRIVING_ACTIVITIES_BY_SPEED,
 }
 
 export const RESTING_CAL_PER_KG_PER_SEC = 0.000306944;
@@ -398,32 +497,39 @@ export class UtilsSvc {
   }
     
   // return a standard date string dd/mm/yyyy from a sort date
-  dateFromSortDate = (sd : string) => {
+  dateFromSortDate = (sd : SortDate) => {
     return (sd.substr(4,2) + '/' + sd.substr(6,2) + '/' + sd.substr(0,4))
   }
 
   // return a standard date string dd/mm/yy from a sort date
-  dateFromSortDateYY = (sd : string) => {
+  dateFromSortDateYY = (sd : SortDate) => {
     return (sd.substr(4,2) + '/' + sd.substr(6,2) + '/' + sd.substr(2,2))
   }
 
   // format given date to long format (eg. Saturday June 9, 2018)
-  formattedLongDate = (dateStr: string) => {
-    let dt = new Date(dateStr);
-    return (dayNames[dt.getDay()] + ' ' + monthNames[dt.getMonth()] + ' ' + dt.getDate() + ', ' + dt.getFullYear());
+  formattedLongDate = (dateStr?: string) => {
+    let dt = dateStr ? new Date(dateStr) : new Date();
+    return (DayNames[dt.getDay()] + ' ' + MonthNames[dt.getMonth()] + ' ' + dt.getDate() + ', ' + dt.getFullYear());
   }
 
   // format given date to long format with month abbreviated (eg. Saturday Jun 9, 2018)
-  formattedLongDateAbbr = (dateStr: string) => {
+  formattedLongDateAbbr = (dateStr?: string) => {
+    let dt = dateStr ? new Date(dateStr) : new Date();
+    return (DayNames[dt.getDay()] + ' ' + MonthAbbreviations[dt.getMonth()] + ' ' + 
+            dt.getDate() + ', ' + dt.getFullYear());
+  }
+
+  // format given date to long format with day and month abbreviated (eg. Sat Jun 9, 2018)
+  formattedLongDateAbbrDayAbbrMonth = (dateStr: string) => {
     let dt = new Date(dateStr);
-    return (dayNames[dt.getDay()] + ' ' + monthAbbreviations[dt.getMonth()] + ' ' + 
+    return (DayAbbreviations[dt.getDay()]  + ' ' + MonthAbbreviations[dt.getMonth()] + ' ' + 
             dt.getDate() + ', ' + dt.getFullYear());
   }
 
   // format given date to long format without day of week (eg. June 9, 2018)
   formattedLongDateNoDay = (dateStr: string) => {
     let dt = new Date(dateStr);
-    return (monthNames[dt.getMonth()] + ' ' + dt.getDate() + ', ' + dt.getFullYear());
+    return (MonthNames[dt.getMonth()] + ' ' + dt.getDate() + ', ' + dt.getFullYear());
   }
 
   // format given date to long format without day of week and abbreviate the month (eg. Jun 9, 2018)
@@ -432,14 +538,21 @@ export class UtilsSvc {
     let dom = dt.getDate();
     let dayLT10 = dom < 10 ? '0' : '';
 
-    return (monthAbbreviations[dt.getMonth()] + ' ' + dayLT10 + dom + ', ' + dt.getFullYear());
+    return (MonthAbbreviations[dt.getMonth()] + ' ' + dayLT10 + dom + ', ' + dt.getFullYear());
   }
 
   // format given date to long format with abbrevieated day of week and numeric date (eg. Wed 2/6/2019)
-  formattedLongDateAbbrDay = (dateStr: string) => {
+  formattedLocaleDateAbbrDay = (dateStr: string) => {
     let dt = new Date(dateStr);
 
-    return (dayAbbreviations[dt.getDay()] + ', ' + dt.toLocaleDateString());
+    return (DayAbbreviations[dt.getDay()] + ' ' + dt.toLocaleDateString());
+  }
+  
+  // format given date to long format with full day of week and numeric date (eg. Wednesday 2/6/2019)
+  formattedLocaleDateDay = (dateStr: string) => {
+    let dt = new Date(dateStr);
+
+    return (DayNames[dt.getDay()] + ' ' + dt.toLocaleDateString());
   }
   
   // Format a given date to hh:mm AM/PM. Use current time if not given.
@@ -561,17 +674,20 @@ export class UtilsSvc {
 
   // return a time formatted as 'h:mm:ss' if colons, 'hhmmss' if 6digit or 'NN hr NN min NN sec' if hms
   // from the given time in seconds
-  timeFromSeconds = (sec: number, format : "hms" | "colons" | "6digit" = 'colons') => {
+  timeFromSeconds = (sec: number, format : "hm" | "hms" | "colons" | "6digit" = 'colons') => {
     sec = Math.round(sec);
     let s = sec % 60;
-    let m = Math.trunc(sec / 60) % 60;
+    let m = format === 'hm' ? Math.round(sec / 60) % 60 : Math.trunc(sec / 60) % 60;
     let h = Math.trunc(sec / 3600);
     let lzm = m < 10 ? '0' : '';
     let lzs = s < 10 ? '0' : '';
     let tsh = m || s ? ' ' : '';
     let tsm = s ? ' ' : '';
     switch(format){
-      case 'hms':
+      case 'hm':
+        if(sec === 0){ return '_'; }
+        return ((h ? (h + 'h' + tsh) : '') + (m ? (m + 'm') : ''));
+        case 'hms':
         if(sec === 0){ return '_'; }
         return ((h ? (h + ' hr' + tsh) : '') + (m ? (m + ' min' + tsm) : '') + (s ? (s + ' sec') : ''));
       case 'colons':
@@ -623,15 +739,15 @@ export class UtilsSvc {
 
     switch(units){
       case 'meters':
-        return (tooSlow ? '--:--' : this.timeFromSeconds(spm)) + ' /m';    // return time/m          
+        return (tooSlow ? '--:--' : this.timeFromSeconds(spm)) + '/m';    // return time/m          
       case 'km':
       case 'kilometers':
         spm *= 1000;
-        return (tooSlow ? '--:--' : this.timeFromSeconds(spm)) + ' /km';    // return time/km
+        return (tooSlow ? '--:--' : this.timeFromSeconds(spm)) + '/km';    // return time/km
       case 'mi':
       case 'miles':
         spm *= M_PER_MILE;
-        return (tooSlow ? '--:--' : this.timeFromSeconds(spm)) + ' /mi';    // return time/mi
+        return (tooSlow ? '--:--' : this.timeFromSeconds(spm)) + '/mi';    // return time/mi
       case 'none':
         return spm.toString();
       default:
@@ -661,7 +777,7 @@ export class UtilsSvc {
 
   // return the number of steps or steps/min as a string, time is in seconds
   formatSteps = (type: TrekType, steps: number,  time?: number) : string => {
-    if(type === TREK_TYPE_BIKE){
+    if(!STEPS_APPLY[type]){
       return "N/A";
     }
     if (time !== undefined) {
@@ -925,13 +1041,28 @@ export class UtilsSvc {
         end = new Date(now - ((dom)* MS_PER_DAY)).toLocaleDateString();
         break;
       case 'All':
-        start = end = '';
+        start = '';
+        end = new Date(now).toLocaleDateString();
         break;
-      case 'Custom':
+      case TIME_FRAME_CUSTOM:
       default:
     } 
     return {start: start, end: end};
   }
+
+  // return a formatted name for the given TimeFrameType
+  formatTimeframeDisplayName = (tf: TimeFrameType) : string => {
+    switch(tf){
+      case 'TMonth':
+        return TIME_FRAME_DISPLAY_NAMES[tf] + " (" + MonthNames[new Date().getMonth()] + ")";
+      case 'LMonth':
+        let m = new Date().getMonth() - 1;
+        if (m === -1) { m = 11; }
+        return TIME_FRAME_DISPLAY_NAMES[tf] + " (" + MonthNames[m] + ")";
+      default:
+        return TIME_FRAME_DISPLAY_NAMES[tf];
+    }
+}
 
   // retrun an object with the year, month and day values for the given date
   getYMD = (d: Date) => {
@@ -1079,57 +1210,6 @@ export class UtilsSvc {
     return pathCopy;
   }
 
-  // divide the given pointList into small time intervals and compute calories by interval
-  // choose time interval according to given overall duration of pointList
-  // return: the rounded calorie sum
-  // params:
-  //  pointList - array of TrekPoint objects
-  //  duration -  total time of the trek represented by the pointList in seconds
-  //  tType -     type of trek (Walk, Run, Bike or Hike)
-  //  weight -    user's weight in kg
-  //  bpWeight -  weight of backpack in kg if tType is Hike, default: 0
-  computeCaloriesBySegment = (pointList : TrekPoint[], duration : number, 
-                              tType : TrekType, hills: string, weight : number, bpweight = 0) : number => {
-    let iTime = 30;                       // seconds per interval
-    if (duration < 300) { iTime = 15; }   // choose a shorter value for very short durations ( < 5 min )
-    if (duration > 3600) { iTime = 60; }  // choose a longer value for very long durations ( > 60 min )
-    let iList = this.getTrekTimeIntervals(pointList, iTime);
-    let cals = 0;
-    if (hills === 'Unknown' || hills === 'Flat') { hills = 'Level'; }
-    let hIndex = ['Level', 'Moderate', 'Difficult', 'Extreme'].indexOf(hills);
-
-    // compute sum of calories for each interval
-    for(let i=0; i<iList.length; i++){
-      let hours = iList[i].duration / 3600;
-      let htw = hours * weight;
-      let speedIndex = this.findRangeIndex(iList[i].speed, ACTIVITY_SPEEDS);
-      switch(tType){
-        case TREK_TYPE_WALK:
-          cals += WALKING_METS[speedIndex][hIndex] * htw;
-          break;
-        case TREK_TYPE_RUN:
-          cals += RUNNING_METS[speedIndex][hIndex] * htw;
-          break;
-        case TREK_TYPE_BIKE:
-          cals += BIKING_METS[speedIndex][hIndex] * htw;
-          break;
-        case TREK_TYPE_HIKE:
-          // must distinguish between hiking with pack and not (bpweight is 0 if not)
-          if (bpweight && (HIKING_METS[speedIndex][0] !== DRIVING_A_CAR_MET)) { 
-            htw = hours * (weight + bpweight);
-            cals += HIKING_WITH_PACK_METS[speedIndex][hIndex] * htw;
-          }
-          else {
-            cals += HIKING_METS[speedIndex][hIndex] * htw;
-          }
-          break;
-        default:
-      }
-    }
-    let precision = cals < 10 ? 10 : 1;           // show 1 digit after decimal for small values ( < 10 )
-    return Math.round(cals * precision) / precision;
-  }
-
   // compute the calories as if driving a car
   computeDrivingCalories = (duration: number, weight: number, ) : number =>  {
     let hours = duration / 3600;
@@ -1156,6 +1236,7 @@ export class UtilsSvc {
   //  time -        duration that was used to compute cals
   getCaloriesPerMin = (cals: number, time: number) : number => {
     // let net = cals - (weight * RESTING_CAL_PER_KG_PER_SEC * time);
+    if(!time) { return 0; }
     let net = cals * 60 / time;
     // if (net < 0) { net = 0; }
     let precision = net < 10 ? 10 : 1;
@@ -1171,8 +1252,14 @@ export class UtilsSvc {
         case TREK_TYPE_RUN:
           return RUNNING_METS;
           break;
-        case TREK_TYPE_BIKE:
+          case TREK_TYPE_BIKE:
           return BIKING_METS;
+          break;
+        case TREK_TYPE_BOARD:
+          return BOARDING_METS;
+          break;
+        case TREK_TYPE_DRIVE:
+          return DRIVING_METS;
           break;
         case TREK_TYPE_HIKE:
           // must distinguish between hiking with pack and not (bpweight is 0 if not)
@@ -1242,5 +1329,41 @@ export class UtilsSvc {
     if (val === undefined || val === null) { return 0; }
     return Math.round(val * 10000) / 10000;
   }
+
+  // return a list of SortDateRange objects given the start and end dates and an interval period.
+  // the given dates should be full 12-character SortDates (ei. including time)
+  // the order of list items is from start date to end date. (oldest first)
+  // a empty list is returned if start date is AFTER end date.
+  dateIntervalList = (sDate: SortDate, eDate: SortDate, period: DateInterval ) : SortDateRange[] => {
+    let intervalDate = sDate;
+    let iDate = new Date(this.dateFromSortDateYY(intervalDate)).getTime();
+    let intervals : SortDateRange[] = [];
+
+    if (intervalDate <= eDate) {
+      do {
+        let int : SortDateRange = { start: intervalDate, end: eDate };
+        switch (period) {
+          case 'single':
+            intervals.push(int);
+            return intervals;           // return single interval of all dates
+          case "daily":
+            iDate += MS_PER_DAY;
+            break;
+          case "weekly":
+            iDate += MS_PER_WEEK;
+            break;
+          case "monthly":
+            let im = new Date(this.dateFromSortDateYY(intervalDate)).getMonth();
+            iDate += MS_PER_DAY * DAYS_IN_MONTHS[im];
+            break;
+          default:
+        }
+        int.end = this.formatSortDate(new Date(iDate - MS_PER_DAY).toLocaleDateString(),"11:59 PM");
+        intervalDate = this.formatSortDate(new Date(iDate).toLocaleDateString(),"12:00 AM");
+        intervals.push(int);
+      } while (intervalDate < eDate);
+    }
+    return intervals;
+  };
 
 }

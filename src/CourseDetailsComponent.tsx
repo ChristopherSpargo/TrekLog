@@ -5,32 +5,35 @@ import React, { Component } from "react";
 import { View, StyleSheet, Text, ScrollView, Dimensions } from "react-native";
 import { observer, inject } from "mobx-react";
 import { action, observable } from "mobx";
-import { NavigationActions } from "react-navigation";
+import { NavigationActions, StackActions } from "react-navigation";
 
-import { TrekInfo, TrekObj, MSG_LINK_NOT_REMOVED,
+import { TrekInfo, TrekObj, MSG_LINK_NOT_REMOVED, TrekType,
          MeasurementSystemType, DIST_UNIT_CHOICES, MSG_UPDATING_TREK } from "./TrekInfoModel";
 import { UtilsSvc } from "./UtilsService";
 import { ModalModel } from "./ModalModel";
-import { CONTROLS_HEIGHT, NAV_ICON_SIZE, HEADER_HEIGHT, PAGE_TITLE_HEIGHT } from "./App";
+import { HEADER_HEIGHT, PAGE_TITLE_HEIGHT, CONTROLS_HEIGHT } from "./App";
 import { ToastModel } from "./ToastModel";
 import SvgButton from "./SvgButtonComponent";
 import Waiting from "./WaitingComponent";
-import IconButton from "./IconButtonComponent";
 import { APP_ICONS } from "./SvgImages";
-import BarDisplay from "./BarDisplayComponent";
+import BarDisplay, { BarData, BarGraphInfo } from "./BarDisplayComponent";
 import { TrekDetails } from "./TrekDetailsComponent";
 import TrekLogHeader from "./TreklogHeaderComponent";
 import CheckboxPicker from "./CheckboxPickerComponent";
 import RadioPicker from "./RadioPickerComponent";
 import { StorageSvc } from "./StorageService";
 import { CourseSvc, Course, CourseDetailObject } from "./CourseService";
-import { BarData, BarGraphInfo, FilterSvc, SortDirection, SORT_DIRECTIONS, 
+import TrackingMethodForm from './TrackingMethodComponent';
+import { FilterSvc, SortDirection, SORT_DIRECTIONS, 
          SORT_DIRECTION_OTHER } from './FilterService';
-
+import SvgYAxis, { YAXIS_TYPE_MAP } from './SvgYAxisComponent';
+import SvgGrid from './SvgGridComponent';
+import SpeedDial from './SpeedDialComponent';
+import NavMenu from './NavMenuComponent';
+import NavMenuTrigger from './NavMenuTriggerComponent'
+         
 export type SortByTypes = "Dist" | "Time" | "Date" | "Speed" | "Steps" | "Cals";
 export type ShowTypes = "Dist" | "Time" | "Steps" | "Speed" | "Cals" | "Date";
-
-export type TimeFrameType = "Today" | "Yesterday" | "TWeek" | "LWeek" | "TMonth" | "LMonth" | "All" | "Custom";
 
 const goBack = NavigationActions.back();
 
@@ -65,7 +68,6 @@ class CourseDetails extends Component<
   @observable headerTitle;
   @observable checkboxPickerOpen;
   @observable coursePickerOpen;
-  @observable showWaiting;
   @observable dataReady : boolean;
   @observable selectedTrekIndex : number;
   @observable sortBy : SortByTypes;
@@ -74,6 +76,9 @@ class CourseDetails extends Component<
   @observable sortDirection : string;
   @observable openItems : boolean;
   @observable scrollToBar;
+  @observable trackingMethodFormOpen: boolean;
+  @observable openNavMenu : boolean;
+  @observable otherEffortSelect : boolean;
 
 
   tInfo = this.props.trekInfo;
@@ -84,30 +89,45 @@ class CourseDetails extends Component<
   focusCourse: Course;
   trekList : CourseDetailObject[];
   barGraphData: BarGraphInfo = {items: [], range: {max: 0, min: 0, range: 0}};
+  selectedTrekDate = '';
 
   activeNav: string = "";
   AFFIndex: number;
+  prevGroup: string;          // Group name on entry to this component, needs to be restored
+  prevType: TrekType;           // previous trek type
+  subjectEffort: number;
+  targetEffort: number;
 
   updateCount = 0;
 
   _didFocusSubscription;
-  _willBlurSubscription;
  
   constructor(props) {
     super(props);
     this.initializeObservables();
+    this._didFocusSubscription = props.navigation.addListener(
+      "didFocus",
+      () => {
+        // go back to Courses menu level if we are returning from changing the defining effort for this course
+        if (this.cS.changedDefiningEffort){
+          this.cS.changedDefiningEffort = false;
+          this.props.navigation.dispatch(goBack)
+        }
+      }
+    );
   }
 
   componentWillMount() {
+    this.prevGroup = this.tInfo.group;
+    this.prevType = this.tInfo.type;
+    this.setDataReady(false);
     this.setOpenItems(false);
     let cName = this.props.navigation.getParam('focusCourse');
     this.cS.getCourse(cName)
     .then((course) => {
-      this.setDataReady(false);
       this.focusCourse = course;
       this.setHeaderTitle(cName);
-      // alert(JSON.stringify(course.efforts,null,2))     
-      this.cS.readEffortTreks(this.focusCourse)
+      this.cS.readEffortTreks(this.focusCourse)   // this creates a CourseDetailObj[]
       .then((courseTreks) => {
         this.setTrekList(courseTreks);
         this.setSortBy('Time');
@@ -129,8 +149,12 @@ class CourseDetails extends Component<
   }
 
   componentWillUnmount() {
+    this._didFocusSubscription && this._didFocusSubscription.remove();
     this.tInfo.clearTrek();
+    this.tInfo.updateGroup(this.prevGroup);
+    this.tInfo.updateType(this.prevType);
     this.setSelectedTrekIndex(-1);
+    this.tInfo.setTrackingValueInfo({value: 0, method: 'courseTime'});
     this.setDataReady(false);
   }
 
@@ -143,10 +167,25 @@ class CourseDetails extends Component<
     this.setDataReady(false);
     this.setCheckboxPickerOpen(false);
     this.setCoursePickerOpen(false);
-    this.setShowWaiting(false);
     this.setSortDirection('Ascend');
     this.setSortByDate(false);
+    this.setTrackingMethodFormOpen(false);
+    this.setOpenNavMenu(false);
   };
+
+  @action
+  setOpenNavMenu = (status: boolean) => {
+    this.openNavMenu = status;
+  }
+
+  openMenu = () => {
+    this.setOpenNavMenu(true);
+  }
+
+  @action
+  setOtherEffortSelect = (status: boolean) => {
+    this.otherEffortSelect = status;
+  }
 
   // set observable that will cause the bar graph to scroll to a bar
   @action
@@ -156,19 +195,13 @@ class CourseDetails extends Component<
 
   // move the barGraph to the specified bar
   scrollBarGraph = (pos: number) => {
-    let oldVal = this.tInfo.updateGraph;
-
-    this.tInfo.setUpdateGraph(true);
     this.setScrollToBar(pos);
     requestAnimationFrame(() => {
-      this.tInfo.setUpdateGraph(false);
       this.setScrollToBar(undefined);
-      this.tInfo.setUpdateGraph(oldVal);
     })
   }
 
   // set the trekList property
-  @action
   setTrekList = (list: CourseDetailObject[]) => {
     this.trekList = list;
   }
@@ -177,6 +210,7 @@ class CourseDetails extends Component<
   @action
   setSelectedTrekIndex = (index: number) => {
     this.selectedTrekIndex = index;
+    this.selectedTrekDate = index < 0 ? '' :  this.trekList[index].trek.sortDate;
   }
 
   // set the open status of the dataReady component
@@ -223,10 +257,16 @@ class CourseDetails extends Component<
   // Set the sortBy property
   @action
   setSortBy = (value: SortByTypes) => {
-    if(value !== this.sortBy){
-      this.sortBy = value;
-      this.setShow(value); 
-      this.rebuildGraph();
+    if (value === 'Date'){
+      this.toggleSortByDate();
+    } else {
+      if(value !== this.sortBy){
+        this.sortBy = value;
+        this.setShow(value); 
+        this.rebuildGraph();
+      } else {
+        this.toggleSortDirection();
+      }
     }
   };
 
@@ -248,37 +288,46 @@ class CourseDetails extends Component<
     this.headerTitle = title;
   };
 
-  // Set the value of the showWaiting flag
+  // set the value of the trackingMethodFormOpen property
   @action
-  setShowWaiting = (status: boolean) => {
-    this.showWaiting = status;
+  setTrackingMethodFormOpen = (status: boolean) => {
+    this.trackingMethodFormOpen = status;
+  };
+
+  // Open the Tracking method form
+  openTrackingMethodForm = () => {
+    this.tInfo.limitsCloseFn = this.prepareForReplay;
+    this.setTrackingMethodFormOpen(true);
   };
 
   // Display the map for the effort at the given index in trekList
-  showTrekMap = (indx: number) => {
+  showTrekMap = (subjectEffort: number, targetEffort?: number) => {
     if (this.trekList.length) {
-      let trek = this.trekList[indx].trek;
+      let trek = this.trekList[subjectEffort].trek;
+      let effort = this.trekList[subjectEffort].effort;
       this.tInfo.setTrekProperties(trek);
-      this.props.courseSvc.initCourseTrackingSnapshot(this.focusCourse, this.trekList[indx].effort, trek)
-      this.props.navigation.navigate("SelectedTrek", {
-        title:
-          this.uSvc.formattedLongDateAbbrDay(trek.date) +
-          "  " +
-          trek.startTime,
-        icon: this.tInfo.type,
-        switchSysFn: this.switchMeasurementSystem,
-        changeTrekFn: this.changeTrek,
-      });
+      this.tInfo.setShowMapControls(true)
+      this.props.courseSvc.initCourseTrackingSnapshot(this.focusCourse, trek, effort,
+                          targetEffort !== undefined ? this.trekList[targetEffort].trek : undefined)
+      .then(() => {        
+        // alert(JSON.stringify({...this.cS.trackingSnapshot, ...{coursePath: undefined, trekPath: undefined}},null,2))
+        this.props.navigation.navigate("SelectedTrek", {
+          title:
+            this.uSvc.formattedLocaleDateAbbrDay(trek.date) +
+            "  " +
+            trek.startTime,
+          icon: this.tInfo.type,
+          switchSysFn: this.switchMeasurementSystem,
+          changeTrekFn: this.changeTrek,
+          checkTrekChangeFn: this.checkTrekChange,
+        })
+      })
+      .catch(() => {})
     }
   };
 
-  // Change to Next or Prev trek in the filteredTreks array.
-  // Return the header label for the Trek.
-  // Return '' if user can't change in the selected direction
-  changeTrek = (dir: string, check = false): string => {
+  checkTrekChange = (dir: string) => {
     let indx = this.selectedTrekIndex;
-    let trek: TrekObj;
-
     if (dir === "Next" && indx !== this.trekList.length - 1) {
       indx++;
     } else {
@@ -287,29 +336,59 @@ class CourseDetails extends Component<
         indx--;
       }
     }
-    if (check) {
-      return indx === this.selectedTrekIndex ? "NO" : "OK";
-    }
-    if (indx === this.selectedTrekIndex) {
-      return "";
-    }
-    trek = this.trekSelected(indx, true);
-    this.props.courseSvc.initCourseTrackingSnapshot(this.focusCourse, 
-                                                                    this.trekList[indx].effort, trek);
-    return (
-      this.uSvc.formattedLongDateAbbrDay(trek.date) +
-      "  " +
-      trek.startTime
-    );
+    return (indx === this.selectedTrekIndex ? -1 : indx);
+  }
+
+  // Change to Next or Prev trek in the filteredTreks array.
+  // Return the header label for the Trek.
+  // Return '' if user can't change in the selected direction
+  changeTrek = (dir: string) => {
+    let indx = this.checkTrekChange(dir);
+    let trek: TrekObj;
+
+    return new Promise<any>((resolve, reject) => {      
+      if (indx === -1) {
+        resolve("");
+      }
+      trek = this.trekSelected(indx);
+      this.tInfo.setShowMapControls(true)
+      this.props.courseSvc.initCourseTrackingSnapshot(this.focusCourse, trek, this.trekList[indx].effort)
+      .then(() => {        
+        resolve(
+          this.uSvc.formattedLocaleDateAbbrDay(trek.date) +
+          "  " +
+          trek.startTime
+        );
+      })
+      .catch((err) => reject(err))
+    })
   };
 
   // Set the Trek at the given index in trekList as the current Trek.
-  trekSelected = (indx: number, update = false) : TrekObj => {
+  trekSelected = (indx: number) : TrekObj => {
     let trek = this.trekList[indx].trek;
-    this.tInfo.setTrekProperties(trek);
-    if (update) { this.tInfo.setUpdateGraph(true); }
     this.setSelectedTrekIndex(indx);
+    this.tInfo.setTrekProperties(trek);
+
+    this.tInfo.setTrackingMethod(this.trekList[indx].effort.subject.method);
+    this.tInfo.setTrackingValue(this.trekList[indx].effort.subject.goalValue);      
+
     return trek;
+  }
+
+  // respond to graph bar being pressed
+  callTrekSelected = (indx: number) => {
+    if (indx === this.selectedTrekIndex) {
+      this.showTrekMap(indx);
+    } else {
+      this.trekSelected(indx)
+    }
+  }
+
+  // remove the trekList item at the specified index
+  removeTrekListItem = (index: number) => {
+    this.trekList.splice(index,1);
+    this.rebuildGraph();
   }
 
   // remove the course link (after confirmation) from the selected trek
@@ -334,25 +413,25 @@ class CourseDetails extends Component<
         allowOutsideCancel: true
       })
       .then(() => {
-        this.setShowWaiting(true);
-        this.cS.removeCourseEffort(this.focusCourse.name, trek.group, trek.date)
+        this.tInfo.setWaitingForSomething("NoMsg");
+        this.cS.removeCourseEffort(this.focusCourse.name, trek.group, trek.sortDate)
         .then(() => {
           // remove treklist entry for this effort
-          this.trekList.splice(index,1);
+          this.removeTrekListItem(index);
 
           // update and save trek with no course link
           trek.course = undefined;
           this.tInfo.setCourseLink(undefined)
-          this.tInfo.saveTrek(trek, 'none')
+          this.tInfo.saveTrek(trek)
           .then(() => {
-          this.setShowWaiting(false);
+            this.tInfo.setWaitingForSomething();
             this.props.toastSvc.toastOpen({
               tType: "Success",
               content: 'Link to ' + trek.type + " has been removed."
             })
           })
           .catch((err) => {
-            this.setShowWaiting(false);
+            this.tInfo.setWaitingForSomething();
             this.props.toastSvc.toastOpen({
               tType: "Error",
               content: MSG_UPDATING_TREK + err,
@@ -360,7 +439,7 @@ class CourseDetails extends Component<
           })
         })
         .catch((err) => {
-          this.setShowWaiting(false);
+          this.tInfo.setWaitingForSomething();
           this.props.toastSvc.toastOpen({
             tType: "Error",
             content: MSG_LINK_NOT_REMOVED + err
@@ -370,29 +449,83 @@ class CourseDetails extends Component<
       .catch(() => {});
   };
 
-  // respond to actions from the BottomNavigation components
-  setActiveNav = val => {
-    requestAnimationFrame(() => {
-      this.activeNav = val;
-      switch (val) {
-        case "Unlink":
-          this.removeCourseLink(this.selectedTrekIndex);
-          break;
-        case "Map":
-          this.tInfo.setUpdateMap(true);
-          this.tInfo.setUpdateGraph(false);
-          this.showTrekMap(this.selectedTrekIndex);
-          break;
-        default:
-      }
-    });
+  // remove the course link (after confirmation) from the selected trek
+  setDefiningEffort = (index: number) => {
+    let trek = this.trekList[index].trek;
+    if (this.cS.isDefiningEffort(this.focusCourse, trek)) {
+      this.props.toastSvc.toastOpen({
+        tType: "Info",
+        content: 'This ' + trek.type + ' is already the\nDefault Effort for this course.',
+        waitForOK: true
+      });
+    } else {      
+      let content =
+        "Change default effort for course to " +
+        trek.type +
+        " on:\n" +
+        trek.date +
+        " " +
+        trek.startTime +
+        "\n" +
+        this.tInfo.getTrekLabel();
+      this.props.modalSvc
+        .simpleOpen({
+          heading: "Set Default Effort",
+          content: content,
+          cancelText: "CANCEL",
+          okText: "SET",
+          headingIcon: 'Key',
+          allowOutsideCancel: true
+        })
+      .then(() => {
+        this.props.navigation.navigate("SelectedTrek", {
+          title:
+            this.props.utilsSvc.formattedLocaleDateAbbrDay(trek.date) +
+            "  " +
+            trek.startTime,
+          icon: this.tInfo.type,
+          mapDisplayMode: 'noSpeeds,noIntervals',
+          takeSnapshotMode: "Update",
+          takeSnapshotName: this.focusCourse.name,
+          takeSnapshotPrompt: 'SET DEFAULT EFFORT\n' + this.focusCourse.name
+          
+        });
+      })
+      .catch(() => {});
+    }
   };
+
+  // user selected to run the selected trek against a specific other effort
+  // call showTrekMap with the two choices
+  otherEffortSelected = () => {
+    this.targetEffort = this.selectedTrekIndex;
+    this.setSelectedTrekIndex(this.subjectEffort);
+    this.setOtherEffortSelect(false);
+    this.tInfo.setTrackingValue(this.trekList[this.targetEffort].trek.duration);
+    this.tInfo.setTrackingMethod('otherEffort');
+    this.showTrekMap(this.subjectEffort, this.targetEffort);
+  }
+
+  // user has selected to configure the replay of the selected trek on this course
+  prepareForReplay = (start: boolean) => {
+    if (start) {
+      this.setTrackingMethodFormOpen(false);
+      this.targetEffort = undefined;
+      if(this.tInfo.trackingMethod === 'otherEffort') {
+        this.subjectEffort = this.selectedTrekIndex;
+        this.setOtherEffortSelect(true);    // allow user to select target effort
+      } else {
+        this.showTrekMap(this.selectedTrekIndex);
+      }
+    } else {
+      this.setTrackingMethodFormOpen(false);
+    }
+  }
 
   // switch measurements system then update the bar graph
   switchMeasurementSystem = () => {
     this.tInfo.switchMeasurementSystem();
     this.buildGraphData();
-    this.tInfo.setUpdateGraph(true);
     this.forceUpdate();
   };
 
@@ -455,9 +588,33 @@ class CourseDetails extends Component<
     // this.setOpenItems(false);
     this.sortTreks();
     this.buildGraphData();
-    this.trekSelected(0, true);
-    this.scrollBarGraph(0);
-    // this.setOpenItems(true);
+    let sel = this.findCurrentSelection();
+    this.trekSelected(sel);
+    this.scrollBarGraph(sel);
+  }
+
+  // find the index for the trek with the date matching selectedTrekDate
+  findCurrentSelection = () : number => {
+    if (this.selectedTrekDate === '') { return 0; }
+    for (let i=0; i<this.trekList.length; i++) {
+      if (this.trekList[i].trek.sortDate === this.selectedTrekDate) {
+        return i;
+      }
+    }
+    return 0;
+  }
+
+  // set the title property of the barGraphData object
+  setGraphTitle = (sType: ShowTypes) => {
+    this.barGraphData.title = undefined;
+    switch(sType){
+      case 'Dist':
+        this.barGraphData.title = this.tInfo.longDistUnitsCaps();
+        break;
+      case 'Speed':
+        this.barGraphData.title = this.tInfo.speedUnits();
+        break;
+    }
   }
 
   // Create the data array for the bar graph.
@@ -469,10 +626,16 @@ class CourseDetails extends Component<
     let dataRange = this.findDataRange(this.trekList, this.show, this.tInfo.measurementSystem)
 
     this.barGraphData.items = [];
+    dataRange.range = dataRange.max;
+    dataRange.min = 0;
+    this.setGraphTitle(this.show);
     this.barGraphData.range = dataRange;
     for(let i=0; i<this.trekList.length; i++) {
       let t = this.trekList[i].trek;
       let barItem : BarData = this.fS.getBarItem(t, thisSortDate, this.show);
+      if (this.cS.isDefiningEffort(this.focusCourse, t)) {
+        barItem.extraIcon = "Key";
+      }
       this.barGraphData.items.push(barItem);
     }
   }
@@ -530,26 +693,98 @@ class CourseDetails extends Component<
     return {max: maxV, min: minV, range: range}
   }
 
+  // respond to actions from the Navigation components
+  setActiveNav = val => {
+    requestAnimationFrame(() => {
+      this.activeNav = val;
+      switch (val) {
+        case "Unlink":
+          this.removeCourseLink(this.selectedTrekIndex);
+          break;
+        case "Default":
+          this.setDefiningEffort(this.selectedTrekIndex);
+          break;
+        case "Map":
+          this.showTrekMap(this.selectedTrekIndex);
+          break;
+        case "Replay":
+          this.openTrackingMethodForm();
+          break;
+        case "GoBack":
+          this.props.navigation.dispatch(goBack);
+          break;
+        case "Home":
+          this.tInfo.clearTrek();
+          this.props.navigation.dispatch(StackActions.popToTop());
+          break;
+        case "Summary":
+        case "Goals":
+        case "Settings":
+        case "Conditions":
+          this.tInfo.clearTrek();
+          const resetAction = StackActions.reset({
+                index: 1,
+                actions: [
+                  NavigationActions.navigate({ routeName: 'Log', key: 'Home' }),
+                  NavigationActions.navigate({ routeName: val, key: 'Key-' + val }),
+                ],
+              });
+          this.props.navigation.dispatch(resetAction);          
+          break;
+        default:
+      }
+    });
+  };
+
+  // show the selected trek image
+  showTrekImage = (set: number, image = 0) => {
+    let title = this.tInfo.formatImageTitle(set, image);
+    this.props.navigation.navigate('Images', {cmd: 'show', setIndex: set, imageIndex: image, title: title});
+  }
+
   render() {
 
-    const {height} = Dimensions.get('window');
+    const {height, width} = Dimensions.get('window');
     const pageTitleSpacing = 20;
     const statusBarHt = 0;
     const sortControlsHt = 30;
-    const areaHt = height - (statusBarHt + pageTitleSpacing + HEADER_HEIGHT + PAGE_TITLE_HEIGHT + CONTROLS_HEIGHT);
-    const { cardLayout, controlsArea, navIcon, navItemWithLabel, navItemLabel, pageTitle } = this.props.uiTheme;
+    const areaHt = height - (statusBarHt + pageTitleSpacing + HEADER_HEIGHT + PAGE_TITLE_HEIGHT);
+    const { cardLayout, pageTitle } = this.props.uiTheme;
     const {
       disabledTextColor,
       pageBackground,
       trekLogBlue,
       mediumTextColor,
       highTextColor,
-      navItemBorderColor,
-      navIconColor
+      dividerColor,
+      secondaryColor
     } = this.props.uiTheme.palette[this.tInfo.colorTheme];
     const gotTreks = this.dataReady && this.cS.haveCourses();
     const graphBgColor = pageBackground;
     const graphHeight = 210;
+    const maxBarHeight = 160;
+    const graphAreaWidth = width;
+    const yAxisWidth = 60;
+    const graphWidth = graphAreaWidth - yAxisWidth - 10;
+    const sortAsc = this.sortDirection === 'Ascend';
+    const replayFormOpen = this.trackingMethodFormOpen;
+    const navMenuItems = 
+    [ 
+      {label: 'Course Options', 
+        submenu: [
+        {icon: 'LinkOff', label: 'Unlink', value: 'Unlink', disabled: !gotTreks},
+        {icon: 'Key', label: 'Set as Default', value: 'Default', disabled: !gotTreks},
+        {icon: 'Replay', label: 'Configure Replay', value: 'Replay', disabled: !gotTreks},
+        {icon: 'Map', label: 'View Map', value: 'Map', disabled: !gotTreks}]
+      },
+      {icon: 'Home', label: 'Home', value: 'Home'},
+      {icon: 'Pie', label: 'Activity', value: 'Summary'},
+      {icon: 'Course', label: 'Courses', value: 'GoBack'},
+      {icon: 'Target', label: 'Goals', value: 'Goals'},
+      {icon: 'Settings', label: 'Settings', value: 'Settings'},
+      {icon: 'PartCloudyDay', label: 'Conditions', value: 'Conditions'}
+    ]  
+
 
     const styles = StyleSheet.create({
       container: {
@@ -567,6 +802,7 @@ class CourseDetails extends Component<
       },
       graphAndStats: {
         marginBottom: 5,
+        marginRight: 10,
         height: graphHeight
       },
       graphArea: {
@@ -578,7 +814,7 @@ class CourseDetails extends Component<
         justifyContent: "center"
       },
       graph: {
-        paddingHorizontal: 3
+        marginLeft: yAxisWidth,
       },
       noMatches: {
         textAlign: "center",
@@ -608,157 +844,175 @@ class CourseDetails extends Component<
         paddingTop: 0,
         height: areaHt,
       },
+      graphStyle: {
+        height: graphHeight,
+      },
+      barStyle: { 
+        height: graphHeight, 
+        width: 40,
+        borderColor: "transparent",
+        backgroundColor: "transparent",
+      },
+      listArea: {
+        ...cardLayout,
+        paddingBottom: 0,
+        paddingLeft: 0,
+        paddingRight: 0,
+        backgroundColor: pageBackground,
+      },
+      pageTitleAdj: {
+        color: highTextColor,
+        paddingLeft: 10,
+        paddingRight: 10,
+        marginBottom: 10,
+      },
+      saveFab: {
+        backgroundColor: secondaryColor,
+      },
     });
 
     return (
-      <View style={styles.container}>
-        {this.dataReady && (
-          <View style={[styles.container, {bottom: CONTROLS_HEIGHT}]}>
-            <TrekLogHeader
-              titleText={this.headerTitle}
-              icon="*"
-              backButtonFn={() => this.props.navigation.dispatch(goBack)}
-            />
-            <CheckboxPicker pickerOpen={this.checkboxPickerOpen} />
-            <RadioPicker pickerOpen={this.coursePickerOpen} />
-            <View style={[cardLayout, { paddingBottom: 0 }]}>
-              <Text style={[pageTitle, {color: highTextColor}]}>Course Detail</Text>
-            </View>
-            {gotTreks && 
-              <View style={styles.scrollArea}>
-                <ScrollView>
-                  <View style={[cardLayout, styles.noPadding]}>
-                    <View style={styles.sortCtrls}>
-                      <IconButton
-                        iconSize={30}
-                        style={{ flexDirection: "row", marginRight: 5, backgroundColor: "transparent",
-                                 width: 90 }}
-                        icon={
-                          this.sortByDate ? "CheckBoxChecked" : "CheckBoxOpen"
-                        }
-                        color={trekLogBlue}
-                        horizontal
-                        label="By Date"
-                        labelStyle={{ color: mediumTextColor, fontSize: 14 }}
-                        onPressFn={() => this.toggleSortByDate()}
-                      />
-                      {this.sortByDate && (
-                        <SvgButton
-                          onPressFn={this.toggleSortDirection}
-                          borderWidth={0}
-                          areaOffset={0}
-                          size={30}
-                          fill={trekLogBlue}
-                          path={
-                            APP_ICONS[
-                              this.sortDirection === "Descend"
-                                ? "CalendarSortNewest"
-                                : "CalendarSortOldest"
-                            ]
-                          }
-                        />
-                      )}
-                      {!this.sortByDate && (
-                        <SvgButton
-                          onPressFn={this.toggleSortDirection}
-                          borderWidth={0}
-                          areaOffset={0}
-                          size={30}
-                          fill={trekLogBlue}
-                          path={
-                            APP_ICONS[
-                              this.sortDirection === "Descend"
-                                ? "ArrowDown"
-                                : "ArrowUp"
-                            ]
-                          }
-                        />
-                      )}
-                      {!this.sortByDate && (
-                          <SvgButton
-                          onPressFn={this.toggleSortDirection}
-                          style={{marginLeft: -12}}
-                          borderWidth={0}
-                          areaOffset={0}
-                          size={30}
-                          fill={trekLogBlue}
-                          path={
-                            APP_ICONS.Sort
-                          }
-                        />
-                      )}
-                    </View>
-                    <View style={styles.graphAndStats}>
-                      <View style={styles.graphArea}>
-                        <View style={styles.graph}>
-                          <BarDisplay
-                            data={this.barGraphData.items}
-                            dataRange={this.barGraphData.range}
-                            selected={this.selectedTrekIndex}
-                            selectFn={this.trekSelected}
-                            openFlag={this.openItems}
-                            barWidth={60}
-                            maxBarHeight={160}
-                            style={{ height: 210, backgroundColor: "transparent" }}
-                            scrollToBar={this.scrollToBar}
-                          />
+      <NavMenu
+        selectFn={this.setActiveNav}
+        items={navMenuItems}
+        locked={replayFormOpen}
+        setOpenFn={this.setOpenNavMenu}
+        open={this.openNavMenu}> 
+        <View style={styles.container}>
+          {this.dataReady && (
+            <View style={styles.container}>
+              <TrekLogHeader
+                titleText={this.headerTitle}
+                icon="*"
+                backButtonFn={() => this.props.navigation.dispatch(goBack)}
+              />
+              <CheckboxPicker pickerOpen={this.checkboxPickerOpen} />
+              <RadioPicker pickerOpen={this.coursePickerOpen} />
+              <View style={styles.listArea}>
+                <NavMenuTrigger openMenuFn={this.openMenu}/>
+                <Text style={[pageTitle, styles.pageTitleAdj]}>Course Detail</Text>
+                {gotTreks && 
+                  <View style={styles.scrollArea}>
+                    <ScrollView>
+                      <View style={[cardLayout, styles.noPadding, {marginTop: 0}]}>
+                        <View style={styles.sortCtrls}>
+                          {this.sortByDate && (
+                            <SvgButton
+                              onPressFn={this.toggleSortDirection}
+                              borderWidth={0}
+                              areaOffset={0}
+                              size={30}
+                              fill={trekLogBlue}
+                              path={
+                                APP_ICONS[
+                                  this.sortDirection === "Descend"
+                                    ? "CalendarSortNewest"
+                                    : "CalendarSortOldest"
+                                ]
+                              }
+                            />
+                          )}
+                          {!this.sortByDate && (
+                              <SvgButton
+                              onPressFn={this.toggleSortDirection}
+                              style={sortAsc ? {transform: ([{ rotateX: "180deg" }])} : {}}
+                              borderWidth={0}
+                              areaOffset={0}
+                              size={30}
+                              fill={trekLogBlue}
+                              path={
+                                APP_ICONS.Sort
+                              }
+                            />
+                          )}
                         </View>
+                        <View style={styles.graphAndStats}>
+                          <View style={styles.graphArea}>
+                            <SvgYAxis
+                              graphHeight={graphHeight}
+                              axisTop={maxBarHeight}
+                              axisBottom={20}
+                              axisWidth={yAxisWidth}
+                              color={mediumTextColor}
+                              lineWidth={1}
+                              majorTics={5}
+                              title={this.barGraphData.title}
+                              dataRange={this.barGraphData.range}
+                              dataType={YAXIS_TYPE_MAP[this.show]}
+                            />
+                            <View style={styles.graph}>
+                              <SvgGrid
+                                graphHeight={graphHeight}
+                                gridWidth={graphWidth}
+                                lineCount={3}
+                                color={dividerColor}
+                                maxBarHeight={maxBarHeight}
+                                minBarHeight={20}
+                              />
+                              <BarDisplay
+                                data={this.barGraphData.items}
+                                dataRange={this.barGraphData.range}
+                                selected={this.selectedTrekIndex}
+                                selectFn={this.callTrekSelected}
+                                openFlag={this.openItems}
+                                maxBarHeight={maxBarHeight}
+                                style={styles.graphStyle}
+                                barStyle={styles.barStyle}
+                                scrollToBar={this.scrollToBar}
+                              />
+                            </View>
+                          </View>
+                        </View>
+                        <TrekDetails
+                          selectable
+                          sortBy={this.sortBy}
+                          sortByDate={this.sortByDate}
+                          selectFn={this.setSortBy}
+                          switchSysFn={this.switchMeasurementSystem}
+                          showImagesFn={this.showTrekImage}
+                        />
                       </View>
-                    </View>
-                    <TrekDetails
-                      selectable
-                      sortBy={this.sortBy}
-                      selectFn={this.setSortBy}
-                      switchSysFn={this.switchMeasurementSystem}
-                    />
+                    </ScrollView>
                   </View>
-                </ScrollView>
+                }
               </View>
-            }
-            {!gotTreks && this.tInfo.typeSelections !== 0 && (
-              <View style={[styles.emptyGraphArea, styles.graph]}>
-                <Text style={styles.noMatches}>Nothing To Display</Text>
-              </View>
-            )}
-            {!gotTreks && this.tInfo.typeSelections === 0 && (
-              <View style={[styles.emptyGraphArea, styles.graph]}>
-                <Text style={styles.noMatches}>No Trek Type Selected</Text>
-              </View>
-            )}
-          </View>
-        )}
-        {this.showWaiting && <Waiting />}
-        {gotTreks && (
-          <View style={controlsArea}>
-            <IconButton
-              iconSize={NAV_ICON_SIZE}
-              icon="LinkOff"
-              style={navItemWithLabel}
-              borderColor={navItemBorderColor}
-              iconStyle={navIcon}
-              color={navIconColor}
-              raised
-              onPressFn={this.setActiveNav}
-              onPressArg="Unlink"
-              label="Unlink"
-              labelStyle={navItemLabel}
+              {!gotTreks && this.tInfo.typeSelections !== 0 && (
+                <View style={[styles.emptyGraphArea, styles.graph]}>
+                  <Text style={styles.noMatches}>Nothing To Display</Text>
+                </View>
+              )}
+              {!gotTreks && this.tInfo.typeSelections === 0 && (
+                <View style={[styles.emptyGraphArea, styles.graph]}>
+                  <Text style={styles.noMatches}>No Trek Type Selected</Text>
+                </View>
+              )}
+            </View>
+          )}
+          {this.tInfo.waitingForSomething && <Waiting />}
+          {this.dataReady && 
+            <TrackingMethodForm
+              open={this.trackingMethodFormOpen}
+              header="Replay Course Effort"
+              title="Move Course Marker Using:"
+              icon="Replay"
+              inMethod={this.trekList[this.selectedTrekIndex].effort.subject.method}
+              inValue={this.trekList[this.selectedTrekIndex].effort.subject.goalValue}
+              onChangeFn={this.tInfo.setTrackingValueInfo}
+              course={this.focusCourse}
+              trek={{date: this.tInfo.sortDate, group: this.tInfo.group}}
             />
-            <IconButton
-              iconSize={NAV_ICON_SIZE}
-              icon="Map"
-              style={navItemWithLabel}
-              borderColor={navItemBorderColor}
-              iconStyle={navIcon}
-              color={navIconColor}
+          }
+          {(this.dataReady && this.otherEffortSelect && this.selectedTrekIndex !== this.subjectEffort) &&
+            <SpeedDial 
+              selectFn={this.otherEffortSelected}
+              bottom={CONTROLS_HEIGHT}
+              style={styles.saveFab}
+              icon="CheckMark"
               raised
-              onPressFn={this.setActiveNav}
-              onPressArg="Map"
-              label="Map"
-              labelStyle={navItemLabel}
             />
-          </View>
-        )}
-      </View>
+          }
+        </View>
+      </NavMenu>
     );
   }
 }

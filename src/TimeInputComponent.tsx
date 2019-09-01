@@ -23,6 +23,7 @@ function TimeInput({
 
   const { highTextColor, mediumTextColor, disabledTextColor
         } = uiTheme.palette[trekInfo.colorTheme];
+  const { fontRegular } = uiTheme;
   const zeros = '000000';
   const styles = StyleSheet.create({
     timeRow: {
@@ -34,13 +35,15 @@ function TimeInput({
       alignItems: "flex-end",
     },
     timeItemValue: {
-      fontSize: 26,
+      fontSize: 28,
+      fontFamily: fontRegular,
       color: onChangeFn ? highTextColor : disabledTextColor,
     },
     timeItemUnits: {
       marginLeft: 2,
       marginRight: 8,
       marginBottom: 2,
+      fontFamily: fontRegular,
       fontSize: 18,
       color: mediumTextColor
     },

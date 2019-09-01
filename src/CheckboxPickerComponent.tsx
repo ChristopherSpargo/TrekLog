@@ -1,15 +1,14 @@
-import React, { useContext, useState, useEffect } from "react";
+import React, { useContext, useState, useEffect, useCallback } from "react";
 import { useObserver } from "mobx-react-lite";
 import {
   View,
   StyleSheet,
   Text,
   ScrollView,
-  TouchableNativeFeedback,
-  Dimensions
+  Dimensions,
+  BackHandler
 } from "react-native";
-// import { RectButton, TouchableWithoutFeedback, TouchableNativeFeedback,
-//          ScrollView } from 'react-native-gesture-handler';
+import { RectButton } from 'react-native-gesture-handler'
 
 import {
   CONFIRM_Z_INDEX,
@@ -42,11 +41,20 @@ function CheckboxPicker({pickerOpen}) {
     pageBackground,
     rippleColor,
     primaryColor,
-    disabledTextColor
+    disabledTextColor,
+    textOnPrimaryColor
   } = uiTheme.palette[trekInfo.colorTheme];
-  const { cardLayout, roundedTop, roundedBottom, footerButton, footerButtonText } = uiTheme;
+  const { cardLayout, roundedTop, roundedBottom, footer, footerButton, 
+          fontRegular, footerButtonText } = uiTheme;
   const headerHeight = 50;
   const canClose = this.allowNone || haveSelections();
+
+  const onBackButtonPressCPicker = useCallback(
+    () => {
+      dismiss();
+      return true;
+    }, [], // Tells React to memoize regardless of arguments.
+  );
 
   const styles = StyleSheet.create({
     container: { ...StyleSheet.absoluteFillObject },
@@ -82,20 +90,16 @@ function CheckboxPicker({pickerOpen}) {
       borderStyle: "solid",
       borderBottomColor: dividerColor,
       borderBottomWidth: 1,
-      backgroundColor: cardLayout.backgroundColor
+      backgroundColor: primaryColor
     },
     title: {
-      color: highTextColor,
-      fontWeight: "bold",
-      fontSize: 20
+      color: textOnPrimaryColor,
+      fontFamily: fontRegular,
+      fontSize: 22
     },
     body: {
       flexDirection: "column",
       paddingVertical: 8
-    },
-    bodyText: {
-      fontSize: 16,
-      color: highTextColor
     },
     rowLayout: {
       flexDirection: "row",
@@ -106,13 +110,8 @@ function CheckboxPicker({pickerOpen}) {
       alignItems: "center"
     },
     footer: {
-      height: headerHeight,
-      flexDirection: "row",
-      alignItems: "center",
-      borderStyle: "solid",
-      borderTopColor: dividerColor,
-      borderTopWidth: 1,
-      backgroundColor: cardLayout.backgroundColor
+      ...footer,
+      ...{borderTopColor: dividerColor, backgroundColor: pageBackground}
     },
     rgItem: {
       paddingVertical: 5,
@@ -122,18 +121,29 @@ function CheckboxPicker({pickerOpen}) {
     },
     rgLabel: {
       color: highTextColor,
-      fontSize: 20,
+      fontFamily: fontRegular,
+      fontSize: 22,
       paddingLeft: 30,
       paddingRight: 30,
       flex: 1
     }
   });
 
+  useEffect(() => {                       // componentDidUpdate
+    if(pickerOpen) {
+      BackHandler.addEventListener('hardwareBackPress', onBackButtonPressCPicker);  
+    }
+  },[pickerOpen])
+
   useEffect(() => {
     if (mData.selections.length && !selections.length){
       setSelections([...mData.selections]);
     }
   });
+
+  function removeListeners() {
+    BackHandler.removeEventListener('hardwareBackPress', onBackButtonPressCPicker);
+  }
 
   // see if there are anu selections
   function haveSelections() {
@@ -153,23 +163,28 @@ function CheckboxPicker({pickerOpen}) {
         .closeCheckboxPicker(400)
         .then(() => {
           setSelections([]);     // clear the local selections so it will be updated from mData in useEffect
+          removeListeners();
           modalSvc.cpData.resolve(result);
         })
-        .catch(() => {});
+        .catch(() => {
+          removeListeners();
+        });
     }, 200);
   }
 
   // call the reject method
   function dismiss() {
-    // setSelection(mData.selection);   
     setTimeout(() => {
       modalSvc
         .closeCheckboxPicker(400)
         .then(() => {
           setSelections([]);     // clear the local selection so it will be updated from mData in useEffect
+          removeListeners();
           modalSvc.cpData.reject("CANCEL");
         })
-        .catch(() => {});
+        .catch(() => {
+          removeListeners();
+        });
     }, 200);
   }
 
@@ -213,30 +228,30 @@ function CheckboxPicker({pickerOpen}) {
                     </View>
                   </ScrollView>
                   <View style={[styles.footer, roundedBottom]}>
-                    <TouchableNativeFeedback
-                      background={TouchableNativeFeedback.Ripple(rippleColor, true)}
-                      onPress={dismiss}
-                    >
-                      <View style={[footerButton, { height: headerHeight }]}>
+                    <RectButton
+                      rippleColor={rippleColor}
+                      style={{flex: 1}}
+                      onPress={dismiss}>
+                      <View style={footerButton}>
                         <Text
-                          style={[footerButtonText, { color: primaryColor }]}
+                          style={footerButtonText}
                         >
                           {mData.cancelText}
                         </Text>
                       </View>
-                    </TouchableNativeFeedback>
-                    <TouchableNativeFeedback
-                      background={TouchableNativeFeedback.Ripple(rippleColor, true)}
-                      onPress={canClose ? close : undefined}
-                    >
-                      <View style={[footerButton, { height: headerHeight }]}>
+                    </RectButton>
+                    <RectButton
+                      rippleColor={rippleColor}
+                      style={{flex: 1}}
+                      onPress={canClose ? close : undefined}>
+                      <View style={footerButton}>
                         <Text
-                          style={[footerButtonText, { color: canClose ? primaryColor : disabledTextColor }]}
+                          style={{...footerButtonText, ...{ color: canClose ? primaryColor : disabledTextColor }}}
                         >
                           {mData.okText}
                         </Text>
                       </View>
-                    </TouchableNativeFeedback>
+                    </RectButton>
                   </View>
                 </View>
               </View>

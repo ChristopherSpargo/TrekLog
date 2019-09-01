@@ -38,9 +38,9 @@ export const CONFIRM_INFO = 'INFO';
 // 'open' functions return a Promise
 
 export class ModalModel {
-  @observable simpleIsOpen;                // when true, SimpleModal component will be open
-  @observable goalNoticeIsOpen;            // when true, GoalNoticeModal component will be open
-  @observable labelFormOpen;               // when true, TrekLabel component will be open
+  @observable simpleIsOpen : boolean;                // when true, SimpleModal component will be open
+  @observable goalNoticeIsOpen : boolean;            // when true, GoalNoticeModal component will be open
+  @observable labelFormOpen : boolean;               // when true, TrekLabel component will be open
 
   @observable smData   : ModalData;         // data object for SimpleModal
   @observable gnmData  : ModalData;         // data object for GoalAchievedModal
@@ -177,7 +177,7 @@ export class ModalModel {
   @action
   closeRadioPicker = (delay?: number) : Promise<string> => {
     this.rpData.openFn(false);      
-    this.rpData.selection = '';
+    // this.rpData.selection = '';
     return new Promise((resolve) => {       // now, allow time for the modal fade-out animation
       setTimeout(() => {
         resolve('Ok');

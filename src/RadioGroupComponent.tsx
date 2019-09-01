@@ -20,6 +20,7 @@ function RadioGroup({
   values = undefined, // value for each radio choice
   icons = undefined, // icons to use in place of standard radio button
   comments = undefined, // comment to add under items
+  commentStyle = undefined, // style for comment area
   itemTest = undefined, // RegExp used to test validity of new items
   iconAreaStyle = undefined, // style object for the icon area when icons present
   colors = undefined, // color for each icon
@@ -43,9 +44,11 @@ function RadioGroup({
   const alignDir = align === "start" ? "flex-start" : "center";
   const { secondaryColor, highlightColor, highTextColor, mediumTextColor, okChoiceColor, cancelColor,
           rippleColor } = uiTheme.palette[trekInfo.colorTheme];
+  const { fontRegular, fontLight, formTextInput } = uiTheme;
   const lStyle = labelStyle || {};
   const iaStyleProp = iconAreaStyle || {};
   const iStyle = itemStyle || {};
+  const cStyle = commentStyle || {};
   const textInputWidth = 155;
 
   const styles = StyleSheet.create({
@@ -63,7 +66,8 @@ function RadioGroup({
       justifyContent: inline ? "flex-start" : "center"
     },
     label: {
-      fontSize: 16,
+      fontSize: 18,
+      fontFamily: fontRegular, 
       paddingLeft: inline && radioFirst ? 3 : 0,
       color: highTextColor
     },
@@ -101,21 +105,13 @@ function RadioGroup({
     },
     commentText: {
       fontSize: 14,
+      fontFamily: fontLight,
       marginLeft: (lStyle.paddingLeft ? lStyle.paddingLeft : 0) + radioIconSize,
       color: mediumTextColor,
     },
     rowLayout: {
       flexDirection: "row",
       alignItems: "center",
-    },
-    textInputItem: {
-      height: 40,
-      width: textInputWidth,
-      borderWidth: 0,
-    },      
-    inputTextStyle: {
-      fontWeight: "300",
-      fontSize: 18,
     },
     addIconArea: {
       flex: 1,
@@ -133,6 +129,7 @@ function RadioGroup({
     },
     button: {
       color: "white",
+      fontFamily: fontRegular,
       fontSize: 14
     },
 });
@@ -188,9 +185,9 @@ function RadioGroup({
                   background={TouchableNativeFeedback.Ripple(rippleColor, false)}
                   onPress={() => valueChange(indx)}
                 >
-                  <View style={[styles.item, iStyle]}>
+                  <View style={{...styles.item, ...iStyle}}>
                     {!radioFirst && (
-                      <Text style={[styles.label, lStyle]}>{item}</Text>
+                      <Text style={{...styles.label, ...lStyle}}>{item}</Text>
                     )}
                     <SvgIcon
                       size={24}
@@ -205,7 +202,7 @@ function RadioGroup({
                       }
                     />
                     {radioFirst && (
-                      <Text style={[styles.label, lStyle]}>{item}</Text>
+                      <Text style={{...styles.label, ...lStyle}}>{item}</Text>
                     )}
                   </View>
                 </TouchableNativeFeedback>
@@ -213,7 +210,7 @@ function RadioGroup({
                   <View style={[styles.rowLayout, {marginLeft: 30}]}>
                     <View style={{width: textInputWidth}}>
                       <TextInputField
-                        style={[styles.textInputItem, styles.inputTextStyle]}
+                        style={{...formTextInput, ...{width: textInputWidth}}}
                         inputWidth={textInputWidth}
                         onChangeFn={(text : string) => setNewItemValue(text)}
                         kbType='default'
@@ -248,7 +245,7 @@ function RadioGroup({
                   onPress={() => valueChange(indx)}
                 >
                   <View style={styles.commentArea}>
-                    <Text style={styles.commentText}>{comments[indx]}</Text>
+                    <Text style={[styles.commentText, cStyle]}>{comments[indx]}</Text>
                   </View>
                 </TouchableNativeFeedback>
                 }

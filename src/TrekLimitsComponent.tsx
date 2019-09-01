@@ -1,14 +1,23 @@
-import React from 'react';
-import { observer, inject } from 'mobx-react';
-import { observable, action } from 'mobx';
-import { View, StyleSheet, Text, TextInput, Keyboard } from 'react-native';
+import React, { useContext, useState, useEffect, useRef, useCallback } from "react";
+import { useObserver } from "mobx-react-lite";
+import { View, StyleSheet, Text, Keyboard, BackHandler } from 'react-native';
+import { RectButton } from 'react-native-gesture-handler'
 
 import { APP_ICONS } from './SvgImages';
 import RadioGroup from './RadioGroupComponent';
 import SlideUpView from './SlideUpComponent';
-import { CONTROLS_HEIGHT } from './App';
+import TextInputField from './TextInputFieldComponent';
+import { 
+  UiThemeContext,
+  TrekInfoContext,
+  LIMITS_FORM_Z_INDEX,
+  INVISIBLE_Z_INDEX,
+  FOOTER_HEIGHT,
+  FORMHEADER_HEIGHT
+ } from './App';
 import SvgIcon from './SvgIconComponent';
-import { TrekInfo } from './TrekInfoModel';
+import { TrekInfo, TREK_SELECT_BITS } from './TrekInfoModel';
+import TrekTypeSelect from "./TrekTypeSelectComponent";
 
 export interface LimitsObj {
   headingIcon   ?: string,    // icon for the header
@@ -16,125 +25,119 @@ export interface LimitsObj {
   label         ?: string,    // label for the input field
   placeholderValue ?: string,  // default value
   onChangeFn    ?: Function,  // function to call on input changes
-  closeFn       ?: Function,  // function to call on finish
+  cancelText    ?: string,    // text for cancel button
+  okText        ?: string,    // text for the OK button
   units         ?: string[],  // array of labels for unit radio buttons
   defaultUnits  ?: string,    // default (last) value for units selection
   unitsVertical ?: boolean,   // layout units radio buttons vertically
+  typeSelect    ?: boolean,   // present a TrekTypeSelect component if true
 }
 
+// dialog used for various inputs (time limit, dist limit, interval data)
 
-// dialog used for single value string input
+function TrekLimitsForm({open=undefined, limits=undefined}) {
+  const uiTheme: any = useContext(UiThemeContext);
+  const tInfo: TrekInfo = useContext(TrekInfoContext);
 
-@inject('uiTheme', 'trekInfo')
-@observer
-class TrekLimitsForm extends React.Component<{   
-  open        : boolean,    // true if component is open
-  done       ?: string,    // 'Close' if call close function, 'Dismiss' if call dismiss function
-  limits      : LimitsObj,  // object with limits form config info
-  uiTheme     ?: any,
-  trekInfo    ?: TrekInfo,
-}, {} > {
+  const [value, setValue] = useState('');
+  const [units, setUnits] = useState('');
+  const [zValue, setZValue] = useState(-1);
 
-  @observable value;
-  @observable units;
-  @observable zValue;
+  const bHandler = useRef(false);
 
-  done = '';
-  closeCount = 0;
+  const onBackButtonPressLimits = useCallback(
+    () => {
+      dismiss();
+      return true;
+    }, [], // Tells React to memoize regardless of arguments.
+  );
 
-  constructor(props) {
-    super(props);
-    this.initializeObservables();
-  }
-
-  componentDidUpdate() {
-    if (this.props.limits.units && (this.props.limits.units.indexOf(this.units) === -1)){
-      this.setUnits(this.props.limits.defaultUnits);
+  useEffect(() => {                       // componentDidUpdate
+    if(open && !bHandler.current) {
+      BackHandler.addEventListener('hardwareBackPress', onBackButtonPressLimits); 
+      bHandler.current = true;
     }
-    if (this.props.done !== this.done){
-      this.done = this.props.done;
-      switch(this.done){
-        case 'Dismiss':
-          this.dismiss();
-          break;
-        case 'Close':
-          this.close();
-          break;
-        case 'Keyboard':
-          Keyboard.dismiss();
-          break;
-        default:
-      }
+  },[open])
+
+  useEffect(() => {     
+    setValue('')                  // componentDidMount
+  },[])
+
+  useEffect(() => {                       // DidUpdate
+    if (limits.units && (limits.units.indexOf(units) === -1)){
+      updateUnits(limits.defaultUnits);
     }
+  },[limits.units])
+
+  function removeListeners() {
+    BackHandler.removeEventListener('hardwareBackPress', onBackButtonPressLimits);
+    bHandler.current = false;
   }
 
-  // initialize all the observable properties in an action for mobx strict mode
-  @action
-  initializeObservables = () => {
-    this.value = '';
-    this.units = '';
-    this.zValue = -1;
+  function setVisible() {
+    setZValue(LIMITS_FORM_Z_INDEX);
   }
 
-  @action
-  setZValue = (val: number) => {
-    this.zValue = val;
+  function setNotVisible() {
+    setZValue(INVISIBLE_Z_INDEX);
   }
 
-  setVisible = () => {
-    this.setZValue(9);
+  function setValueInput(val: string) {
+    let v = parseFloat(val);
+    limits.onChangeFn({value: v, units: units});
   }
 
-  setNotVisible = () => {
-    this.setZValue(-1);
+  function updateUnits(val: string) {
+    setUnits(val);
+    setValue(value);      // in case units changed to SAVED_UNITS
   }
 
-  @action
-  setValue = (val: string) => {
-      this.value = val;
-  }
-
-  setValueInput = () => {
-    let v = parseFloat(this.value);
-    this.props.limits.onChangeFn({value: v, units: this.units});
-  }
-
-  @action
-  setUnits = (val: string) => {
-    this.units = val;
-    this.setValue(this.value);      // in case units changed to SAVED_UNITS
-  }
-
-  setUnitsInput = (val: string) => {
-    this.setUnits(val);
-    this.setValueInput();
+  function setUnitsInput(val: string) {
+    updateUnits(val);
+    setValueInput(value);
   }
   
+  function setType(tType: string){
+    limits.onChangeFn(tType);
+  }
+
     // call the close method, indicate OK
-  close = () => {
-      if (this.value === '') { 
-        this.setValue(this.props.limits.placeholderValue);
+  function close() {
+    if (!limits.typeSelect) {
+      let v = value;
+      if (v === '') { 
+        // alert(limits.placeholderValue);
+        v = limits.placeholderValue;
+        setValue(v);
       }
-      this.setValueInput();
-      Keyboard.dismiss();
-      this.props.limits.closeFn(true);
-      this.setValue('');
+      setValueInput(v);
+    }
+    Keyboard.dismiss();
+    removeListeners();
+    tInfo.limitsCloseFn(true);
+    setValue('');
   }
 
   // call the close method, indicate CANCEL
-  dismiss = () => {
+  function dismiss() {
       Keyboard.dismiss();
-      this.props.limits.closeFn(false);
-      this.setValue('');
+      removeListeners();
+      tInfo.limitsCloseFn(false);
+      setValue('');
   }
 
-  render() {
-
-    const { highTextColor, dividerColor, mediumTextColor, headerBackgroundColor, textOnPrimaryColor,
-            pageBackground, disabledTextColor } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
-    const { cardLayout, roundedTop } = this.props.uiTheme;
-    const pHolder = this.props.limits.placeholderValue;
-    const formHt = 165 + CONTROLS_HEIGHT;
+    const { highTextColor, dividerColor, textOnPrimaryColor,
+            pageBackground, rippleColor } = uiTheme.palette[tInfo.colorTheme];
+    const { cardLayout, roundedTop, footer, footerButton, footerButtonText,
+            formHeader, formHeaderText, formBody, formBodyText, formTextInput, formNumberInput
+          } = uiTheme;
+    const footerHeight = FOOTER_HEIGHT;
+    const headerHeight = FORMHEADER_HEIGHT;
+    const bodyHeight = 130;
+    const pHolder = limits.placeholderValue;
+    const formHt = bodyHeight + footerHeight + headerHeight;
+    const okTxt = limits.okText || 'CONTINUE';
+    const canTxt = limits.cancelText || 'CANCEL';
 
     const styles = StyleSheet.create({
       container: { ... StyleSheet.absoluteFillObject },
@@ -143,7 +146,7 @@ class TrekLimitsForm extends React.Component<{
         bottom: 0,
         left: 0,
         right: 0,
-        zIndex: this.zValue,
+        zIndex: zValue,
       },
       cardCustom: {
         marginTop: 0,
@@ -158,113 +161,135 @@ class TrekLimitsForm extends React.Component<{
         backgroundColor: pageBackground,
       },
       header: {
-        paddingLeft: 10,
-        flexDirection: "row",
-        alignItems: "center",
-        height: 40,
-        borderStyle: "solid",
+        ...formHeader,
         borderBottomColor: dividerColor,
-        borderBottomWidth: 1,
-        backgroundColor: headerBackgroundColor,
       },
-      title: {
+      headerText: {
+        ...formHeaderText,
         color: textOnPrimaryColor,
-        fontSize: 18
       },
       body: {
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: 8,
-        minHeight: 100,
+        ...formBody,
+        height: bodyHeight,
       },
-      bodyText: {
-        fontSize: 16,
+      labelText: {
+        ...formBodyText,
         color: highTextColor,
       },
       rowLayout: {
         flexDirection: "row",
         alignItems: "center",
       },
+      footer: {
+        ...footer,
+        ...{borderTopColor: dividerColor, backgroundColor: pageBackground}
+      },
       colLayout: {
         flexDirection: "column",
         alignItems: "center",
       },
       textInputItem: {
-        height: 40,
-        width: 200,
-        borderWidth: 0,
-        fontWeight: "300",
-        // textAlign: "center",
-        fontSize: 18,
+        ...formTextInput,
         color: highTextColor,
       },      
-      numberInput: {
-        width: 75,
-      },
-      labelText: {
-        color: highTextColor,
-        fontSize: 18
+      rgLabel: {
+        fontSize: 20,
       },
     })
 
-    return (
+    return useObserver(() => (
       <View style={styles.container}>
           <View style={styles.formArea}>
             <SlideUpView
-              startValue={250}
+              startValue={formHt}
               endValue={0}
               bgColor="transparent"
-              open={this.props.open}
-              beforeOpenFn={this.setVisible}
-              afterCloseFn={this.setNotVisible}
+              open={open}
+              beforeOpenFn={setVisible}
+              afterCloseFn={setNotVisible}
               >
               <View style={[cardLayout, styles.cardCustom, roundedTop]}>
                 <View style={[styles.header, roundedTop]}>
-                  {this.props.limits.headingIcon &&
+                  {limits.headingIcon &&
                     <SvgIcon 
                       style={{marginRight: 4, backgroundColor: 'transparent'}}
                       size={24}
                       widthAdj={0}
                       fill={textOnPrimaryColor}
-                      paths={APP_ICONS[this.props.limits.headingIcon]}
+                      paths={APP_ICONS[limits.headingIcon]}
                     />
                   }
-                  <Text style={styles.title}>{this.props.limits.heading}</Text>
+                  <Text style={styles.headerText}>{limits.heading}</Text>
                 </View>
                 <View style={styles.body}>
-                  <Text style={styles.labelText}>{this.props.limits.label}</Text>
-                    <View style={this.props.limits.unitsVertical ? styles.rowLayout : styles.colLayout}>
-                      <TextInput
-                          style={[styles.textInputItem, styles.numberInput]}
-                          onChangeText={(text) => this.setValue(text)}
-                          placeholderTextColor={disabledTextColor}
-                          placeholder={pHolder}
-                          value={this.value}
-                          underlineColorAndroid={mediumTextColor}
-                          keyboardType="numeric"
-                      /> 
-                      {(this.props.limits.units !== undefined) &&
-                        <RadioGroup 
-                          onChangeFn={this.setUnitsInput}
-                          selected={this.units}
-                          values={this.props.limits.units}
-                          labels={this.props.limits.units}
-                          labelStyle={{color: highTextColor, fontSize: 18}}
-                          vertical={this.props.limits.unitsVertical}
-                          inline
-                          itemHeight={30}
-                          radioFirst
+                  <Text style={styles.labelText}>{limits.label}</Text>
+                    {!limits.typeSelect && 
+                      <View style={limits.unitsVertical ? styles.rowLayout : styles.colLayout}>
+                        <View style={{marginBottom: 5}}>
+                          <TextInputField
+                            style={[styles.textInputItem, formNumberInput]}
+                            onChangeFn={(text) => setValue(text)}
+                            placeholderValue={value || pHolder}
+                            topAdjust={0}
+                          />
+                        </View>
+                        {(limits.units !== undefined) &&
+                          <RadioGroup 
+                            onChangeFn={setUnitsInput}
+                            selected={units}
+                            values={limits.units}
+                            labels={limits.units}
+                            labelStyle={styles.rgLabel}
+                            vertical={limits.unitsVertical}
+                            inline
+                            itemHeight={30}
+                            radioFirst
+                          />
+                        }
+                      </View>
+                    }
+                    {limits.typeSelect &&
+                      <View style={[styles.rowLayout, {marginTop: 5}]}>
+                        <TrekTypeSelect
+                          style={{justifyContent: "flex-start"}}
+                          size={40}
+                          selected={TREK_SELECT_BITS[tInfo.type]}
+                          onChangeFn={setType}
                         />
-                      }
+                      </View>
+                    }
+                </View>
+                <View style={styles.footer}>
+                  <RectButton
+                    rippleColor={rippleColor}
+                    style={{flex: 1}}
+                    onPress={dismiss}>
+                    <View style={footerButton}>
+                      <Text
+                        style={footerButtonText}
+                      >
+                        {canTxt}
+                      </Text>
                     </View>
+                  </RectButton>
+                  <RectButton
+                    rippleColor={rippleColor}
+                    style={{flex: 1}}
+                    onPress={() => close()}>
+                    <View style={footerButton}>
+                      <Text
+                        style={footerButtonText}
+                      >
+                        {okTxt}
+                      </Text>
+                    </View>
+                  </RectButton>
                 </View>
               </View>
             </SlideUpView>
           </View>
       </View>
-    )
-  }
+    ))
 }
 
 export default TrekLimitsForm;

@@ -1,11 +1,13 @@
 import React, { Component } from 'react'
 import { View, StyleSheet, Text, ScrollView, Keyboard, 
-          TouchableNativeFeedback } from 'react-native'
+          TouchableNativeFeedback, 
+          Group} from 'react-native'
 import { observable, action } from 'mobx'
 import { observer, inject } from 'mobx-react'
-import { NavigationActions } from 'react-navigation';
+import { NavigationActions, StackActions } from 'react-navigation';
+import { RectButton } from 'react-native-gesture-handler'
 
-import { TrekInfo, TrekType, MeasurementSystemType, DEFAULT_STRIDE_LENGTHS, STRIDE_CONVERSION_FACTORS,
+import { TrekInfo, TrekType, MeasurementSystemType, DEFAULT_STRIDE_LENGTHS,
          WEIGHT_UNIT_CHOICES, STRIDE_UNIT_CHOICES, TREK_TYPE_CHOICES, TrekTypeDataNumeric,
          TREK_SELECT_BITS, SWITCH_MEASUREMENT_SYSTEM, SYSTEM_TYPE_METRIC, SYSTEM_TYPE_US, 
          TREK_TYPE_WALK, TREK_TYPE_HIKE, TREK_TYPE_RUN, INVALID_NAMES} from './TrekInfoModel'
@@ -27,7 +29,9 @@ import IconButton from './IconButtonComponent';
 import RadioPicker from './RadioPickerComponent';
 import FadeInView from './FadeInComponent';
 import SlideDownView from './SlideDownComponent';
-import { GroupSvc, DEFAULT_WEIGHT, SettingsObj, WeightObj } from './GroupService';
+import { GroupSvc, DEFAULT_WEIGHT, SettingsObj, WeightObj, GroupsObj } from './GroupService';
+import NavMenu, { NavMenuItem } from './NavMenuComponent';
+import NavMenuTrigger from './NavMenuTriggerComponent'
 
 const goBack = NavigationActions.back() ;
 
@@ -59,7 +63,8 @@ class Settings extends Component<{
   @observable originalSettings : SettingsObj;
   @observable openItems;
   @observable newGroup;
-  
+  @observable openNavMenu : boolean;
+
   uSvc = this.props.utilsSvc;
   gSvc = this.props.groupSvc;
   todayShortDate = this.uSvc.formatShortSortDate();
@@ -69,7 +74,6 @@ class Settings extends Component<{
   weights : WeightObj[] = [];
   packWeightNum = 0;
   strideLengths : TrekTypeDataNumeric;
-  activeNav = '';             // used by navigation component
   oldTheme : ThemeType;
   oldSystem : MeasurementSystemType;
 
@@ -86,16 +90,19 @@ class Settings extends Component<{
     this.setOriginalSettings(undefined);
     this.setOpenItems(false);        
     this.gSvc.readGroups()
-    .then((groups) => {
+    .then((groups: GroupsObj) => {
+      if(groups && groups.groups.length !== 0) {
         this.oldTheme = groups.theme;
         this.oldSystem = groups.measurementSystem;
         this.setSystem(groups.measurementSystem || SYSTEM_TYPE_US);
-        this.changeGroup(this.props.trekInfo.group)
-      })
+         this.changeGroup(this.props.trekInfo.group)
+      } else {
+          this.setNoGroups();
+      }
+    })
     .catch(() => {
       // Failed to read groups or list empty
       this.setNoGroups();
-      // this.setOpenItems(true);
     })
 
   }
@@ -103,9 +110,6 @@ class Settings extends Component<{
   componentDidMount() {
     this.keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', this.keyboardDidShow);
     this.keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', this.keyboardDidHide);
-      // requestAnimationFrame(() => {
-      //   this.setOpenItems(true);
-      // })
     }
 
   componentWillUnmount() {
@@ -129,6 +133,7 @@ class Settings extends Component<{
     this.originalSettings = undefined;
     this.setOpenItems(false);
     this.setNewGroup(false);
+    this.setOpenNavMenu(false);
   }
 
   @action
@@ -145,6 +150,15 @@ class Settings extends Component<{
   }
   
   @action
+  setOpenNavMenu = (status: boolean) => {
+    this.openNavMenu = status;
+  }
+
+  openMenu = () => {
+    this.setOpenNavMenu(true);
+  }
+
+  @action
   setOpenItems = (status: boolean) => {
     this.openItems = status;
   }
@@ -154,6 +168,7 @@ class Settings extends Component<{
     this.setDefaultSettings();
     this.updateDataReady(true);
     this.props.toastSvc.toastOpen({tType: "Error", content: "Please create a group."});
+    // this.setGroup(NEW_GROUP);
     this.getDifferentGroup();
   }
 
@@ -176,7 +191,6 @@ class Settings extends Component<{
         this.strideLengths = data.strideLengths || DEFAULT_STRIDE_LENGTHS;
         if(this.strideLengths.Walk === undefined){ this.strideLengths.Walk = DEFAULT_STRIDE_LENGTHS.Walk;}
         if(this.strideLengths.Run === undefined){ this.strideLengths.Run = DEFAULT_STRIDE_LENGTHS.Run;}
-        if(this.strideLengths.Bike === undefined){ this.strideLengths.Bike = DEFAULT_STRIDE_LENGTHS.Bike;}
         if(this.strideLengths.Hike === undefined){ this.strideLengths.Hike = DEFAULT_STRIDE_LENGTHS.Hike;}
         if (data.weights === undefined) {
           this.weights = [{weight: DEFAULT_WEIGHT, date: this.todayShortDate}];
@@ -205,7 +219,7 @@ class Settings extends Component<{
   setDefaultSettings = () => {
     this.setDefaultType(TREK_TYPE_WALK);
     // switch to wrong measurementSystem type
-    this.setSystem(SWITCH_MEASUREMENT_SYSTEM[this.system] as MeasurementSystemType);
+    this.setSystem(SYSTEM_TYPE_METRIC);
     this.heightNum = 0;
     this.setHeight("0");
     this.weightDate = this.todayShortDate;
@@ -213,7 +227,7 @@ class Settings extends Component<{
     this.weights = [{weight: this.weightNum, date: this.weightDate}];
     this.packWeightNum = 0;
     this.setPackWeight("0");
-    this.strideLengths = this.uSvc.copyObj(DEFAULT_STRIDE_LENGTHS) as TrekTypeDataNumeric;
+    this.strideLengths = {...DEFAULT_STRIDE_LENGTHS};
     // switch to wright measurementSystem type
     this.switchSystem(SWITCH_MEASUREMENT_SYSTEM[this.system] as MeasurementSystemType);
     this.setOriginalSettings({} as SettingsObj);  // default to everything has changed
@@ -239,7 +253,7 @@ class Settings extends Component<{
       type: this.defaultType,
       height: this.uSvc.fourSigDigits(this.heightNum),
       weights: newWeights,
-      strideLengths: this.uSvc.copyObj(this.strideLengths) as TrekTypeDataNumeric,
+      strideLengths: {...this.strideLengths},
       packWeight: this.uSvc.fourSigDigits(this.packWeightNum),
     }
   }
@@ -247,12 +261,16 @@ class Settings extends Component<{
   // Compare the current settings to the given settings, return true if equal
   compareSettings = (sGiven: SettingsObj) : boolean => {
     let sNow;
+    let same = true;
     
-    if(sGiven === undefined) { return true; }
-    if(this.theme !== this.oldTheme) { return false; }
-    if (this.system !== this.oldSystem) { return false; }
-    sNow = this.getSaveObj();
-    return this.uSvc.compareObjects(sNow, sGiven);
+    if(sGiven === undefined) { same = false; }
+    if(this.theme !== this.oldTheme) { same = false; }
+    if (this.system !== this.oldSystem) { same =  false; }
+    if (same){
+      sNow = this.getSaveObj();
+      same = this.uSvc.compareObjects(sNow, sGiven);
+    }
+    return same;
   }
 
   // Update the current TrekInfoModel settings from the given object
@@ -370,7 +388,7 @@ class Settings extends Component<{
 
   // Change to the settings for the given group
   changeGroup = (value: string) => {
-    if (this.group!== '' && this.group!== value){
+    if (this.group !== '' && this.group !== value){
       if (!this.compareSettings(this.originalSettings)) {
         this.props.modalSvc.simpleOpen({heading: "Save Settings", headingIcon: "Settings",
                                         dType: CONFIRM_INFO,  
@@ -485,7 +503,7 @@ class Settings extends Component<{
           this.setPackWeight(Math.round(this.packWeightNum * LB_PER_KG).toString());
           TREK_TYPE_CHOICES.forEach((type) => {
             this.strideLengthStr[type] = 
-              Math.round((this.strideLengths[type] / CM_PER_INCH) / STRIDE_CONVERSION_FACTORS[type]).toString();
+              Math.round(this.strideLengths[type] / CM_PER_INCH).toString();
           })
         }
         break;
@@ -496,13 +514,14 @@ class Settings extends Component<{
           this.setPackWeight(Math.round(this.packWeightNum).toString());
           TREK_TYPE_CHOICES.forEach((type) => {
             this.strideLengthStr[type] = 
-              Math.round(this.strideLengths[type] / STRIDE_CONVERSION_FACTORS[type]).toString();
+              Math.round(this.strideLengths[type]).toString();
           })
         }
         break;
       default:
     }
     this.setSystem(value);
+    this.compareSettings(this.originalSettings);
   }
 
   // set a new value for the weight property
@@ -562,13 +581,13 @@ class Settings extends Component<{
       this.strideLengthStr[type] = value;
       this.strideLengths[type] = ((this.system === SYSTEM_TYPE_US) // keep strideLengths in cm
             ? (parseInt(value,10) * CM_PER_INCH) 
-            : parseInt(value, 10)) * STRIDE_CONVERSION_FACTORS[type];
+            : parseInt(value, 10));
       this.strideLengths[type] = this.uSvc.fourSigDigits(this.strideLengths[type]);
     }
     else {  // if no value given, just update from strideLengths
       this.strideLengthStr[type] = Math.round(((this.system === SYSTEM_TYPE_US) // strideLengths are in cm
       ? (this.strideLengths[type] / CM_PER_INCH) 
-      : this.strideLengths[type]) / STRIDE_CONVERSION_FACTORS[type]).toString();
+      : this.strideLengths[type])).toString();
     }
   }
 
@@ -586,19 +605,51 @@ class Settings extends Component<{
     })
   }
 
+  setActiveNav = val => {
+    requestAnimationFrame(() => {
+      switch (val) {
+        case "Home":
+          this.props.navigation.dispatch(StackActions.popToTop());
+          break;
+        case "Summary":
+        case "Courses":
+        case "Goals":
+        case "Conditions":
+        const resetAction = StackActions.reset({
+                index: 1,
+                actions: [
+                  NavigationActions.navigate({ routeName: 'Log', key: 'Home' }),
+                  NavigationActions.navigate({ routeName: val, key: 'Key-' + val }),
+                ],
+              });
+          this.props.navigation.dispatch(resetAction);          
+          break;
+        default:
+      }
+    })
+  }
+
   render() {
 
-    const hideUpdate = this.changingGroup || this.compareSettings(this.originalSettings);
-    const { cardLayout, navItem, navIcon, pageTitle } = this.props.uiTheme;
+    const showSave = !this.changingGroup && !this.compareSettings(this.originalSettings);
+    const { cardLayout, navItem, navIcon, pageTitle, fontRegular,
+            formInputItem  
+          } = this.props.uiTheme;
     const settingIconSize = 24;
-    const cardHeight = 110;
+    const cardHeight = 130;
     const haveGroups = this.gSvc.haveGroups();
     const { highTextColor, mediumTextColor, disabledTextColor, secondaryColor, primaryColor,
             pageBackground, dangerColor, dividerColor, rippleColor, navItemBorderColor,
             listIconColor } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
-    const groupSelectIconSize = 26;
+    const groupSelectIconSize = 30;
     const groupSelectButtonSize = 40;
-
+    let navMenuItems : NavMenuItem[] = 
+    [ 
+        {icon: 'Home', label: 'Home', value: 'Home'},
+        {icon: 'Pie', label: 'Activity', value: 'Summary'},
+        {icon: 'Course', label: 'Courses', value: 'Courses'},
+        {icon: 'Target', label: 'Goals', value: 'Goals'},
+        {icon: 'PartCloudyDay', label: 'Conditions', value: 'Conditions'}]  
     
 
     const styles=StyleSheet.create({
@@ -625,32 +676,44 @@ class Settings extends Component<{
         marginBottom: 0,
         minHeight: cardHeight,
       },
+      groupNameText: {
+        color: highTextColor, 
+        fontFamily: fontRegular,
+        fontSize: 22, 
+        paddingLeft: 5, 
+        width: 150
+      },
       labelText: {
+        fontFamily: fontRegular,
         color: primaryColor,
         marginBottom: 5,
-        fontSize: 18,
+        fontSize: 20,
       },
       descText: {
+        fontFamily: fontRegular,
         color: mediumTextColor,
-        fontSize: 16,
+        fontSize: 18,
       },
       unitsText: {
+        fontFamily: fontRegular,
         color: mediumTextColor,
         marginLeft: 5,
         marginTop: -5,
-        fontSize: 16
+        fontSize: 18
       },
       onText: {
+        fontFamily: fontRegular,
         color: highTextColor,
         marginLeft: 25,
         marginTop: -5,
-        fontSize: 16
+        fontSize: 18
       },
       dateText: {
+        fontFamily: fontRegular,
         color: disabledTextColor,
         marginLeft: 10,
         marginTop: -5,
-        fontSize: 18
+        fontSize: 20
       },
       pickerInput: {
         height: 40,
@@ -658,17 +721,13 @@ class Settings extends Component<{
         borderWidth: 0,
       },      
       textInputItem: {
-        height: 40,
-        width: 175,
-        borderWidth: 0,
-      },      
-      inputTextStyle: {
-        fontWeight: "300",
-        fontSize: 18,
-      },
-      numberInput: {
+        ...formInputItem,
         width: 55,
         marginRight: 5
+      },      
+      inputTextStyle: {
+        fontFamily: fontRegular,
+        fontSize: 20,
       },
       addIconArea: {
         flex: 1,
@@ -689,7 +748,8 @@ class Settings extends Component<{
       },
       button: {
         color: "white",
-        fontSize: 14
+        fontFamily: fontRegular,
+        fontSize: 16
       },
       settingIcon: {
         width: settingIconSize,
@@ -705,6 +765,31 @@ class Settings extends Component<{
       flexWrap: {
         flexWrap: "wrap",
         marginRight: 15,
+      },
+      saveButtonArea: {
+        position: "absolute",
+        bottom: CONTROLS_HEIGHT,
+        right: 10,
+      },
+      saveButton: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: secondaryColor,
+      },
+      listArea: {
+        flex: 1,
+        ...cardLayout,
+        paddingBottom: 0,
+        paddingLeft: 0,
+        paddingRight: 0,
+        backgroundColor: pageBackground,
+      },
+      pageTitleAdj: {
+        color: highTextColor,
+        paddingLeft: 10,
+        paddingRight: 10,
+        marginBottom: 10,
       },
     })
 
@@ -728,7 +813,11 @@ class Settings extends Component<{
     }
 
     return(
-        <View style={styles.container}>
+      <NavMenu
+        selectFn={this.setActiveNav}
+        items={navMenuItems}
+        setOpenFn={this.setOpenNavMenu}
+        open={this.openNavMenu}> 
           <RadioPicker pickerOpen={this.radioPickerOpen}/>
           {this.dataReady &&
           <View style={[styles.container, {paddingBottom: 10}]}>
@@ -739,221 +828,252 @@ class Settings extends Component<{
               group={this.group || "None"}
               setGroupFn={this.getDifferentGroup}
             />
-            <View style={[cardLayout, { marginBottom: 0, paddingBottom: 10}]}>
-              <Text style={[pageTitle, {color: highTextColor}]}>TrekLog Settings</Text>
+            <View style={styles.listArea}>
+              <NavMenuTrigger openMenuFn={this.openMenu}/>
+              <Text style={[pageTitle, styles.pageTitleAdj]}>TrekLog Settings</Text>
+              <ScrollView>
+                <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                          duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                  <SlideDownView startValue={-160} endValue={0} open={this.openItems} 
+                            duration={SCROLL_DOWN_DURATION}>
+                    <View style={[cardLayout, styles.cardCustom]}>
+                      <SettingHeader icon={APP_ICONS.YinYang} label="Theme" 
+                                    description="Select the theme to be applied when TrekLog starts.  The theme applies to all groups."
+                      />
+                      <View style={styles.inputRow}>
+                        <RadioGroup 
+                          onChangeFn={this.setTheme}
+                          selected={this.theme}
+                          labels={["Light", "Dark"]}
+                          values={[COLOR_THEME_LIGHT, COLOR_THEME_DARK]}
+                          labelStyle={{color: highTextColor, fontSize: 20}}
+                          justify='start'
+                          inline
+                          itemHeight={30}
+                          radioFirst
+                        />
+                      </View>
+                    </View>           
+                  </SlideDownView>
+                </FadeInView>       
+                <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                          duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                  <SlideDownView startValue={-cardHeight} endValue={0} open={this.openItems} 
+                            duration={SCROLL_DOWN_DURATION}>
+                    <View style={[cardLayout, styles.cardCustom]}>
+                      <SettingHeader icon={APP_ICONS.CompassMath} label="Measurements" 
+                                    description="System to use for weights and distances"
+                      />
+                      <View style={styles.inputRow}>
+                        <RadioGroup 
+                          onChangeFn={this.switchSystem}
+                          selected={this.system}
+                          labels={["Imperial", "Metric"]}
+                          values={[SYSTEM_TYPE_US, SYSTEM_TYPE_METRIC]}
+                          labelStyle={{color: highTextColor, fontSize: 20}}
+                          justify='start'
+                          inline
+                          itemHeight={30}
+                          radioFirst
+                        />
+                      </View>
+                    </View>           
+                  </SlideDownView>
+                </FadeInView>       
+                <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                          duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                  <SlideDownView startValue={-160} endValue={0} open={this.openItems} 
+                            duration={SCROLL_DOWN_DURATION}>
+                    <View style={[cardLayout, styles.cardCustom]}>
+                      <SettingHeader icon={APP_ICONS.FolderOpenOutline} label="Groups" 
+                        description="Treks are organized into groups. The rest of the settings apply only to this group:"
+                      />
+                      <View style={styles.inputRow}>     
+                        <IconButton 
+                          iconSize={groupSelectIconSize}
+                          icon="ListChoice"
+                          style={{...navItem, ...styles.groupSelectButtonStyle}}
+                          raised
+                          borderColor={navItemBorderColor}
+                          iconStyle={navIcon}
+                          color={secondaryColor}
+                          onPressFn={this.getDifferentGroup}
+                        />
+                        <RectButton
+                          rippleColor={rippleColor}
+                          onPress={this.getDifferentGroup}
+                        >
+                          <Text style={styles.groupNameText}>
+                            {this.newGroup ? "New" : this.group}</Text>
+                        </RectButton>
+                        {(!this.newGroup && haveGroups) &&
+                          <View style={styles.addIconArea}>
+                            <TouchableNativeFeedback
+                              background={TouchableNativeFeedback.Ripple(rippleColor, false)}
+                              onPress={this.deleteThisGroup}
+                            >
+                              <View style={[styles.groupActionButton, {marginHorizontal: 10}]}>
+                                <Text style={[styles.button, {color: dangerColor}]}>DELETE</Text>
+                              </View>
+                            </TouchableNativeFeedback>
+                          </View>
+                        }
+                      </View>
+                    </View>  
+                  </SlideDownView>
+                </FadeInView>       
+                <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                          duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                  <SlideDownView startValue={-140} endValue={0} open={this.openItems} 
+                            duration={SCROLL_DOWN_DURATION}>
+                    <View style={[cardLayout, styles.cardCustom, {minHeight: 140}]}>
+                      <SettingHeader icon={APP_ICONS.BulletedList} label="Type" 
+                                    description="Default type to use with this group"
+                      />
+                      <View style={[styles.inputRow, {marginTop: 0}]}>
+                        <TrekTypeSelect
+                          style={{justifyContent: "flex-start"}}
+                          size={40}
+                          selected={TREK_SELECT_BITS[this.defaultType]}
+                          onChangeFn={this.setDefaultType}
+                        />
+                      </View>
+                    </View>           
+                  </SlideDownView>
+                </FadeInView>       
+                <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                          duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                  <SlideDownView startValue={-cardHeight} endValue={0} open={this.openItems} 
+                            duration={SCROLL_DOWN_DURATION}>
+                    <View style={[cardLayout, styles.cardCustom]}>
+                      <SettingHeader icon={APP_ICONS.BathroomScale} label="Weight" 
+                                    description="Weight to use for this group"
+                      />
+                      <View style={styles.inputRow}>
+                        <TextInputField
+                          style={styles.textInputItem}
+                          onChangeFn={this.setNewWeight}
+                          placeholderValue={this.weightStr}
+                        />
+                        <Text style={styles.unitsText}>{WEIGHT_UNIT_CHOICES[this.system]}</Text>
+                        <Text style={styles.onText}>on:</Text>
+                        <Text style={styles.dateText}>{this.uSvc.dateFromSortDate(this.weightDate)}</Text>
+                      </View>
+                    </View>           
+                  </SlideDownView>
+                </FadeInView>       
+                <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                          duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                  <SlideDownView startValue={-cardHeight} endValue={0} open={this.openItems} 
+                            duration={SCROLL_DOWN_DURATION}>
+                    <View style={[cardLayout, styles.cardCustom]}>
+                      <SettingHeader icon={APP_ICONS.Height} label="Height" 
+                                    description="Height to use for this group"
+                      />
+                      <View style={styles.inputRow}>
+                        <TextInputField
+                          style={styles.textInputItem}
+                          onChangeFn={this.useHeightForStrides}
+                          placeholderValue={this.heightStr}
+                        />
+                        <Text style={styles.unitsText}>{STRIDE_UNIT_CHOICES[this.system]}</Text>
+                      </View>
+                    </View>           
+                  </SlideDownView>
+                </FadeInView>       
+                <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                          duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                  <SlideDownView startValue={-cardHeight} endValue={0} open={this.openItems} 
+                            duration={SCROLL_DOWN_DURATION}>
+                    <View style={[cardLayout, styles.cardCustom]}>
+                      <SettingHeader icon={APP_ICONS.Walk} label="Walking" 
+                                    description="Walking stride length for this group"
+                      />
+                      <View style={styles.inputRow}>
+                        <TextInputField
+                              style={styles.textInputItem}
+                              onChangeFn={(text) => this.setStrideLength(TREK_TYPE_WALK, text)}
+                          placeholderValue={this.strideLengthStr[TREK_TYPE_WALK]}
+                        />
+                        <Text style={styles.unitsText}>{STRIDE_UNIT_CHOICES[this.system]}</Text>
+                      </View>
+                    </View>           
+                  </SlideDownView>
+                </FadeInView>       
+                <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                        duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                  <SlideDownView startValue={-cardHeight} endValue={0} open={this.openItems} 
+                          duration={SCROLL_DOWN_DURATION}>
+                    <View style={[cardLayout, styles.cardCustom]}>
+                      <SettingHeader icon={APP_ICONS.Run} label="Running" 
+                                    description="Running stride length for this group"
+                      />
+                      <View style={styles.inputRow}>
+                        <TextInputField
+                              style={styles.textInputItem}
+                              onChangeFn={(text) => this.setStrideLength(TREK_TYPE_RUN, text)}
+                          placeholderValue={this.strideLengthStr[TREK_TYPE_RUN]}
+                        />
+                        <Text style={styles.unitsText}>{STRIDE_UNIT_CHOICES[this.system]}</Text>
+                      </View>
+                    </View>           
+                  </SlideDownView>
+                </FadeInView>       
+                <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                          duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                  <SlideDownView startValue={-cardHeight} endValue={0} open={this.openItems} 
+                            duration={SCROLL_DOWN_DURATION}>
+                    <View style={[cardLayout, styles.cardCustom]}>
+                      <SettingHeader icon={APP_ICONS.Hike} label="Hiking" 
+                                    description="Hiking stride length for this group"
+                      />
+                      <View style={styles.inputRow}>
+                        <TextInputField
+                              style={styles.textInputItem}
+                              onChangeFn={(text) => this.setStrideLength(TREK_TYPE_HIKE, text)}
+                          placeholderValue={this.strideLengthStr[TREK_TYPE_HIKE]}
+                        />
+                        <Text style={styles.unitsText}>{STRIDE_UNIT_CHOICES[this.system]}</Text>
+                      </View>
+                    </View>
+                  </SlideDownView>
+                </FadeInView>       
+                <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                        duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                  <SlideDownView startValue={-cardHeight} endValue={0} open={this.openItems} 
+                            duration={SCROLL_DOWN_DURATION}>
+                    <View style={[cardLayout, styles.cardCustom]}>
+                      <SettingHeader icon={APP_ICONS.Sack} label="Backpack" 
+                                    description="Default backpack weight for this group"
+                      />
+                      <View style={styles.inputRow}>
+                        <TextInputField
+                              style={styles.textInputItem}
+                              onChangeFn={(text) => this.setNewPackWeight(text)}
+                          placeholderValue={this.packWeightStr}
+                        />
+                        <Text style={styles.unitsText}>{WEIGHT_UNIT_CHOICES[this.system]}</Text>
+                      </View>
+                    </View>           
+                  </SlideDownView>
+                </FadeInView>       
+              </ScrollView>
             </View>
-            <ScrollView>
-              <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
-                        duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
-                <SlideDownView startValue={-150} endValue={0} open={this.openItems} 
-                          duration={SCROLL_DOWN_DURATION}>
-                  <View style={[cardLayout, styles.cardCustom]}>
-                    <SettingHeader icon={APP_ICONS.YinYang} label="Theme" 
-                                  description="Select the theme to be applied when TrekLog starts.  The theme applies to all groups."
-                    />
-                    <View style={styles.inputRow}>
-                      <RadioGroup 
-                        onChangeFn={this.setTheme}
-                        selected={this.theme}
-                        labels={["Light", "Dark"]}
-                        values={[COLOR_THEME_LIGHT, COLOR_THEME_DARK]}
-                        labelStyle={{color: highTextColor, fontSize: 18}}
-                        justify='start'
-                        inline
-                        itemHeight={30}
-                        radioFirst
-                      />
-                    </View>
-                  </View>           
-                </SlideDownView>
-              </FadeInView>       
-              <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
-                        duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
-                <SlideDownView startValue={-130} endValue={0} open={this.openItems} 
-                          duration={SCROLL_DOWN_DURATION}>
-                  <View style={[cardLayout, styles.cardCustom]}>
-                    <SettingHeader icon={APP_ICONS.CompassMath} label="Measurements" 
-                                  description="System to use for weights and distances"
-                    />
-                    <View style={styles.inputRow}>
-                      <RadioGroup 
-                        onChangeFn={this.switchSystem}
-                        selected={this.system}
-                        labels={["Imperial", "Metric"]}
-                        values={[SYSTEM_TYPE_US, SYSTEM_TYPE_METRIC]}
-                        labelStyle={{color: highTextColor, fontSize: 18}}
-                        justify='start'
-                        inline
-                        itemHeight={30}
-                        radioFirst
-                      />
-                    </View>
-                  </View>           
-                </SlideDownView>
-              </FadeInView>       
-              <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
-                        duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
-                <SlideDownView startValue={-150} endValue={0} open={this.openItems} 
-                          duration={SCROLL_DOWN_DURATION}>
-                  <View style={[cardLayout, styles.cardCustom]}>
-                    <SettingHeader icon={APP_ICONS.FolderOpenOutline} label="Groups" 
-                      description="Treks are organized into groups. The rest of the settings apply only to this group:"
-                    />
-                    <View style={styles.inputRow}>     
-                      <IconButton 
-                        iconSize={groupSelectIconSize}
-                        icon="ListChoice"
-                        style={{...navItem, ...styles.groupSelectButtonStyle}}
-                        raised
-                        borderColor={navItemBorderColor}
-                        iconStyle={navIcon}
-                        color={secondaryColor}
-                        onPressFn={this.getDifferentGroup}
-                      />
-                      <Text style={{color: highTextColor, fontSize: 20,marginLeft: 5, width: 150}}>
-                        {this.newGroup ? "New" : this.group}</Text>
-                      {(!this.newGroup && haveGroups) &&
-                        <View style={styles.addIconArea}>
-                          <TouchableNativeFeedback
-                            background={TouchableNativeFeedback.Ripple(rippleColor, false)}
-                            onPress={this.deleteThisGroup}
-                          >
-                            <View style={[styles.groupActionButton, {marginHorizontal: 10}]}>
-                              <Text style={[styles.button, {color: dangerColor}]}>DELETE</Text>
-                            </View>
-                          </TouchableNativeFeedback>
-                        </View>
-                      }
-                    </View>
-                  </View>  
-                </SlideDownView>
-              </FadeInView>       
-              <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
-                        duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
-                <SlideDownView startValue={-130} endValue={0} open={this.openItems} 
-                          duration={SCROLL_DOWN_DURATION}>
-                  <View style={[cardLayout, styles.cardCustom, {minHeight: cardHeight + 15}]}>
-                    <SettingHeader icon={APP_ICONS.BulletedList} label="Type" 
-                                  description="Default type to use with this group"
-                    />
-                    <View style={[styles.inputRow, {marginTop: 0}]}>
-                      <TrekTypeSelect
-                        style={{justifyContent: "flex-start"}}
-                        size={50}
-                        selected={TREK_SELECT_BITS[this.defaultType]}
-                        onChangeFn={this.setDefaultType}
-                      />
-                    </View>
-                  </View>           
-                </SlideDownView>
-              </FadeInView>       
-              <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
-                        duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
-                <SlideDownView startValue={-130} endValue={0} open={this.openItems} 
-                          duration={SCROLL_DOWN_DURATION}>
-                  <View style={[cardLayout, styles.cardCustom]}>
-                    <SettingHeader icon={APP_ICONS.BathroomScale} label="Weight" 
-                                  description="Weight to use for this group"
-                    />
-                    <View style={styles.inputRow}>
-                      <TextInputField
-                        style={[styles.textInputItem, styles.numberInput, styles.inputTextStyle]}
-                        onChangeFn={this.setNewWeight}
-                        placeholderValue={this.weightStr}
-                      />
-                      <Text style={styles.unitsText}>{WEIGHT_UNIT_CHOICES[this.system]}</Text>
-                      <Text style={styles.onText}>on:</Text>
-                      <Text style={styles.dateText}>{this.uSvc.dateFromSortDate(this.weightDate)}</Text>
-                    </View>
-                  </View>           
-                </SlideDownView>
-              </FadeInView>       
-              <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
-                        duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
-                <SlideDownView startValue={-130} endValue={0} open={this.openItems} 
-                          duration={SCROLL_DOWN_DURATION}>
-                  <View style={[cardLayout, styles.cardCustom]}>
-                    <SettingHeader icon={APP_ICONS.WomanGirl} label="Height" 
-                                  description="Height to use for this group"
-                    />
-                    <View style={styles.inputRow}>
-                      <TextInputField
-                        style={[styles.textInputItem, styles.numberInput, styles.inputTextStyle]}
-                        onChangeFn={this.useHeightForStrides}
-                        placeholderValue={this.heightStr}
-                      />
-                      <Text style={styles.unitsText}>{STRIDE_UNIT_CHOICES[this.system]}</Text>
-                    </View>
-                  </View>           
-                </SlideDownView>
-              </FadeInView>       
-              <View style={[cardLayout, styles.cardCustom]}>
-                <SettingHeader icon={APP_ICONS.Walk} label="Walking" 
-                               description="Walking stride length for this group"
-                />
-                <View style={styles.inputRow}>
-                  <TextInputField
-                    style={[styles.textInputItem, styles.numberInput, styles.inputTextStyle]}
-                    onChangeFn={(text) => this.setStrideLength(TREK_TYPE_WALK, text)}
-                    placeholderValue={this.strideLengthStr[TREK_TYPE_WALK]}
-                  />
-                  <Text style={styles.unitsText}>{STRIDE_UNIT_CHOICES[this.system]}</Text>
-                </View>
-              </View>           
-              <View style={[cardLayout, styles.cardCustom]}>
-                <SettingHeader icon={APP_ICONS.Run} label="Running" 
-                               description="Running stride length for this group"
-                />
-                <View style={styles.inputRow}>
-                  <TextInputField
-                    style={[styles.textInputItem, styles.numberInput, styles.inputTextStyle]}
-                    onChangeFn={(text) => this.setStrideLength(TREK_TYPE_RUN, text)}
-                    placeholderValue={this.strideLengthStr[TREK_TYPE_RUN]}
-                  />
-                  <Text style={styles.unitsText}>{STRIDE_UNIT_CHOICES[this.system]}</Text>
-                </View>
-              </View>           
-              <View style={[cardLayout, styles.cardCustom]}>
-                <SettingHeader icon={APP_ICONS.Hike} label="Hiking" 
-                               description="Hiking stride length for this group"
-                />
-                <View style={styles.inputRow}>
-                  <TextInputField
-                    style={[styles.textInputItem, styles.numberInput, styles.inputTextStyle]}
-                    onChangeFn={(text) => this.setStrideLength(TREK_TYPE_HIKE, text)}
-                    placeholderValue={this.strideLengthStr[TREK_TYPE_HIKE]}
-                  />
-                  <Text style={styles.unitsText}>{STRIDE_UNIT_CHOICES[this.system]}</Text>
-                </View>
-              </View>
-              <View style={[cardLayout, styles.cardCustom]}>
-                <SettingHeader icon={APP_ICONS.Sack} label="Backpack" 
-                               description="Default backpack weight for this group"
-                />
-                <View style={styles.inputRow}>
-                  <TextInputField
-                    style={[styles.textInputItem, styles.numberInput, styles.inputTextStyle]}
-                    onChangeFn={(text) => this.setNewPackWeight(text)}
-                    placeholderValue={this.packWeightStr}
-                  />
-                  <Text style={styles.unitsText}>{WEIGHT_UNIT_CHOICES[this.system]}</Text>
-                </View>
-              </View>           
-            </ScrollView>
           </View>
           }
-          {(!hideUpdate && !this.keyboardOpen && haveGroups) &&
+          {(showSave && !this.keyboardOpen && haveGroups) &&
             <SpeedDial 
               selectFn={this.saveSettings}
               bottom={CONTROLS_HEIGHT}
               style={styles.saveFab}
               icon="CheckMark"
+              raised
             />
           }
           {(!this.dataReady || this.changingGroup) &&
             <Waiting/>
           }
-        </View>
+      </NavMenu>
     )
   }
   

@@ -10,8 +10,8 @@ import { TREK_TYPE_COLORS_OBJ } from './App';
 function TrekTypeSelect({
   size = undefined,
   style = undefined,
-  onChangeFn = undefined,  // call this when value of radio changes
-  selected  = undefined        // bitlist of the current selections
+  onChangeFn = undefined,       // call this when value of radio changes
+  selected  = undefined         // bitlist of the current selections
 }) {
 
   // call onChange with toggle param 'true'
@@ -29,7 +29,7 @@ function TrekTypeSelect({
   const styles = StyleSheet.create({
     typeControls: {
       flexDirection: "row",
-      alignItems: "center",
+      alignItems: "flex-end",
       justifyContent: "center",
     },
     controlButton: {
@@ -71,6 +71,7 @@ function TrekTypeSelect({
         path={APP_ICONS.Bike}
         highlight={(selected & TREK_SELECT_BITS.Bike) !== 0}
         svgWidthAdj={4}
+        svgHeightAdj={5}
       />
       <SvgButton 
         value="Hike"
@@ -81,6 +82,27 @@ function TrekTypeSelect({
         fill={TREK_TYPE_COLORS_OBJ.Hike}
         path={APP_ICONS.Hike}
         highlight={(selected & TREK_SELECT_BITS.Hike) !== 0}
+      />
+      <SvgButton 
+        value="Board"
+        onPressFn={toggleType}
+        onLongPressFn={setType}
+        size={typeIconAreaSize}
+        style={styles.controlButton}
+        fill={TREK_TYPE_COLORS_OBJ.Board}
+        path={APP_ICONS.Board}
+        highlight={(selected & TREK_SELECT_BITS.Board) !== 0}
+        svgHeightAdj={5}
+      />
+      <SvgButton 
+        value="Drive"
+        onPressFn={toggleType}
+        onLongPressFn={setType}
+        size={typeIconAreaSize}
+        style={styles.controlButton}
+        fill={TREK_TYPE_COLORS_OBJ.Drive}
+        path={APP_ICONS.Drive}
+        highlight={(selected & TREK_SELECT_BITS.Drive) !== 0}
       />
     </View>
   ))

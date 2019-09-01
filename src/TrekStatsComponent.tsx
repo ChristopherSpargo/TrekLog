@@ -6,7 +6,7 @@ import { useObserver } from "mobx-react-lite";
 import { UiThemeContext, TrekInfoContext, UtilsSvcContext } from "./App";
 import {
   TrekInfo,
-  TREK_TYPE_BIKE,
+  STEPS_APPLY,
   SWITCH_SPEED_AND_TIME,
   DIST_UNIT_CHOICES,
   PLURAL_STEP_NAMES
@@ -157,6 +157,8 @@ function TrekStats({
     let ms = tInfo.measurementSystem;
     let showSpeed = tInfo.showSpeedOrTime === "speed";
     let sp: string;
+    let sepStr = showSpeed ? " " : "/";
+    let skip = showSpeed ? 1 : 0;
 
     if (interval !== undefined && interval >= 0) {
       sp = showSpeed
@@ -173,12 +175,12 @@ function TrekStats({
     } else {
       sp = showSpeed ? tInfo.averageSpeed : tInfo.timePerDist;
     }
-    let i = sp.indexOf(" ");
+    let i = sp.indexOf(sepStr);
     if (!showSpeed) {
       return {
         value: sp.substr(0, i),
         units: "",
-        label: "Time" + sp.substr(i)
+        label: "Time" + sp.substr(i + skip)
       };
     }
     return { value: sp.substr(0, i), units: sp.substr(i), label: "Avg Speed" };
@@ -290,16 +292,20 @@ function TrekStats({
     disabledTextColor,
     rippleColor
   } = uiTheme.palette[tInfo.colorTheme];
+  const { fontRegular } = uiTheme;
+  const noSteps = !STEPS_APPLY[tInfo.type];
   const small = format === 'small';
   const carIconSize = small ? 12 : 14;
   const minItemWidth = 135;
-  const timeFontSie = small ? 28 : 90
-  const statLabelFontSize = small ? 16 : 22;
-  const statValueFontSize = small ? 22 : 50;
-  const statUnitsFontSize = small ? 18 : 30;
+  const timeFontSie = small ? 32 : 94
+  const statLabelFontSize = small ? 18 : 24;
+  const statValueFontSize = small ? 26 : 54;
+  const statUnitsFontSize = small ? 20 : 33;
   const statUnitsMargin = small ? 0 : 8;
+  const calsMarginTop = small ? 10 : 0;
   const selectColor = bgImage ? selectOnFilm : selectOnTheme;
   const switchSys = sysChangeFn || tInfo.switchMeasurementSystem;
+  const haveElevs = tInfo.hasElevations();
 
   const styles = StyleSheet.create({
     container: {
@@ -320,6 +326,7 @@ function TrekStats({
     },
     statLabelText: {
       color: mediumTextColor,
+      fontFamily: fontRegular,
       fontSize: statLabelFontSize
     },
     statValue: {
@@ -333,10 +340,12 @@ function TrekStats({
     },
     statValueText: {
       color: highTextColor,
+      fontFamily: fontRegular,
       fontSize: statValueFontSize
     },
     statUnitsText: {
       color: highTextColor,
+      fontFamily: fontRegular,
       marginBottom: statUnitsMargin,
       fontSize: statUnitsFontSize
     },
@@ -398,7 +407,7 @@ function TrekStats({
   return useObserver(() => (
     <View style={styles.bigStats}>
       <StatItem
-        item={{ value: formattedDuration(), units: "", label: "Time" }}
+        item={{ value: formattedDuration(), units: "", label: "Duration" }}
         valueStyle={{ fontSize: timeFontSie }}
       />
       <View style={styles.bigStatPair}>
@@ -414,22 +423,22 @@ function TrekStats({
           />
         )}
       </View>
-      <View style={[styles.bigStatPair, {marginTop: small ? 10 : 0}]}>
+      <View style={[styles.bigStatPair, {marginTop: calsMarginTop}]}>
         <StatItem
           item={formattedCals()}
           showDriving={true}
           switchFn={toggleShowTotalCalories}
         />
-        {trekType !== TREK_TYPE_BIKE && (
+        {!noSteps && (
           <StatItem item={formattedSteps()} switchFn={toggleShowStepsPerMin} />
         )}
+        {haveElevs && noSteps && (
+          <StatItem item={elevationDisplayValue()} switchFn={toggleElevDisplay} />
+        )}
       </View>
-      {!logging && (
+      {(haveElevs && !logging && !noSteps) && (
         <View style={styles.bigStatPair}>
-          <StatItem
-            item={elevationDisplayValue()}
-            switchFn={toggleElevDisplay}
-          />
+          <StatItem item={elevationDisplayValue()} switchFn={toggleElevDisplay} />
         </View>
       )}
     </View>

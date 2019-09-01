@@ -2,13 +2,13 @@ import React from 'react';
 import { observer, inject } from 'mobx-react';
 import { observable, action } from 'mobx';
 import { View, StyleSheet, Text, TextInput, Keyboard } from 'react-native';
+import { RectButton } from 'react-native-gesture-handler'
 
-import { BACKDROP_Z_INDEX, LABEL_FORM_Z_INDEX, NAV_ICON_SIZE } from './App';
+import { BACKDROP_Z_INDEX, LABEL_FORM_Z_INDEX } from './App';
 import { APP_ICONS } from './SvgImages';
 import SvgIcon from './SvgIconComponent';
 import { ModalModel } from './ModalModel'
 import { TrekInfo } from './TrekInfoModel';
-import IconButton from './IconButtonComponent';
 
 const MAX_LABEL_LENGTH = 35;
 const MAX_NOTE_LENGTH = 300;
@@ -124,15 +124,17 @@ class TrekLabelForm extends React.Component<{
   render() {
 
     const mData = this.props.modalSvc.lfData;
-    const { controlsArea, cardLayout, roundedTop, navItemWithLabel, navItemLabel, navIcon } = this.props.uiTheme;
-    const { highTextColor, dividerColor, mediumTextColor, navIconColor, pageBackground, navItemBorderColor,
-            trekLogBlue, contrastingMask_3 } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
+    const { cardLayout, roundedTop, footer, footerButton, footerButtonText,
+            formTextInput } = this.props.uiTheme;
+    const { highTextColor, dividerColor, mediumTextColor, pageBackground,
+            trekLogBlue, contrastingMask_3, primaryColor, textOnPrimaryColor, rippleColor
+          } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
     const defHIcon = mData.headingIcon || "Edit";
     const labelPrompt = "Label:"
     const labelChars = (MAX_LABEL_LENGTH - this.labelValue.length) + " characters left";
     const notePrompt = "Note:";
     const noteChars =  (MAX_NOTE_LENGTH - this.noteValue.length) + " characters left";
-    const navIconSize = NAV_ICON_SIZE;
+    const headerHeight = 40;
 
     const styles = StyleSheet.create({
       container: { ... StyleSheet.absoluteFillObject },
@@ -143,7 +145,7 @@ class TrekLabelForm extends React.Component<{
       },
       formArea: {
         position: "absolute",
-        bottom: controlsArea.height,
+        bottom: 0,
         left: 0,
         right: 0,
         zIndex: LABEL_FORM_Z_INDEX,
@@ -170,13 +172,14 @@ class TrekLabelForm extends React.Component<{
         paddingBottom: 5,
         flexDirection: "row",
         alignItems: "flex-end",
-        height: 40,
+        height: headerHeight,
         borderStyle: "solid",
         borderBottomColor: dividerColor,
         borderBottomWidth: 1,
+        backgroundColor: primaryColor,
       },
       title: {
-        color: highTextColor,
+        color: textOnPrimaryColor,
         fontSize: 18
       },
       body: {
@@ -189,16 +192,17 @@ class TrekLabelForm extends React.Component<{
         fontSize: 18,
         color: highTextColor,
       },
-      rowLayout: {
+      footer: {
+        ...footer,
+        ...{borderTopColor: dividerColor, backgroundColor: pageBackground}
+      },
+        rowLayout: {
         flexDirection: "row",
         alignItems: "center",
       },
       textInputItem: {
-        height: 40,
+        ...formTextInput,
         width: 330,
-        borderWidth: 0,
-        fontWeight: "300",
-        fontSize: 18,
         marginRight: 10,
         color: trekLogBlue,
       },      
@@ -232,7 +236,7 @@ class TrekLabelForm extends React.Component<{
                       style={{marginRight: 6}}
                       size={24}
                       widthAdj={0}
-                      fill={highTextColor}
+                      fill={textOnPrimaryColor}
                       paths={APP_ICONS[defHIcon]}
                     />
                     <Text style={styles.title}>{mData.heading}</Text>
@@ -266,37 +270,35 @@ class TrekLabelForm extends React.Component<{
                     </View>
                   </View>
                 </View>
+                {!this.keyboardOpen && 
+                  <View style={[styles.footer]}>
+                    <RectButton
+                      rippleColor={rippleColor}
+                      style={{flex: 1}}
+                      onPress={this.dismiss}>
+                      <View style={footerButton}>
+                        <Text
+                          style={footerButtonText}
+                        >
+                          {mData.cancelText}
+                        </Text>
+                      </View>
+                    </RectButton>
+                    <RectButton
+                      rippleColor={rippleColor}
+                      style={{flex: 1}}
+                      onPress={() => this.close()}>
+                      <View style={footerButton}>
+                        <Text
+                          style={footerButtonText}
+                        >
+                          {mData.okText}
+                        </Text>
+                      </View>
+                    </RectButton>
+                  </View>
+                }
               </View>
-              {!this.keyboardOpen && 
-                <View style={[controlsArea, styles.caAdjust]}>
-                  {mData.cancelText && 
-                    <IconButton 
-                      iconSize={navIconSize}
-                      icon="ArrowBack"
-                      style={navItemWithLabel}
-                      borderColor={navItemBorderColor}
-                      iconStyle={navIcon}
-                      color={navIconColor}
-                      raised
-                      onPressFn={this.dismiss}
-                      label="Cancel"
-                      labelStyle={navItemLabel}
-                    />
-                  }
-                    <IconButton 
-                      iconSize={navIconSize}
-                      icon="CheckMark"
-                      style={navItemWithLabel}
-                      iconStyle={navIcon}
-                      borderColor={navItemBorderColor}
-                      color={navIconColor}
-                      raised
-                      onPressFn={this.close}
-                      label="Save"
-                      labelStyle={navItemLabel}
-                    />
-                </View>
-              }
             </View>
           </View>
         }

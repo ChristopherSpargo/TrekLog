@@ -1,6 +1,6 @@
 import React, { Component } from 'react';
-import { View, StyleSheet, Text } from 'react-native';
-import { BorderlessButton } from 'react-native-gesture-handler';
+import { View, StyleSheet, Text, TouchableNativeFeedback  } from 'react-native';
+import { BorderlessButton} from 'react-native-gesture-handler';
 import { observer, inject } from 'mobx-react';
 
 import SvgIcon from './SvgIconComponent';
@@ -106,28 +106,26 @@ class IconButton extends Component<{
       )
     } else {
       return ( 
-          <BorderlessButton
-            rippleColor={rippleColor}
-            style={{flex: propStyle.flex}}
-            borderless={true}
-            onPress={!this.props.disabled ? this.doOnPress : undefined}
+        <TouchableNativeFeedback
+          background={TouchableNativeFeedback.Ripple(rippleColor, false)}
+          onPress={(!this.props.disabled && this.props.onPressFn) ? this.doOnPress : undefined}
           >
-              <View style={{...styles.button, ...propStyle, 
-                            ...{borderColor: bdrColor, backgroundColor: bgColor}}}>
-                {this.props.icon &&
-                  <SvgIcon 
-                    size={iconSize}
-                    style={[styles.icon, iStyle]}
-                    widthAdj={0}
-                    fill={iFill}
-                    paths={APP_ICONS[this.props.icon]}
-                  />
-                }
-                {this.props.label &&
-                  <Text style={[{color: navIconColor}, this.props.labelStyle]}>{this.props.label}</Text>
-                }
-              </View>
-          </BorderlessButton>
+          <View style={{...styles.button, ...propStyle, 
+                        ...{borderColor: bdrColor, backgroundColor: bgColor}}}>
+            {this.props.icon &&
+              <SvgIcon 
+                size={iconSize}
+                style={[styles.icon, iStyle]}
+                widthAdj={0}
+                fill={iFill}
+                paths={APP_ICONS[this.props.icon]}
+              />
+            }
+            {this.props.label &&
+              <Text style={[{color: navIconColor}, this.props.labelStyle]}>{this.props.label}</Text>
+            }
+          </View>
+        </TouchableNativeFeedback>
       )
     }
   }

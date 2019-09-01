@@ -14,6 +14,8 @@ import {
   HEADER_HEIGHT
 } from "./App";
 import TrekStats from "./TrekStatsComponent";
+import SvgButton from './SvgButtonComponent';
+import { APP_ICONS } from './SvgImages';
 
 @inject("trekInfo", "utilsSvc", "uiTheme")
 @observer
@@ -27,6 +29,7 @@ class NumbersBar extends Component<
     bgImage?: boolean;  // true if being displayed over an image
     format?: string;    // small or big size display
     sysChangeFn?: Function // function to call for measurementSystem change
+    closeFn?: Function; // function to call if user presses Close button
     uiTheme?: any;
     utilsSvc?: UtilsSvc;
     trekInfo?: TrekInfo; // object with all non-gps information about the Trek
@@ -71,9 +74,9 @@ class NumbersBar extends Component<
       highTextColor,
       disabledTextColor,
       secondaryColor,
-      matchingMask_8,
+      statsBackgroundColor,
     } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
-    const { cardLayout, roundedTop } = this.props.uiTheme;
+    const { cardLayout, roundedTop, fontRegular, fontItalic, fontLight } = this.props.uiTheme;
     const tInfo = this.props.trekInfo;
     const small = this.props.format === 'small';
     const labelText = tInfo.trekLabel
@@ -82,9 +85,9 @@ class NumbersBar extends Component<
       ? tInfo.type + " in progress"
       : "No Label";
     const noLabel = labelText === "No Label";
-    const nHt = small ? 220 : (height - CONTROLS_HEIGHT - HEADER_HEIGHT);
+    const nHt = small ? 270 : (height - CONTROLS_HEIGHT - HEADER_HEIGHT);
     const statsAreaHt = nHt;
-    const areaHeight = statsAreaHt + CONTROLS_HEIGHT;
+    const areaHeight = statsAreaHt;
 
     const styles = StyleSheet.create({
       container: {
@@ -97,7 +100,7 @@ class NumbersBar extends Component<
         marginTop: 0,
         marginBottom: 0,
         paddingTop: 0,
-        paddingBottom: CONTROLS_HEIGHT,
+        paddingBottom: 5,
         paddingLeft: 0,
         paddingRight: 0,
         elevation: 0,
@@ -123,14 +126,22 @@ class NumbersBar extends Component<
         justifyContent: "flex-start",
         alignItems: "center"
       },
+      labelAndClose: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        paddingRight: 5,
+      },
       labelText: {
-        fontSize: small ? 18 : 20,
-        fontStyle: noLabel ? "italic" : "normal",
-        fontWeight: "bold",
+        flex: 1,
+        textAlign: "center",
+        fontSize: small ? 22 : 24,
+        fontFamily: noLabel ? fontItalic : fontLight,
         color: noLabel ? disabledTextColor : highTextColor
       },
       intervalText: {
         fontSize: small ? 14 : 16,
+        fontFamily: fontRegular,
         color: secondaryColor,
       }
     });
@@ -139,7 +150,7 @@ class NumbersBar extends Component<
       <View style={styles.container}>
         <View style={[styles.statusArea, roundedTop]}>
           <SlideUpView
-            bgColor={matchingMask_8}
+            bgColor={statsBackgroundColor}
             startValue={areaHeight}
             endValue={0}
             open={this.props.open}
@@ -147,8 +158,18 @@ class NumbersBar extends Component<
             afterCloseFn={this.setNotVisible}
           >
             <View style={[cardLayout, styles.cardCustom, roundedTop]}>
-              <View style={[styles.label]}>
-                <Text style={styles.labelText}>{labelText}</Text>
+              <View style={styles.label}>
+                <View style={styles.labelAndClose}>
+                  <Text style={styles.labelText}>{labelText}</Text>
+                  <SvgButton
+                    onPressFn={this.props.closeFn}
+                    borderWidth={0}
+                    areaOffset={0}
+                    size={24}
+                    fill={highTextColor}
+                    path={ APP_ICONS.Close }
+                  />
+                </View>
                 {(this.props.interval !== undefined && this.props.interval >= 0) &&
                   <Text style={styles.intervalText}>{'Interval ' + (this.props.interval + 1)}</Text>
                 }

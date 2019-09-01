@@ -1,53 +1,75 @@
-import React from 'react';
-import { observer, inject } from 'mobx-react';
-import { View, StyleSheet, Text, TouchableWithoutFeedback } from 'react-native';
-import { BorderlessButton } from 'react-native-gesture-handler';
+import React, { useContext, useEffect, useRef, useCallback } from "react";
+import { View, StyleSheet, Text, TouchableWithoutFeedback, BackHandler } from 'react-native';
+import { useObserver } from "mobx-react-lite";
 
-import { BACKDROP_Z_INDEX, CONFIRM_Z_INDEX } from './App';
+import { BACKDROP_Z_INDEX, CONFIRM_Z_INDEX, ModalSvcContext, UiThemeContext, TrekInfoContext } from './App';
 import SvgIcon from './SvgIconComponent';
 import { ModalModel } from './ModalModel';
 import { APP_ICONS } from './SvgImages';
 import { TrekInfo } from './TrekInfoModel';
+import IconButton from './IconButtonComponent';
 
 // dialog used for basic NOTICES and CONFIRMATIONS
 
-@inject('modalSvc', 'uiTheme', 'trekInfo')
-@observer
-class GoalAchievedModal extends React.Component<{   
-  modalSvc   ?: ModalModel,
-  trekInfo   ?: TrekInfo,
-  uiTheme    ?: any,
-}, {} > {
+function GoalAchievedModal({goalsMetOpen}) {
+
+  const bHandler = useRef(false);
+  const modalSvc: ModalModel = useContext(ModalSvcContext);
+  const trekInfo: TrekInfo = useContext(TrekInfoContext);
+  const uiTheme: any = useContext(UiThemeContext);
+
+  const onBackButtonPressGoalsMet = useCallback(
+    () => {
+      dismiss();
+      return true;
+    }, [], // Tells React to memoize regardless of arguments.
+  );
+
+  useEffect(() => {                       // componentDidUpdate
+    if(goalsMetOpen && !bHandler.current) {
+      BackHandler.addEventListener('hardwareBackPress', onBackButtonPressGoalsMet); 
+      bHandler.current = true;
+    }
+  },[goalsMetOpen])
+
+  function removeListeners() {
+    BackHandler.removeEventListener('hardwareBackPress', onBackButtonPressGoalsMet);
+    bHandler.current = false;
+  }
 
   // call the resolve method
-  close = (response = 'OK') => {
+  function close(response = 'OK') {
     setTimeout(() => {
-      this.props.modalSvc.closeGoalNoticeModal(400)
+      modalSvc.closeGoalNoticeModal(400)
       .then(() => {
-        this.props.modalSvc.gnmData.resolve(response);      
+        removeListeners();
+        modalSvc.gnmData.resolve(response);      
       })
-      .catch(() => {})
+      .catch(() => {
+        removeListeners();
+      })
     }, 200);
   }
 
   // call the reject method
-  dismiss = () => {
+  function dismiss() {
     setTimeout(() => {
-      this.props.modalSvc.closeGoalNoticeModal(400)
+      modalSvc.closeGoalNoticeModal(400)
       .then(() => {
-        this.props.modalSvc.gnmData.reject('CANCEL');      
+        removeListeners();
+        modalSvc.gnmData.reject('CANCEL');      
       })
-      .catch(() => {})
+      .catch(() => {
+        removeListeners();
+      })
     }, 200);
   }
   
-  render() {
-
-    const gnmData = this.props.modalSvc.gnmData;
-    const contentLines = this.props.modalSvc.goalNoticeIsOpen && this.props.modalSvc.gnmData.content.split('\n');
-    const { highTextColor, goalGold, mediumTextColor, rippleColor, pageBackground, contrastingMask_3
-          } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
-    const { cardLayout } = this.props.uiTheme;          
+    const gnmData = modalSvc.gnmData;
+    const contentLines = modalSvc.goalNoticeIsOpen && modalSvc.gnmData.content.split('\n');
+    const { highTextColor, goalGold, mediumTextColor, pageBackground, contrastingMask_3
+          } = uiTheme.palette[trekInfo.colorTheme];
+    const { cardLayout, fontRegular, fontItalic } = uiTheme;          
     const styles = StyleSheet.create({
       container: { ... StyleSheet.absoluteFillObject },
       background: {
@@ -98,7 +120,8 @@ class GoalAchievedModal extends React.Component<{
       },
       title: {
         color: mediumTextColor,
-        fontSize: 28,
+        fontSize: 30,
+        fontFamily: fontRegular,
         marginLeft: 10,
       },
       body: {
@@ -108,12 +131,13 @@ class GoalAchievedModal extends React.Component<{
         minHeight: 100
       },
       bodyText: {
-        fontSize: 18,
-        fontStyle: "italic",
+        fontSize: 20,
+        fontFamily: fontItalic,
         color: mediumTextColor,
       },
       itemList: {
-        fontSize: 20,
+        fontSize: 22,
+        fontFamily: fontRegular,
         color: highTextColor,
       },
       footer: {
@@ -125,25 +149,26 @@ class GoalAchievedModal extends React.Component<{
         backgroundColor: pageBackground,
       },
       actionButton: {
-        minWidth: 100,
+        minWidth: 120,
         height: 30,
         paddingHorizontal: 10,
-        backgroundColor: goalGold,
+        backgroundColor: pageBackground,
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "center"
       },
       button: {
-        color: "white",
-        fontSize: 18
+        color: goalGold,
+        fontFamily: fontRegular,
+        fontSize: 20
       }
     })
-    return (
+    return useObserver(() => (
       <View style={styles.container}>
-        {this.props.modalSvc.goalNoticeIsOpen &&
+        {goalsMetOpen &&
           <View style={styles.container}>
             <TouchableWithoutFeedback                 
-              onPress={(gnmData.allowOutsideCancel === true) ? this.dismiss : undefined}
+              onPress={(gnmData.allowOutsideCancel === true) ? dismiss : undefined}
             >
               <View style={styles.background}/>
             </TouchableWithoutFeedback>
@@ -170,23 +195,20 @@ class GoalAchievedModal extends React.Component<{
                 }
               </View>
               <View style={styles.footer}>
-                <BorderlessButton
-                  rippleColor={rippleColor}
-                  style={{backgroundColor: 'transparent'}}
-                  borderless={true}
-                  onPress={this.close.bind(this, gnmData.okText)}
-                >
-                  <View style={styles.actionButton}>
-                    <Text style={styles.button}>{gnmData.okText}</Text>
-                  </View>
-                </BorderlessButton>
+                <IconButton
+                  label={gnmData.okText}
+                  horizontal
+                  onPressFn={close}
+                  onPressArg={gnmData.okText}
+                  style={styles.actionButton}
+                  labelStyle={styles.button}
+                />
               </View>
             </View>
           </View>
         }
       </View>
-    )
-  }
+    ))
 }
 
 export default GoalAchievedModal;

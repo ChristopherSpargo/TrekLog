@@ -3,7 +3,7 @@ import { LatLng } from 'react-native-maps';
 
 import { TrekInfo, TrekTimeInterval, TrekPoint, NumericRange, TrekType,
           } from './TrekInfoModel'
-import { BarData, BarGraphInfo } from './FilterService';
+import { BarData, BarGraphInfo } from './BarDisplayComponent';
 import { UtilsSvc, DRIVING_A_CAR_MET, ACTIVITY_SPEEDS } from './UtilsService';
 
 export interface DistAndPoint {
@@ -69,6 +69,10 @@ export interface IntervalData {
   calsRange   ?: NumericRange,    // range for interval calories
 }
 
+export const INTERVAL_AREA_HEIGHT = 120;
+export const INTERVAL_GRAPH_HEIGHT = 95;
+
+
 export class IntervalSvc {
 
   @observable intervalChange;
@@ -80,6 +84,7 @@ export class IntervalSvc {
   intervalValue = 0;
   lastIntervalValue = 0;
   lastUnits = '';
+  lastIntervalTrek = '';
   graphBarWidth = 50;
   intervalGraphData: BarGraphInfo = {items: [], range: {max: 0, min: 0, range: 0}};
 
@@ -102,7 +107,6 @@ export class IntervalSvc {
   @action
   setShow = (val: string) => {
     this.show = val;
-    this.trekInfo.setUpdateGraph(true);
     this.buildGraphData(this.intervalData);
   }
 
@@ -164,8 +168,6 @@ export class IntervalSvc {
     validPath = iData.segPaths[index].concat(iData.segPaths[index+1]);
     segAndPt = this.findNearestPoint(pt, validPath);    // restrict search to validPath
     segAndPt = this.findNearestPoint(segAndPt.point, path); // get segAndPt.segIndex relative to full path
-    this.trekInfo.setUpdateMap(true);
-    this.trekInfo.setUpdateGraph(true);
     this.moveIntervalMarker(index, segAndPt, this.trekInfo.pointList);
     this.buildGraphData(this.intervalData);
     this.setIntervalChange(true);
@@ -234,7 +236,8 @@ export class IntervalSvc {
     // update the length of time for this interval
     iData.times[index] = iData.startTimes[index + 1] - iData.startTimes[index];
 
-    // update the elevation value for this interval (use rough midpoint)
+    if (nElevs) {
+      // update the elevation value for this interval (use rough midpoint)
       if (index > 0){
         iData.elevs[index] = 
           tInfo.elevations[
@@ -245,9 +248,10 @@ export class IntervalSvc {
           tInfo.elevations[Math.round(((iData.iDists[index] / 2) / tInfo.trekDist) * nElevs)];
       }
 
-    // update the elevation value for the next interval (use rough midpoint)
-    iData.elevs[index + 1] = 
-    tInfo.elevations[Math.round(((iData.endDists[index] + (iData.iDists[index + 1] / 2)) / tInfo.trekDist) * nElevs)];
+      // update the elevation value for the next interval (use rough midpoint)
+      iData.elevs[index + 1] = 
+      tInfo.elevations[Math.round(((iData.endDists[index] + (iData.iDists[index + 1] / 2)) / tInfo.trekDist) * nElevs)];
+    }
 
     // update the average speed for the interval
     iData.speeds[index] = 
@@ -449,7 +453,7 @@ export class IntervalSvc {
   getDataRanges = () => {
     let iData = this.intervalData;
 
-    if (this.trekInfo.hasElevations()) {
+    if (iData.elevs.length) {
       // set range information for elevations
       iData.elevRange = this.utilsSvc.getNumericRange(iData.elevs);
     }
@@ -530,7 +534,6 @@ export class IntervalSvc {
         case "Calories":
           barItem.value = intData.cals[i];
           barItem.label1 = intData.cals[i].toString();
-          // if(isNaN(intData.cals[i])){ alert(JSON.stringify(intData.segPoints[i]))}
           break;
         default:
           barItem.value = 0;

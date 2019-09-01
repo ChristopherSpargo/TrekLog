@@ -3,23 +3,23 @@ import { View, StyleSheet, Text, ScrollView } from 'react-native'
 import { RectButton } from 'react-native-gesture-handler'
 import { action, observable } from 'mobx'
 import { observer, inject } from 'mobx-react'
-import { NavigationActions } from 'react-navigation';
+import { NavigationActions, StackActions } from 'react-navigation';
+import { ProgressCircle } from 'react-native-svg-charts';
 
 import { TrekInfo } from './TrekInfoModel'
 import { ToastModel } from './ToastModel';
-import { TREKLOG_GOALS_KEY } from './App';
+import { TREKLOG_GOALS_KEY, PROGRESS_COLORS } from './App';
 import { UtilsSvc } from './UtilsService';
 import { ModalModel, CONFIRM_INFO } from './ModalModel';
 import Waiting from './WaitingComponent';
-import { GoalsSvc } from './GoalsService';
-import { GoalDisplayObj } from './GoalsService';
-import { APP_ICONS } from './SvgImages';
-import SvgIcon from './SvgIconComponent';
+import { GoalsSvc, GoalDisplayObj, PROGRESS_RANGES } from './GoalsService';
 import SpeedDial, { SpeedDialItem } from './SpeedDialComponent';
 import TrekLogHeader from './TreklogHeaderComponent';
 import FadeInView from './FadeInComponent';
 import SlideDownView from './SlideDownComponent';
 import { SCROLL_DOWN_DURATION, FADE_IN_DURATION } from './App';
+import NavMenu, { NavMenuItem } from './NavMenuComponent';
+import NavMenuTrigger from './NavMenuTriggerComponent'
 
 const goBack = NavigationActions.back() ;
 
@@ -37,6 +37,7 @@ class Goals extends Component<{
 
   @observable openGoals;
   @observable headerTitle;
+  @observable openNavMenu : boolean;
 
   selectedGoal = -1;             // index of currently selected goal list item (-1 if none)
   
@@ -44,6 +45,7 @@ class Goals extends Component<{
   gS = this.props.goalsSvc;
   uSvc = this.props.utilsSvc;
   APGIndex = -1;
+  renders = 0;
 
   _didFocusSubscription;
   _willBlurSubscription;
@@ -82,15 +84,16 @@ class Goals extends Component<{
         let gl = this.gS.processGoalList(this.gS.goalList);
         this.gS.afterProcessGoals();
         this.gS.setDisplayList(gl);
+        this.gS.sortGoals();
         this.setSelectedGoal(0);
         this.gS.updateDataReady(true);  
         this.setOpenGoals(false);        
       }
       else {
-      // Goals List is there but empty
-      this.props.toastSvc.toastOpen({tType: "Error", content: "Goal list is empty."});
-      this.gS.updateDataReady(true);
-      this.setTitleParam();
+        // Goals List is there but empty
+        this.props.toastSvc.toastOpen({tType: "Error", content: "Goal list is empty."});
+        this.gS.updateDataReady(true);
+        this.setTitleParam();
       }
     })
     .catch(() => {
@@ -109,11 +112,19 @@ class Goals extends Component<{
     this.gS.updateDataReady(false);
   }
 
+  @action
+  setOpenNavMenu = (status: boolean) => {
+    this.openNavMenu = status;
+  }
+
+  openMenu = () => {
+    this.setOpenNavMenu(true);
+  }
+
   // Set the title in the header
   setTitleParam = (titleMsg?: string) => {
     if(this.gS.goalList && (this.gS.goalList.length > 0)) {
-      let plural = this.gS.goalList.length === 1 ? '' : 's';
-      this.setHeaderTitle(titleMsg || (this.gS.goalList.length + ' Goal' + plural));
+      this.setHeaderTitle(titleMsg || ( 'Goals (' + this.gS.goalList.length + ')'));
     }
     else {
       this.setHeaderTitle("No Goals");
@@ -238,27 +249,69 @@ class Goals extends Component<{
     }
   }
 
+  setActiveNav = val => {
+    requestAnimationFrame(() => {
+      switch (val) {
+        case "Home":
+          this.tI.clearTrek();
+          this.props.navigation.dispatch(StackActions.popToTop());
+          break;
+        case "Summary":
+        case "Courses":
+        case "Settings":
+        case "Conditions":
+        const resetAction = StackActions.reset({
+                index: 1,
+                actions: [
+                  NavigationActions.navigate({ routeName: 'Log', key: 'Home' }),
+                  NavigationActions.navigate({ routeName: val, key: 'Key-' + val }),
+                ],
+              });
+          this.props.navigation.dispatch(resetAction);          
+          break;
+        default:
+      }
+    })
+  }
   render() {
 
     const { mediumTextColor, disabledTextColor, dividerColor, highlightedItemColor, disabledHeaderTextColor,
-            pageBackground, highTextColor, secondaryColor, rippleColor, textOnSecondaryColor
+            pageBackground, highTextColor, secondaryColor, rippleColor, textOnSecondaryColor, progressBackground,
+            cardItemTitleColor, altCardBackground
           } = this.props.uiTheme.palette[this.tI.colorTheme];
-    const { cardLayout, pageTitle } = this.props.uiTheme;
-            const displayList = this.gS.displayList && this.gS.displayList.length > 0;
+    const { cardLayout, pageTitle, fontRegular, fontLight } = this.props.uiTheme;
+    const displayList = this.gS.displayList && this.gS.displayList.length > 0;
     const iconSize = 40;
+    const progressCircleSize = 40;
     const iconLabelTextSize = 16;
+    const goalCardHeight = 152 + 12;
+    let navMenuItems : NavMenuItem[] = 
+    [ {icon: 'Home', label: 'Home', value: 'Home'},
+      {icon: 'Pie', label: 'Activity', value: 'Summary'},
+      {icon: 'Course', label: 'Courses', value: 'Courses'},
+      {icon: 'Settings', label: 'Settings', value: 'Settings'},
+      {icon: 'PartCloudyDay', label: 'Conditions', value: 'Conditions'}
+    ]  
+    
 
     const styles=StyleSheet.create({
       container: { ... StyleSheet.absoluteFillObject, backgroundColor: pageBackground },
       cardCustom: {
-        // borderBottomWidth: 1,
         justifyContent: "space-between",
         paddingBottom: 0,
-        paddingTop: 0,
         paddingLeft: 0,
-        marginTop: 0,
-        marginBottom: 0,
+        paddingTop: 0,
         paddingRight: 0,
+        marginTop: 2,
+        marginBottom: 10,
+        marginLeft: 5,
+        marginRight: 5,
+        borderColor: dividerColor,
+        borderStyle: "solid",
+        borderWidth: 1,
+        borderBottomWidth: 2,
+        borderRadius: 3,
+        backgroundColor: altCardBackground,
       },
       goalHighlight: {
         backgroundColor: highlightedItemColor,
@@ -272,34 +325,40 @@ class Goals extends Component<{
         flexDirection: "row",
         alignItems: "center",
       },
-      goalDate: {
+      goalDateItem: {
+        flexDirection: "row",
+        alignItems: "center"
+      },
+      goalDateType: {
+        fontFamily: fontRegular,
+        fontSize: 18,
         color: mediumTextColor,
-        fontSize: 16
+        width: 80,
+      },
+      goalDateText: {
+        fontFamily: fontRegular,
+        color: mediumTextColor,
+        fontSize: 18
       },
       goalText: {
-        color: highTextColor,
-        fontSize: 20
-      },
-      iconArea: {
-        width: iconSize,
-        height: iconSize,
-        marginRight: 5,
-        backgroundColor: "transparent",
+        fontFamily: fontRegular,
+        color: cardItemTitleColor,
+        fontSize: 22
       },
       progressLabel: {
         width: iconSize + 5,
-        marginBottom: 10,
-        marginTop: -4,
+        marginTop: 3,
         fontSize: iconLabelTextSize,
-        fontWeight: "200",
+        fontFamily: fontLight,
         color: highTextColor,
         textAlign: "center",
       },
       noGoals: {
         marginTop: 100,
         textAlign: "center",
+        fontFamily: fontRegular,
         color: disabledTextColor,
-        fontSize: 22,
+        fontSize: 24,
       },
       addGoalFab: {
         backgroundColor: secondaryColor,
@@ -312,7 +371,7 @@ class Goals extends Component<{
         bottom: 0,
       },
       speedDialTrigger: {
-        backgroundColor: pageBackground,
+        backgroundColor: "transparent",
       },
       buttonArea: {
         marginTop: 10,
@@ -324,6 +383,19 @@ class Goals extends Component<{
         borderStyle: "solid",
         borderColor: dividerColor,
       },
+      listArea: {
+        ...cardLayout,
+        paddingBottom: 0,
+        paddingLeft: 0,
+        paddingRight: 0,
+        backgroundColor: pageBackground,
+      },
+      pageTitleAdj: {
+        color: highTextColor,
+        paddingLeft: 10,
+        paddingRight: 10,
+        marginBottom: 10,
+      },
     })
 
     let mapActions : SpeedDialItem[] =
@@ -333,94 +405,122 @@ class Goals extends Component<{
 
 
     return(
-      <View style={styles.container}>
-            <SpeedDial 
-              selectFn={this.addNewGoal}
-              bottom={5}
-              style={styles.addGoalFab}
-              icon="Plus"
-            />
-        {this.gS.dataReady &&
-          <View style={styles.itemsArea}>
-            <TrekLogHeader
-              titleText={this.headerTitle}
-              icon="*"
-              backButtonFn={() => this.props.navigation.dispatch(goBack)}
-              group={this.tI.group || "None"}
-              groupTextColor={disabledHeaderTextColor}
-            />
-            <View style={[cardLayout, {marginBottom: 0, paddingBottom: 15}]}>
-              <Text style={[pageTitle, {color: highTextColor}]}>Status of Goals</Text>
-            </View>
-            <ScrollView>
-              {!displayList && 
-                <View style={styles.centered}>
-                  <Text style={styles.noGoals}>No Goals To Display</Text>
-                </View>
-              }
-              {displayList && 
-                <View style={{paddingBottom: 85}}>
-                  {this.gS.displayList.map((dlItem, index) => (
-                    <FadeInView startValue={0.1} key={index} endValue={1} open={this.openGoals} 
-                        duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
-                      <SlideDownView startValue={-110} endValue={0} open={this.openGoals} 
-                          duration={SCROLL_DOWN_DURATION} style={{overflow: "hidden"}}>
-                        <View style={[cardLayout, styles.cardCustom, {overflow: "hidden"},
-                                    this.selectedGoal === index ? styles.goalHighlight : {}]}>
-                          <RectButton
-                            rippleColor={rippleColor}
-                            onPress={this.showSelectedGoal.bind(this, index)}
-                          >
-                            <View style={styles.buttonArea}>
-                              <Text style={styles.goalText}>{this.gS.formatGoalStatement(dlItem.goal)}</Text>
-                              <View style={[styles.rowLayout, {alignItems: "flex-start"}]}>
-                                <SvgIcon 
-                                  paths={APP_ICONS.Target}
-                                  size={iconSize}
-                                  fill="url(#grad)"
-                                  fillPct={this.gS.computeProgress(dlItem)}
-                                  stroke={highTextColor}
-                                  strokeWidth={.5}
-                                  style={styles.iconArea}
-                                />
-                                <Text style={styles.goalDate}>{"Set: " + this.uSvc.dateFromSortDate(dlItem.goal.dateSet)}</Text>
-                              </View>
-                              <Text style={styles.progressLabel}>
-                                {Math.round(this.gS.computeProgress(dlItem) * 100) + '%'}
-                              </Text>
-                              <View style={[styles.rowLayout,
-                                            {alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 10}]}>
-                                <SpeedDial
-                                  icon="DotsVertical"
-                                  iconColor={mediumTextColor}
-                                  items={mapActions}
-                                  sdIndex={index}
-                                  selectFn={this.speedDialAction}
-                                  style={styles.speedDialTrigger}
-                                  horizontal={true}
-                                  menuColor="transparent"
-                                  itemIconsStyle={{backgroundColor: secondaryColor}}
-                                  itemIconsColor={textOnSecondaryColor}
-                                  iconSize="Small"
-                                />
-                              </View>
-                            </View>
-                          </RectButton>
-                        </View>
-                        <View style={styles.divider}/>
-                      </SlideDownView>
-                    </FadeInView>       
-                    ))
+      <NavMenu
+        selectFn={this.setActiveNav}
+        items={navMenuItems}
+        setOpenFn={this.setOpenNavMenu}
+        open={this.openNavMenu}> 
+        <View style={styles.container}>
+          <SpeedDial 
+            selectFn={this.addNewGoal}
+            bottom={10}
+            style={styles.addGoalFab}
+            icon="Plus"
+            raised
+          />
+          <TrekLogHeader
+            titleText={this.headerTitle}
+            icon="*"
+            backButtonFn={() => this.props.navigation.dispatch(goBack)}
+            group={this.tI.group || "None"}
+            groupTextColor={disabledHeaderTextColor}
+          />
+          {this.gS.dataReady &&
+            // <View style={styles.itemsArea}>
+              <View style={styles.listArea}>
+                <NavMenuTrigger openMenuFn={this.openMenu}/>
+                <Text style={[pageTitle, styles.pageTitleAdj]}>Goals List</Text>
+                <ScrollView snapToInterval={goalCardHeight} decelerationRate={.90}> 
+                  {!displayList && 
+                    <View style={styles.centered}>
+                      <Text style={styles.noGoals}>No Goals To Display</Text>
+                    </View>
                   }
-                </View>
-              }
-            </ScrollView>
-          </View>
-        }
-        {(!this.gS.dataReady) &&
-          <Waiting/>
-        }
-      </View>
+                  {displayList && 
+                    <View style={{paddingBottom: 85}}>
+                      {this.gS.displayList.map((dlItem, index) => {
+                        let prog = this.gS.computeProgress(dlItem);
+                        let progPct = Math.round(prog * 100);
+                        let ind = this.uSvc.findRangeIndex(progPct, PROGRESS_RANGES);
+                        let pColor = PROGRESS_COLORS[ind];
+                        return (
+                          <FadeInView startValue={0} key={index} endValue={1} open={this.openGoals} 
+                              duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                            <SlideDownView startValue={-170} endValue={0} open={this.openGoals} 
+                                duration={SCROLL_DOWN_DURATION} style={{overflow: "hidden"}}>
+                              <View style={[cardLayout, styles.cardCustom, {overflow: "hidden"},
+                                          this.selectedGoal === index ? styles.goalHighlight : {}]}>
+                                <RectButton
+                                  rippleColor={rippleColor}
+                                  onPress={this.showSelectedGoal.bind(this, index)}
+                                >
+                                  <View style={styles.buttonArea}>
+                                    <Text style={styles.goalText}>{this.gS.formatGoalStatement(dlItem.goal)}</Text>
+                                    <View style={[styles.rowLayout, {alignItems: "flex-start", marginBottom: 40, marginTop: 5}]}>
+                                      <View>                                  
+                                        <ProgressCircle
+                                          style={{height: progressCircleSize}}
+                                          backgroundColor={progressBackground}
+                                          strokeWidth={2}
+                                          progress={prog}
+                                          progressColor={pColor}
+                                        />                         
+                                        <Text style={styles.progressLabel}>
+                                          {Math.round(this.gS.computeProgress(dlItem) * 100) + '%'}
+                                        </Text>
+                                      </View>
+                                      <View style={{marginLeft: 10}}>  
+                                        <View style={styles.goalDateItem}>
+                                          <Text style={styles.goalDateType}>Since:</Text>
+                                          <Text style={styles.goalDateText}>
+                                                  {this.uSvc.dateFromSortDate(dlItem.goal.dateSet)}</Text>
+                                        </View>                                
+                                        <View style={styles.goalDateItem}>
+                                          <Text style={styles.goalDateType}>Last Met:</Text>
+                                          <Text style={[styles.goalDateText, {color: highTextColor}]}>
+                                                {dlItem.mostRecentDate === '0' ? "Never" :
+                                                  this.uSvc.dateFromSortDate(dlItem.mostRecentDate)}</Text>
+                                        </View>
+                                      </View>
+                                    </View>
+                                    {/* <View style={[styles.rowLayout,
+                                                  {alignItems: 'flex-end', justifyContent: 'flex-end', 
+                                                  marginBottom: 5}]}> */}
+                                      <SpeedDial
+                                        icon="DotsVertical"
+                                        iconColor={mediumTextColor}
+                                        items={mapActions}
+                                        bottom={3}
+                                        // right={10}
+                                        sdIndex={index}
+                                        selectFn={this.speedDialAction}
+                                        style={styles.speedDialTrigger}
+                                        horizontal={true}
+                                        menuColor="transparent"
+                                        itemIconsStyle={{backgroundColor: secondaryColor}}
+                                        itemIconsColor={textOnSecondaryColor}
+                                        iconSize="Small"
+                                      />
+                                    {/* </View> */}
+                                  </View>
+                                </RectButton>
+                              </View>
+                              {/* <View style={styles.divider}/> */}
+                            </SlideDownView>
+                          </FadeInView>       
+                        )})
+                      }
+                    </View>
+                  }
+                </ScrollView>
+              </View>
+            // </View>
+          }
+          {(!this.gS.dataReady) &&
+            <Waiting/>
+          }
+        </View>
+      </NavMenu>
     )
   }
   

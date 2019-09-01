@@ -5,15 +5,15 @@ import { NavigationActions } from 'react-navigation';
 import { observer, inject } from 'mobx-react'
 import { BorderlessButton } from 'react-native-gesture-handler'
 
-import { TrekInfo, TREK_TYPE_BIKE } from './TrekInfoModel';
+import { TrekInfo, STEPS_APPLY } from './TrekInfoModel';
 import TrekDisplay from './TrekDisplayComponent';
 import { ModalModel } from './ModalModel'
 import {LimitsObj} from './TrekLimitsComponent'
-import { CONTROLS_HEIGHT} from './App';
+import { CONTROLS_HEIGHT, HEADER_ICON_SIZE, BACK_BUTTON_SIZE} from './App';
 import { LocationSvc } from './LocationService';
 import { LoggingSvc } from './LoggingService';
 import { UtilsSvc } from './UtilsService';
-import SvgIcon from './SvgIconComponent';
+import SvgButton from './SvgButtonComponent';
 import { APP_ICONS } from './SvgImages'
 
 const goBack = NavigationActions.back() ;
@@ -120,7 +120,7 @@ class LogTrekMap extends Component<{
     const { highTextColor, trekLogBlue, matchingMask_5, matchingMask_7, rippleColor,
             trackingStatsBackgroundHeader 
           } = this.palette;
-    const semiTrans = this.trekInfo.defaultMapType === 'hybrid' ? matchingMask_7 : matchingMask_5;
+    const semiTrans = this.trekInfo.currentMapType === 'hybrid' ? matchingMask_7 : matchingMask_5;
     const distItem = this.formattedDist();
     const speedItem = this.formattedCurrentSpeed();
     const stepsItem = this.formattedSteps();
@@ -165,7 +165,7 @@ class LogTrekMap extends Component<{
       },
       caTop: {
         top: 0,
-        backgroundColor: reviewTracking ? trackingStatsBackgroundHeader : bgBottom,
+        backgroundColor: reviewTracking ? trackingStatsBackgroundHeader : semiTrans,
         bottom: undefined,
       },
       backButtonArea: {
@@ -175,16 +175,25 @@ class LogTrekMap extends Component<{
         justifyContent: "center", 
         alignItems: "center",
       },
+      backButtonTarget: {
+        width: HEADER_ICON_SIZE + 5,
+        height: HEADER_ICON_SIZE + 5,
+        borderRadius: (HEADER_ICON_SIZE + 5) / 2,
+        alignItems: "center",
+        justifyContent: "center",
+      },
   })
 
     return (
       <View style={[styles.container]}>
         <TrekDisplay 
+          displayMode="normal"
           pathToCurrent={this.trekInfo.pointList}
+          pathLength={this.trekInfo.trekPointCount}
           bottom={mapBottom} 
           layoutOpts={this.trekInfo.layoutOpts} 
           changeZoomFn={this.toggleSpeedDialZoom}
-          mapType={this.trekInfo.defaultMapType}
+          mapType={this.trekInfo.currentMapType}
           speedDialIcon={sdIcon}
           speedDialValue={sdValue}
           changeMapFn={this.trekInfo.setDefaultMapType}
@@ -201,36 +210,30 @@ class LogTrekMap extends Component<{
         <View style={[controlsArea, styles.caAdjust, styles.caTop]}>
           {(numPts > 0 && reviewOk) &&
             <View style={[styles.stats, {justifyContent: "flex-start"}]}>
-              <BorderlessButton
-                rippleColor={rippleColor}
-                onPress={() => this.setActiveNav('DontShowMap')}
-              >
-                <View style={styles.backButtonArea}>
-                  <SvgIcon 
-                      size={32}
-                      widthAdj={0}
-                      fill={highTextColor}
-                      paths={APP_ICONS.ArrowBack}
-                  />
-                </View>
-              </BorderlessButton>
+              <View style={styles.backButtonArea}>
+                <SvgButton
+                  style={styles.backButtonTarget}
+                  onPressFn={() => this.setActiveNav('DontShowMap')}
+                  borderWidth={0}
+                  size={BACK_BUTTON_SIZE}
+                  fill={highTextColor}
+                  path={APP_ICONS.ArrowBack}
+                />
+              </View>
             </View>
           }
           {(numPts > 0 && !reviewOk) &&
             <View style={styles.stats}>
-              <BorderlessButton
-                  rippleColor={rippleColor}
-                  onPress={() => this.setActiveNav('DontShowMap')}
-              >
-                <View style={styles.backButtonArea}>
-                  <SvgIcon 
-                      size={32}
-                      widthAdj={0}
-                      fill={highTextColor}
-                      paths={APP_ICONS.ArrowBack}
-                  />
-                </View>
-              </BorderlessButton>
+              <View style={styles.backButtonArea}>
+                <SvgButton
+                  style={styles.backButtonTarget}
+                  onPressFn={() => this.setActiveNav('DontShowMap')}
+                  borderWidth={0}
+                  size={BACK_BUTTON_SIZE}
+                  fill={highTextColor}
+                  path={APP_ICONS.ArrowBack}
+                />
+              </View>
               <View style={[styles.statGroupStat, {flex: 1.6, justifyContent: "flex-start"}]}>
                   <Text style={[styles.bigStat, {fontSize: 56}]}>{this.trekInfo.formattedDuration()}</Text>
               </View>
@@ -255,7 +258,7 @@ class LogTrekMap extends Component<{
                     <Text style={[styles.shortStat, {color: trekLogBlue}]}>{speedItem.units}</Text>
                   </View>
                 </BorderlessButton>
-              {this.trekInfo.type !== TREK_TYPE_BIKE &&
+                {STEPS_APPLY[this.trekInfo.type] && 
                   <BorderlessButton
                     style={{flex: 1.3}}
                     rippleColor={rippleColor}

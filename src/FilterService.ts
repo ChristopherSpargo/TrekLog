@@ -1,15 +1,21 @@
 import { observable, action } from "mobx"
 import { DatePickerAndroid } from 'react-native'
 import { TrekInfo, TrekType, TrekObj, DIST_UNIT_CHOICES, 
-         MeasurementSystemType, TREK_SELECT_BITS, NumericRange, ALL_SELECT_BITS } from './TrekInfoModel'
-import { UtilsSvc, TimeFrame } from './UtilsService';
-import { SortByTypes, ShowTypes, TIME_FRAMES_NEXT } from './ReviewComponent'
+         MeasurementSystemType, TREK_SELECT_BITS, ALL_SELECT_BITS, TREK_TYPE_HIKE, RESP_OK, RESP_CANCEL } from './TrekInfoModel'
+import { UtilsSvc, TimeFrame, TIME_FRAMES_NEXT, TIME_FRAME_CUSTOM  } from './UtilsService';
+import { SortByTypes, ShowTypes} from './ReviewComponent'
 import { ToastModel } from "./ToastModel";
+import { BarData, BarGraphInfo } from './BarDisplayComponent';
 
 export type SortDirection = "Ascend" | "Descend";
-export const SORT_DIRECTIONS = ['Ascend', 'Descend'];
-export const SORT_DIRECTION_OTHER = {Ascend: 'Descend', Descend: 'Ascend'};
+export const SORTDIRECTION_ASCEND = "Ascend";
+export const SORTDIRECTION_DESCEND = "Descend";
+export const SORT_DIRECTIONS = [SORTDIRECTION_ASCEND, SORTDIRECTION_DESCEND];
+export const SORT_DIRECTION_OTHER = {Ascend: SORTDIRECTION_DESCEND, Descend: SORTDIRECTION_ASCEND};
 export const SORT_DIRECTION_ICONS = {Ascend: 'ArrowUp', Descend: 'ArrowDown'}
+export const FILTERMODE_DASHBOARD = 'Dashboard';
+export const FILTERMODE_REVIEW = 'Review';
+export const FILTERMODE_FROM_STATS = 'ReviewFromStats';
 
 export interface FilterSettingsObj {
   typeSels: number,
@@ -32,35 +38,15 @@ export interface FilterSettingsObj {
   timeframe: string
 }
 
-export interface BarData  {
-  value: any,         // value that determines the size (height) of the bar
-  label1: string,     // line 1 of bar label
-  label2: string,     // line 2 (if any) of bar label
-  type?: string,      // type of trek this is for
-  icon?: string,      // icon to show if different types in graph
-  images?: boolean,   // true if trek has any images
-  indicator: string,   // label shown below bars, like an X axis, that also indicates which bar is in focus 
-                      // (currently Trek date - blue and bold if focused, black and normal if not) 
-  indicatorFill: string, // color for indicator text
-  index?: number,     // index in the source data array for this bar
-  noPress?: boolean,  // true if bar should not be pressed
-}
-
-export interface BarGraphInfo {
-  items: BarData[],
-  range: NumericRange
-}
-
-
 export class FilterSvc {
 
   @observable selectedTrekIndex;
   @observable scrollToBar;
   @observable dataReady;
-  updateCount = 0;
+  selectedTrekDate = '';
+  trekType : TrekType;
 
   // filter values
-  @observable trekType;
   @observable distMin;
   @observable distMax;
   @observable timeMin;
@@ -93,6 +79,7 @@ export class FilterSvc {
   @observable calsDefMax : string;
   @observable stepsDefMin : string;
   @observable stepsDefMax : string;
+  @observable ftChecksum : number;
   @observable filterRuns : number;
   @observable foundType : boolean;
   @observable groupList : string[];
@@ -112,7 +99,6 @@ export class FilterSvc {
   @action
   initializeObservables = () => {
     this.selectedTrekIndex = -1;
-    this.trekType = '';
     this.distMin = '';
     this.distMax = '';
     this.timeMin = '';
@@ -126,9 +112,8 @@ export class FilterSvc {
     this.dateMin = '';
     this.dateMax = '';
     this.sortBy = 'Dist';
-    this.sortDirection = SORT_DIRECTIONS[1];
+    this.setDefaultSortValues();
     this.show = 'Dist';
-    this.sortByDate = true;
     this.dataReady = false;
     this.dateDefMin = '';
     this.dateDefMax = '';
@@ -142,8 +127,9 @@ export class FilterSvc {
     this.calsDefMax = '';
     this.stepsDefMin = '';
     this.stepsDefMax = '';
-    this.setFilterRuns(0);
+    this.setFTChecksum(0);
     this.setFoundType(false);
+    this.setFilterRuns(0);
     this.clearGroupList();
   }
 
@@ -155,14 +141,9 @@ export class FilterSvc {
 
   // move the barGraph to the specified bar
   scrollBarGraph = (pos: number) => {
-    let oldVal = this.trekInfo.updateGraph;
-
-    this.trekInfo.setUpdateGraph(true);
     this.setScrollToBar(pos);
     requestAnimationFrame(() => {
-      this.trekInfo.setUpdateGraph(false);
       this.setScrollToBar(undefined);
-      this.trekInfo.setUpdateGraph(oldVal);
     })
   }
 
@@ -183,7 +164,8 @@ export class FilterSvc {
     }
 
     return {
-      typeSels:      this.filterMode === 'Dashboard' ? ALL_SELECT_BITS : this.trekInfo.typeSelections,
+      typeSels:      this.filterMode === FILTERMODE_DASHBOARD ? ALL_SELECT_BITS 
+                                                              : this.trekInfo.typeSelections,
       distMin:       this.getFlt(this.distMin, 100),
       distMax:       this.getFlt(this.distMax, 100),
       distUnits:     this.trekInfo.distUnits(),
@@ -224,6 +206,10 @@ export class FilterSvc {
         return 'Run';
       case TREK_SELECT_BITS['Hike']:
         return 'Hike';
+      case TREK_SELECT_BITS['Board']:
+        return 'Board';
+      case TREK_SELECT_BITS['Drive']:
+        return 'Drive';
       default:
         return 'Trek';
     }
@@ -241,7 +227,7 @@ export class FilterSvc {
 
   // set the trek type for filtering data
   @action
-  setTrekType = (value?: string) => {
+  setTrekType = (value?: TrekType) => {
     if (value !== undefined){
       this.trekType = value;
     }
@@ -252,34 +238,28 @@ export class FilterSvc {
   
   // set the timeframe for review data
   @action
-  setTimeframe = (value: string, selectAfter = true) => {
-    let dates : TimeFrame = this.utilsSvc.getTimeFrame(value);
+  setTimeframe = (value: string) => {
 
     this.trekInfo.updateTimeframe(value);
-    if (value !== 'Custom') {
+    if (value !== TIME_FRAME_CUSTOM) {
+      let dates : TimeFrame = this.utilsSvc.getTimeFrame(value);
       this.dateMin = dates.start;
       this.dateMax = dates.end;
-      this.trekInfo.setUpdateGraph(true);
-      this.filterTreks(selectAfter);
     }
-    else {
-      this.trekInfo.setUpdateGraph(false);
-    }
+    this.filterTreks();             // this sets dateDefMin and Max
+    if(this.dateMin === '') { this.setDateMin(this.dateDefMin, "None"); }
+    if(this.dateMax === '') { this.setDateMax(this.dateDefMax, "None"); }
   }
 
   // find a timeframe that has some treks in it starting with the given timeframe
-  findActiveTimeframe = (startTF = 'TWeek', selectAfter = false) => {
+  findActiveTimeframe = (startTF = 'TMonth') => {
     let tf = startTF;
 
-    this.setTimeframe(tf, selectAfter);
-    if (tf === 'Custom') {
-      this.trekInfo.setUpdateGraph(true);
-      this.filterTreks(selectAfter);
-    }
-    else {
+    this.setTimeframe(tf);
+    if (tf !== TIME_FRAME_CUSTOM) {
       while((this.filteredTreks.length === 0) && (tf !== 'All')) {
         tf = TIME_FRAMES_NEXT[tf];
-        this.setTimeframe(tf, selectAfter);
+        this.setTimeframe(tf);
       }
     }
   }
@@ -292,7 +272,6 @@ export class FilterSvc {
   // Set the Trek type filter property.
   @action
   setType = (value: TrekType, toggle: boolean) => {
-    this.trekInfo.setUpdateGraph(true);
     if (!toggle) {  // set selection to value
       this.trekInfo.setTypeSelections(TREK_SELECT_BITS[value]);
     } else {    // toggle bit value within selection
@@ -306,7 +285,6 @@ export class FilterSvc {
   // Set the Trek type selections filter property to the given value.
   @action
   setTypeSels = (value: number) => {
-    this.trekInfo.setUpdateGraph(true);
     this.trekInfo.setTypeSelections(value );
     this.filterTreks();      
   }
@@ -340,17 +318,18 @@ export class FilterSvc {
   }
 
   @action
-  setFilterRuns = (val: number) => {
-    this.filterRuns = val;
-  }
-
-  @action
   setFoundType = (status: boolean) => {
     this.foundType = status;
   }
 
-  incFilterRuns = () => {
-    this.setFilterRuns(this.filterRuns + 1);
+  @action
+  setFTChecksum = (val: number) => {
+    this.ftChecksum = val;
+  }
+
+  @action
+  setFilterRuns = (val: number) => {
+    this.filterRuns = val;
   }
 
   @action
@@ -413,55 +392,44 @@ export class FilterSvc {
     this.distDefMax = value;
   }
 
-  // get the minimu trek date filter value
+  // get the minimum trek date filter value
   @action
   getDateMin = () => {
-    let oldMin = this.dateMin;
-    let dt, min, max;
+    let dt;
 
-    this.trekInfo.setUpdateGraph(false);
-    this.setDateMin('', 'Filter');
-    dt = this.utilsSvc.getYMD(new Date(oldMin !== '' ? oldMin : this.dateDefMin));
-    min = this.utilsSvc.getYMD(new Date(this.dateDefMin));
-    max = this.utilsSvc.getYMD(new Date(this.dateMax !== '' ? this.dateMax : this.dateDefMax));
-    DatePickerAndroid.open({
-      date: new Date(dt.year, dt.month, dt.day),
-      minDate: new Date(min.year, min.month, min.day),
-      maxDate: new Date(max.year, max.month, max.day),
-    })
-    // @ts-ignore
-    .then(({action, year, month, day}) => {
-      if (action === DatePickerAndroid.dateSetAction){
-        this.setTimeframe('Custom');
-        this.setDateMin(new Date(year,month,day).toLocaleDateString(), 'None');
-        requestAnimationFrame(() => {
-          this.trekInfo.setUpdateGraph(true);
-          this.filterTreks()
-        })
-      }
-      else {
-        this.trekInfo.setUpdateGraph(false);
-        this.setDateMin(oldMin, 'None');
-        requestAnimationFrame(() => {
-          this.filterTreks(false)
-        })
-      }
-    })
-    .catch(() =>{
-      this.trekInfo.setUpdateGraph(false);
+    return new Promise<any>((resolve) => {
+      dt = this.utilsSvc.getYMD(new Date(this.getDateMinValue()));
+      DatePickerAndroid.open({
+        date: new Date(dt.year, dt.month, dt.day),
+      })
+      // @ts-ignore
+      .then(({action, year, month, day}) => {
+        if (action === DatePickerAndroid.dateSetAction){
+          this.setDateMin(new Date(year,month,day).toLocaleDateString(), 'None');
+          this.setTimeframe(TIME_FRAME_CUSTOM);
+          resolve(RESP_OK)
+        }
+        else {
+          resolve(RESP_OK)
+        }
+      })
+      .catch(() =>{
+        resolve(RESP_CANCEL)
+      })
     })
   }
 
   @action
-  setDateMin = (value: string, filter = 'Select') => {
+  setDateMin = (value: string, filter : "Select" | "Filter" | "None") => {
     this.trekInfo.dtMin = value;
     this.dateMin = value;
     switch(filter){
       case 'Select':
         this.filterTreks();
+        this.buildAfterFilter();
         break;
       case 'Filter':
-        this.filterTreks(false);
+        this.filterTreks();
         break;
       case 'None':
       default:
@@ -469,56 +437,58 @@ export class FilterSvc {
   }
 
   // get the maximum trek date filter value
+  @action
   getDateMax = () => {
-    let oldMax = this.dateMax;
-    let dt, min, max;
+    let dt;
 
-    this.trekInfo.setUpdateGraph(false);
-    this.setDateMax('', 'Filter');
-    dt = this.utilsSvc.getYMD(new Date(oldMax !== '' ? oldMax : this.dateDefMax));
-    max = this.utilsSvc.getYMD(new Date(this.dateDefMax));
-    min = this.utilsSvc.getYMD(new Date(this.dateMin !== '' ? this.dateMin : this.dateDefMin));
-    DatePickerAndroid.open({
-      date: new Date(dt.year, dt.month, dt.day),
-      minDate: new Date(min.year, min.month, min.day),
-      maxDate: new Date(max.year, max.month, max.day),
+    return new Promise<any>((resolve) => {
+
+      dt = this.utilsSvc.getYMD(new Date(this.getDateMaxValue()));
+      DatePickerAndroid.open({
+        date: new Date(dt.year, dt.month, dt.day),
+      })
+      // @ts-ignore
+      .then(({action, year, month, day}) => {
+        if (action === DatePickerAndroid.dateSetAction){
+          this.setDateMax(new Date(year,month,day).toLocaleDateString(), 'None');
+          this.setTimeframe(TIME_FRAME_CUSTOM);
+          resolve(RESP_OK)
+        }
+        else {
+          resolve(RESP_OK)
+        }
+      })
+      .catch(() =>{resolve(RESP_CANCEL)})
     })
-    // @ts-ignore
-    .then(({action, year, month, day}) => {
-      if (action === DatePickerAndroid.dateSetAction){
-        this.setTimeframe('Custom');
-        this.setDateMax(new Date(year,month,day).toLocaleDateString(), 'None');
-        requestAnimationFrame(() => {
-          this.trekInfo.updateGraph = true;
-          this.filterTreks()
-        })
-      }
-      else {
-        this.setDateMax(oldMax, 'None');
-        requestAnimationFrame(() => {
-          this.filterTreks(false)
-        })
-      }
-    })
-    .catch(() =>{})
   }
   
   @action
-  setDateMax = (value: string, filter = 'Select') => {
+  setDateMax = (value: string, filter : "Select" | "Filter" | "None" ) => {
     this.trekInfo.dtMax = value;
     this.dateMax = value;
     switch(filter){
       case 'Select':
         this.filterTreks();
+        this.buildAfterFilter();
         break;
       case 'Filter':
-        this.filterTreks(false);
+        this.filterTreks();
         break;
       case 'None':
       default:
     }
   }
 
+  // return either the dateMin value or dateDefMin value
+  getDateMinValue = () :string => {
+    return this.dateMin === '' ? this.dateDefMin : this.dateMin;
+  }
+
+  // return either the dateMax value or dateDefMax value
+  getDateMaxValue = () :string => {
+    return this.dateMax === '' ? this.dateDefMax : this.dateMax;
+  }
+  
   // set the sortBy filter property and then set the initial value of startWith.
   @action
   setShow = (value: ShowTypes) => {
@@ -526,18 +496,26 @@ export class FilterSvc {
     this.setSortDirection(this.sortDirection);
   }
 
-  // do a simple set of the sortBy and sortDirection properties with no side effects
-  @action
-  setSortByAndDirection = (sb: SortByTypes, dir: SortDirection) => {
-    this.sortBy = sb;
-    this.sortDirection = dir;
-  }
-
   // set the sortBy filter property and then set the initial value of startWith.
   @action
   setSortBy = (value: SortByTypes) => {
-    this.sortBy = value;
-    this.setShow(value); 
+    if (value === 'Date'){
+      this.toggleSortByDate();
+    } else {
+      if(value !== this.sortBy){    
+        this.sortBy = value;
+        this.setShow(value); 
+      } else {
+        this.toggleSortDirection();
+      }
+    }
+  }
+
+  // set the default sort parameters
+  @action
+  setDefaultSortValues = () => {
+    this.sortDirection = SORTDIRECTION_DESCEND; // init to sort Descending
+    this.sortByDate = true;                     // by date
   }
 
   // set the sortBy filter property and then set the initial value of startWith.
@@ -558,6 +536,7 @@ export class FilterSvc {
   setSortDirection = (value: string) => {
       this.sortDirection = value;
       this.sortExistingTreks();
+      this.buildAfterFilter();
   }
 
   // Change the sorting direction 
@@ -581,23 +560,23 @@ export class FilterSvc {
   // Check the given trek aginst the filter values.  Return true if trek passes all filters.
   checkTrek = (trek: TrekObj) => {
 
-    let dist = this.utilsSvc.convertDist(trek.trekDist, this.filter.distUnits);
-    let speed = this.utilsSvc.convertSpeed(trek.trekDist, trek.duration, this.filter.speedUnits);
-    let time = trek.duration / 60;
-    let cals = trek.calories;
-    let steps = this.utilsSvc.computeStepCount(trek.trekDist, trek.strideLength);
-    let date = trek.sortDate;
     if (!(this.trekInfo.typeSelections & TREK_SELECT_BITS[trek.type])) { return false; }
+    let date = trek.sortDate;
     if (this.filter.dateMin && (date < this.filter.dateMin)) { return false; }
     if (this.filter.dateMax && (date > this.filter.dateMax)) { return false; }
+    let dist = this.utilsSvc.convertDist(trek.trekDist, this.filter.distUnits);
     if (this.filter.distMin && (dist < this.filter.distMin)) { return false; }
     if (this.filter.distMax && (dist > this.filter.distMax)) { return false; }
+    let time = trek.duration / 60;
     if (this.filter.timeMin && (time < this.filter.timeMin)) { return false; }
     if (this.filter.timeMax && (time > this.filter.timeMax)) { return false; }
+    let speed = this.utilsSvc.convertSpeed(trek.trekDist, trek.duration, this.filter.speedUnits);
     if (this.filter.speedMin && (speed < this.filter.speedMin)) { return false; }
     if (this.filter.speedMax && (speed > this.filter.speedMax)) { return false; }
+    let cals = trek.calories;
     if (this.filter.calsMin && (cals < this.filter.calsMin)) { return false; }
     if (this.filter.calsMax && (cals > this.filter.calsMax)) { return false; }
+    let steps = this.utilsSvc.computeStepCount(trek.trekDist, trek.strideLength);
     if (this.filter.stepsMin && (steps < this.filter.stepsMin)) { return false; }
     if (this.filter.stepsMax && (steps > this.filter.stepsMax)) { return false; }
     
@@ -642,16 +621,21 @@ export class FilterSvc {
     }
   }
 
-  // return a list of treks sorted and filtered by the current settings
+  // return a list of indicies into the trekInfo.allTreks list sorted and filtered per current settings
+  @action
   filterAndSort = () : number[] => {
     let foundSelectedType = false;
     let treks : number[] = [];
+    let cSum = 0;
 
+    this.updateFSO();
+    // include the date range in the checksum
+    cSum = this.getFlt(this.filter.dateMax) + this.getFlt(this.filter.dateMin);
     if (this.trekInfo.allTreks.length) {
-      this.updateFSO();
       for( let i=0; i<this.trekInfo.allTreks.length; i++){
         if (this.checkTrek(this.trekInfo.allTreks[i])){
-          treks.push(i);
+          treks.push(i);      // push index of this TrekObj
+          cSum += this.getFlt(this.trekInfo.allTreks[i].sortDate);
           if ((this.trekInfo.typeSelections & TREK_SELECT_BITS[this.trekInfo.allTreks[i].type])) { 
             foundSelectedType = true; 
           } 
@@ -659,30 +643,34 @@ export class FilterSvc {
       }
       treks.sort(this.sortFunc);
     }
+    this.setFTChecksum(cSum);
     this.setFilteredTreks(treks);
-    this.incFilterRuns();
+    this.setFilterRuns(++this.filterRuns);
     this.setFoundType(foundSelectedType);
     return treks;
   }
 
+  // build the graph data, set the selectedTrekIndex value and run the after filtering treks functions
+  buildAfterFilter = () => {
+    this.buildGraphData(this.filteredTreks);        
+    this.setDataReady(true);
+    if (this.filteredTreks.length) {
+      let sel = this.findCurrentSelection();
+      this.trekSelected(sel);
+      this.scrollBarGraph(sel);
+    }
+    else {
+      this.setSelectedTrekIndex(-2);
+    }
+    this.runAfterFilterFns();
+  }
+
   // Apply the filter to all the treks
   @action
-  filterTreks = (selectAfterFilter = true) => {
+  filterTreks = () => {
     let treks : number[] = this.filterAndSort();
-
+    
     this.getFilterDefaults(treks);
-    if (selectAfterFilter){
-      this.buildGraphData(treks);        
-      this.setDataReady(true);
-      if (this.filteredTreks.length) {
-        this.trekSelected(0);
-        this.scrollBarGraph(0);
-      }
-      else {
-        this.setSelectedTrekIndex(-2);
-      }
-      this.runAfterFilterFns();
-    }
   }
 
   runAfterFilterFns = () => {
@@ -706,20 +694,15 @@ export class FilterSvc {
   sortExistingTreks = () => {
     if (this.filteredTreks.length){
       this.updateFSO();
-      let treks = [...this.filteredTreks];
-      treks.sort(this.sortFunc);
-      this.buildGraphData(treks);
-      this.setFilteredTreks(treks);
-      this.trekSelected(0);
-      this.scrollBarGraph(0);
+      this.filteredTreks.sort(this.sortFunc);
     }
   }
 
   // Set the Trek at the given index in filteredTreks as the current Trek.
-  trekSelected = (indx: number, update = false) => {
+  trekSelected = (indx: number) => {
     let trek = this.trekInfo.allTreks[this.filteredTreks[indx]];
     this.trekInfo.setTrekProperties(trek);
-    if (!trek.elevations) { // read and save elevation data for trek if necessary
+    if (trek.type === TREK_TYPE_HIKE && !trek.elevations) { // read and save elevation data for Hike if necessary
       this.trekInfo.setElevationProperties()
       .then(() => {
         this.toastSvc.toastOpen({tType: 'Info', content: 'Retreived elevation data.'})
@@ -728,16 +711,13 @@ export class FilterSvc {
         trek.hills = this.trekInfo.hills;
         trek.calories = this.trekInfo.calories;
         this.trekInfo.saveTrek(trek, 'none')
-        // this.trekInfo.setUpdateGraph(true);
         this.setSelectedTrekIndex(indx);
       })
       .catch(() => {
         this.toastSvc.toastOpen({tType: 'Error', content: 'Error retreiving elevation data.'})
-        // this.trekInfo.setUpdateGraph(true);
         this.setSelectedTrekIndex(indx);
       })
     } else {
-      if (update) { this.trekInfo.setUpdateGraph(true); }
       this.setSelectedTrekIndex(indx);
     }
   }
@@ -745,13 +725,23 @@ export class FilterSvc {
   // Set the property that keeps trak of whick Trek is currently in focus
   @action
   setSelectedTrekIndex = (val: number) => {
-    if(val === -2) { this.trekInfo.setUpdateGraph(false); }
     this.selectedTrekIndex = val;
+    this.selectedTrekDate = val < 0 ? '' : this.trekInfo.allTreks[this.filteredTreks[val]].sortDate;
   }
 
+  // find the index for the trek with the date matching selectedTrekDate
+  findCurrentSelection = () : number => {
+    if (this.selectedTrekDate === '') { return 0; }
+    for (let i=0; i<this.filteredTreks.length; i++) {
+      if (this.trekInfo.allTreks[this.filteredTreks[i]].sortDate === this.selectedTrekDate) {
+        return i;
+      }
+    }
+    return 0;
+  }
 
   @action
-  setFilterItem = (item: string, value: string, update = true) => {
+  setFilterItem = (item: string, value: string) => {
       switch(item){
         case 'distMin':
           this.setDistMin(value);
@@ -777,7 +767,7 @@ export class FilterSvc {
         case 'calsMax':
           this.setCalsMax(value);
           break;
-          case 'stepsMin':
+        case 'stepsMin':
           this.setStepsMin(value);
           break;
         case 'stepsMax':
@@ -785,59 +775,43 @@ export class FilterSvc {
           break;
         default:
       }
-      if (update) {
-        this.filterTreks()
-      }
+      this.filterTreks();
+      this.runAfterFilterFns();
   }
 
   // Reset the values in the Dist filter fields
   @action
-  resetDistFilter = (update = true) => {
+  resetDistFilter = () => {
     this.setDistMin('');
     this.setDistMax('');
-    if (update){
-        this.filterTreks();
-    } 
   }
 
   // Reset the values in the Time filter fields
   @action
-  resetTimeFilter = (update = true) => {
+  resetTimeFilter = () => {
     this.setTimeMin('');
     this.setTimeMax('');
-    if (update){
-        this.filterTreks();
-    } 
   }
 
   // Reset the values in the Speed filter fields
   @action
-  resetSpeedFilter = (update = true) => {
+  resetSpeedFilter = () => {
     this.setSpeedMin('');
     this.setSpeedMax('');
-    if (update){
-        this.filterTreks();
-    } 
   }
 
   // Reset the values in the Calories filter fields
   @action
-  resetCalsFilter = (update = true) => {
+  resetCalsFilter = () => {
     this.setCalsMin('');
     this.setCalsMax('');
-    if (update){
-        this.filterTreks();
-    } 
   }
 
   // Reset the values in the Steps filter fields
   @action
-  resetStepsFilter = (update = true) => {
+  resetStepsFilter = () => {
     this.setStepsMin('');
     this.setStepsMax('');
-    if (update){
-        this.filterTreks();
-    } 
   }
 
   // find the max and min values for each sortable property in the given Trek list
@@ -943,6 +917,22 @@ export class FilterSvc {
     this.barGraphData.items.push(item);
   }
 
+  // set the title property of the barGraphData object
+  setGraphTitle = (sType: ShowTypes) => {
+    this.barGraphData.title = undefined;
+    switch(sType){
+      case 'Dist':
+        this.barGraphData.title = this.trekInfo.longDistUnitsCaps();
+        break;
+      case 'Speed':
+        this.barGraphData.title = this.trekInfo.speedUnits();
+        break;
+      case 'Cals':
+        this.barGraphData.title = 'Calories';
+        break;
+    }
+  }
+
   // Create the data array for the bar graph.
   // Content depends on which show category is currently selected
   // The given treks array has already been sorted using the sortBy value.
@@ -951,7 +941,10 @@ export class FilterSvc {
     let thisSortDate = this.utilsSvc.formatSortDate();
     let dataRange = this.findDataRange(treks, this.show, this.trekInfo.measurementSystem)
 
+    dataRange.min = 0;
+    dataRange.range = dataRange.max
     this.clearBarGraphData();
+    this.setGraphTitle(this.show);
     this.barGraphData.range = dataRange;
     for(let tn=0; tn<treks.length; tn++) {
       let t = this.trekInfo.allTreks[treks[tn]];
@@ -978,8 +971,8 @@ export class FilterSvc {
       case "Date":
         let db = this.utilsSvc.daysBetween(thisSortDate, t.sortDate)
         barItem.value = db;
-        barItem.label1 = t.date.substr(0,5) + '/' + t.sortDate.substr(2,2);
-        barItem.label2 = t.startTime;
+        // barItem.label1 = t.date.substr(0,5) + '/' + t.sortDate.substr(2,2);
+        // barItem.label2 = t.startTime;
         break;
       case "Steps":
         let s = this.utilsSvc.computeStepCount(t.trekDist, t.strideLength);

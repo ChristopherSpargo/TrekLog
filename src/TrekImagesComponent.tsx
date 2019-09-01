@@ -38,18 +38,19 @@ class TrekImages extends Component<{
   static navigationOptions = ({ navigation }) => {
     const params = navigation.state.params || {};
     const cmd = params.cmd;
+    const headerActions = [
+      {icon: 'Delete', color: "white", style: {}, actionFn: params.deleteImage}
+    ];
 
     switch (cmd) {
       case 'show':
         return {
           header: <TrekLogHeader titleText={params.title || ' '}
                                       icon={params.icon || ''}
-                                      headerRightIcon="Delete"
-                                      headerRightIconColor="white"
+                                      actionButtons={headerActions}
                                       backgroundColor="rgba(0,0,0,.4)"
                                       textColor="white"
                                       position="absolute"
-                                      headerRightFn={params.deleteImage}
                                       backButtonFn={() =>  navigation.dispatch(goBack)}
                   />
         }
@@ -136,7 +137,8 @@ class TrekImages extends Component<{
         break;
       case 'show':
         let setIndex = this.props.navigation.getParam('setIndex');
-        this.setCurrentImageSet(setIndex);
+        let imageIndex = this.props.navigation.getParam('imageIndex');
+        this.setCurrentImageSet(setIndex, imageIndex);
         break;
       default:
     }
@@ -271,11 +273,11 @@ class TrekImages extends Component<{
 
   // set the value of the currentImageObject property
   @action
-  setCurrentImageSet = (index: number) => {
-    this.currentImageSetIndex = index;
-    if (index >= 0) {
-      this.currentImageSet = this.tInfo.trekImages[index];
-      this.setCurrentImageIndex(0);
+  setCurrentImageSet = (setIndex: number, imageIndex = 0) => {
+    this.currentImageSetIndex = setIndex;
+    if (setIndex >= 0) {
+      this.currentImageSet = this.tInfo.trekImages[setIndex];
+      this.setCurrentImageIndex(imageIndex);
       this.openImageDispaly();
     }
   }
@@ -580,8 +582,6 @@ class TrekImages extends Component<{
   }
 
   render () {
-    const tInfo = this.tInfo;
-    tInfo.setUpdateMap(false);
     const { trekLogGreen, trekLogRed,
           } = this.props.uiTheme.palette[this.tInfo.colorTheme];
     const { navIcon } = this.props.uiTheme;
@@ -758,6 +758,7 @@ class TrekImages extends Component<{
               flashMode={RNCamera.Constants.FlashMode.off}
               permissionDialogTitle={'Permission to use camera'}
               permissionDialogMessage={'We need your permission to use your phone\'s camera'}
+              playSoundOnCapture={true}
             />
             {(!this.videoRecording && !this.picturePaused) &&
               <TouchableWithoutFeedback

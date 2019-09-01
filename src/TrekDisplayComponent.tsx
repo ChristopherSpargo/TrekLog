@@ -4,12 +4,16 @@ import { View, StyleSheet, Text } from 'react-native';
 import { observer, inject } from 'mobx-react';
 import { observable, action } from 'mobx';
 import MapView, { Marker, Polyline, LatLng, Region } from 'react-native-maps';
+import { RectButton } from 'react-native-gesture-handler'
 
 import { INTERVAL_MARKER_Z_INDEX, CURRENT_POS_MARKER_Z_INDEX, INITIAL_POS_MARKER_Z_INDEX, 
          PICTURE_MARKER_Z_INDEX, MAIN_PATH_Z_INDEX, TRACKING_POS_MARKER_Z_INDEX,
          SHORT_CONTROLS_HEIGHT, CONTROLS_HEIGHT,
          HEADER_HEIGHT,
          HEADER_Z_INDEX,
+         semitransWhite_8,
+         semitransWhite_5,
+         semitransBlack_5,
         } from './App';
 import SpeedDial, {SpeedDialItem} from './SpeedDialComponent';
 import { TrekInfo, MapType, TrekPoint, TrekImageSet } from './TrekInfoModel';
@@ -19,17 +23,21 @@ import { APP_ICONS } from './SvgImages';
 import { ModalModel } from './ModalModel'
 import IconButton from './IconButtonComponent';
 import { LoggingSvc } from './LoggingService';
-import { RateRangePathsObj } from './IntervalSvc';
+import { RateRangePathsObj, INTERVAL_AREA_HEIGHT } from './IntervalSvc';
 import FadeInTemp from './FadeInTempComponent';
+
+export type mapDisplayModeType = "normal" | "noControls" | "noIntervals" | "noSpeeds";
+
 // const TREK_ZOOM_CURRENT = 15;
 // const TREK_ZOOM_STATE   =  6;
 // const TREK_ZOOM_COUNTRY =  4;
-const COUNTRY_CENTER_LAT_USA = 41;
-const COUNTRY_CENTER_LNG_USA = -101;
+// const COUNTRY_CENTER_LAT_USA = 41;
+// const COUNTRY_CENTER_LNG_USA = -101;
 
 @inject('trekInfo', 'uiTheme', 'utilsSvc', 'modalSvc', 'loggingSvc')
 @observer
 class TrekDisplay extends Component<{
+  displayMode : mapDisplayModeType,
   intervalMarkers ?: LatLng[],
   intervalLabelFn ?: Function,
   selectedInterval ?: number,
@@ -53,12 +61,17 @@ class TrekDisplay extends Component<{
   trackingPath ?: LatLng[],
   trackingMarker ?: TrekPoint,
   pathToCurrent : TrekPoint[], // path for polyLine to current trek position
+  pathLength : number,          // number of points in pathToCurrent
   trackingDiffDist ?: number,
   trackingDiffTime ?: number,
   trackingTime ?: number,     // elapsed tracking time
   trekMarkerDragFn ?: Function, // call this function if replay trek marker dragged
   courseMarkerDragFn ?: Function, // call this function if replay course marker dragged
   timerType ?: string,        // if 'Log', 'Paused' or 'Play' show trek current position with yellow marker, else red
+  takeSnapshotFn ?: Function, // if present, take a snapshot of the map and return the uri to this function
+  snapshotPrompt ?: string,   // display this prompt on button for user to take a snapshot of the map
+  pauseFn ?: Function,        // if present dispaly a Pause/Play button and call this button when pressed
+  isPaused ?: boolean,        // display PLAY icon if true otherwise display PAUSE icon
   uiTheme ?: any,
   utilsSvc ?: UtilsSvc,
   modalSvc ?: ModalModel,
@@ -94,7 +107,7 @@ class TrekDisplay extends Component<{
       "elementType": "labels.text.stroke",
       "stylers": [
         {
-          "color": "#646464"
+          "color": "#666666"
         }
       ]
     },
@@ -178,21 +191,29 @@ class TrekDisplay extends Component<{
     }
   ];
 
+  initRegionLatDelta = 0.090;     // amount of latitude to show on initial map render
+  initRegionLngDelta = 0.072;     // amount of longitude to show on initial map render
+
+  currRegionLatDelta = 0.05; //0.015;
+  currRegionLngDelta = 0.04; //0.01211;
+
   currRegion : any = {
     latitude: 34,
     longitude: -112,
-    latitudeDelta: 0.015,
-    longitudeDelta: 0.01211
+    latitudeDelta: this.currRegionLatDelta,
+    longitudeDelta: this.currRegionLngDelta
   }
 
+  renderCount = 0;
 
   constructor(props) {
     super(props);
-    this.setShowMapControls(true);
-    this.showPrevPts(-1);
+    // this.tInfo.setShowMapControls(true);
+    // this.showPrevPts(-1);      // **Debug
   }
 
   // shouldComponentUpdate(){
+  //   alert(this.props.trekInfo.updateMap)
   //   return this.props.trekInfo.updateMap;
   // }
 
@@ -213,26 +234,21 @@ class TrekDisplay extends Component<{
           if (this.mapViewRef) { 
             let topPadding = this.props.rateRangeObj ? 325 : 200;
             this.mapViewRef.fitToCoordinates(this.props.selectedPath,
-                    {edgePadding: {top: topPadding, right: 50, bottom: 50, left: 50}, animated: false});
+                    {edgePadding: {top: topPadding, right: 50, bottom: 50, left: 50}, animated: true});
           }
         } 
         else {
           if (this.mapViewRef) { 
             this.mapViewRef.animateCamera({center: this.props.intervalMarkers[this.selectedMarker]}, 
-                                        {duration: 300});
+                                        {duration: 500});
           }
         }
       }
     }
   }
 
-  @action
-  setShowMapControls = (status: boolean) => {
-    this.tInfo.showMapControls = status;
-  }
-
   toggleShowMapControls = () => {
-    this.setShowMapControls(!this.tInfo.showMapControls);
+    this.tInfo.setShowMapControls(!this.tInfo.showMapControls);
   }
 
   // this happens when user moves map or program follows Current position
@@ -270,36 +286,36 @@ class TrekDisplay extends Component<{
     if (point){
       this.currRegion.latitude        = point.l.a;
       this.currRegion.longitude       = point.l.o;
-      this.currRegion.latitudeDelta   = 0.015;
-      this.currRegion.longitudeDelta  = 0.01211;
+      this.currRegion.latitudeDelta   = this.currRegionLatDelta;
+      this.currRegion.longitudeDelta  = this.currRegionLngDelta;
     }
   }
 
   // change the focus or zoom level on the map
   layoutMap = ( path: LatLng[]) => {
-    let rangePadding = this.props.rateRangeObj ? 150 : 0;
     let bPadding = (this.props.intervalMarkers ? 50 : 250);
+    let topPadding = this.props.rateRangeObj ? 325 : 200;
     switch(this.mode){
       case 'All':
         if (this.mapViewRef) { 
           this.mapViewRef.fitToCoordinates(path,
-                                          {edgePadding: {top: 200, right: 50, 
+                                          {edgePadding: {top: topPadding, right: 50, 
                                                          bottom: bPadding, left: 50}, 
-                                          animated: false});
+                                          animated: true});
         }
         break;
       case 'Interval':
         if (this.mapViewRef) { 
           this.mapViewRef.fitToCoordinates(path,
-                                          {edgePadding: {top: 200, right: 50, 
-                                           bottom: 50, left: 50}, animated: false});
+                                          {edgePadding: {top: topPadding, right: 50, 
+                                           bottom: 50, left: 50}, animated: true});
         }
         break;
       case 'Current':
       case 'NewAll':        
       case 'Start':
         if (this.mapViewRef) { 
-          this.mapViewRef.animateToRegion(this.props.utilsSvc.copyObj(this.currRegion), 10);
+          this.mapViewRef.animateToRegion({...this.currRegion}, 500);
         }
         if (this.mode === 'NewAll'){
           this.mode = 'All';
@@ -380,31 +396,41 @@ class TrekDisplay extends Component<{
   }
 
   @action
-  showPrevPts = (index: number) => {
+  showPrevPts = (index: number) => {        // **Debug
     if(this.showPrevPtsIndex === index){
       this.showPrevPtsIndex = -1;
     } else {
       this.showPrevPtsIndex = index;
     }
   }
-  
+
+  takeMapSnapshot () {
+    const snapshot = this.mapViewRef.takeSnapshot({
+      format: 'jpg',   // image formats: 'png', 'jpg' (default: 'png')
+      quality: .3,
+      result: 'file'   // result types: 'file', 'base64' (default: 'file')
+    });
+    snapshot.then((uri) => {
+      this.props.takeSnapshotFn(uri);
+    });
+  }  
   render () {
     const tInfo = this.tInfo;
-    // tInfo.setUpdateMap(false);
-    const { trekLogYellow, highTextColor, secondaryColor, matchingMask_8, rippleColor, mediumTextColor,
+    // alert(++this.renderCount)
+    const { trekLogYellow, highTextColor, secondaryColor, matchingMask_8, mediumTextColor,
             matchingMask_3, contrastingMask_5, pageBackground, pathColor, navItemBorderColor, 
             locationRadiusBorder, intervalMarkerBorderColor, intervalMarkerBackgroundColor,
             trackingMarkerRadiusBorder, trackingMarkerPathColor, matchingMask_9, 
-            trackingColorMinus, trackingColorPlus, trackingStatsBackgroundHeader
+            trackingColorMinus, trackingColorPlus, trackingStatsBackgroundHeader, dividerColor,
+            primaryColor, rippleColor
           } = this.props.uiTheme.palette[this.tInfo.colorTheme];
-    const { navIcon } = this.props.uiTheme;
+    const { fontRegular, fontBold, navIcon, footerButton, footerButtonText } = this.props.uiTheme;
     const path = this.props.utilsSvc.cvtPointListToLatLng(this.props.pathToCurrent); // copy just the LaLo data
-    const numPts = path.length;
+    const numPts = this.props.pathLength;
     const selection = (this.props.selectedInterval !== undefined || this.props.selectedInterval !== -1) 
                           ? this.props.selectedInterval : 0;
     const markers = this.props.intervalMarkers;
     const mType = this.props.mapType;
-    const haveLocation = tInfo.initialLoc !== undefined;
     const triggerIcon = this.props.speedDialIcon || "Location";
     const radiusBg = "rgba(18, 46, 59, .5)";
     const trekImages = this.tInfo.trekImageCount !== 0;
@@ -414,7 +440,7 @@ class TrekDisplay extends Component<{
     const showNext = this.props.nextFn !== undefined;
     const showPrev = this.props.prevFn !== undefined;
     const minSDOffset = (this.props.bottom !== 0) ? 5 : SHORT_CONTROLS_HEIGHT;
-    const showControls = this.tInfo.showMapControls;
+    const showControls = this.tInfo.showMapControls && !this.props.takeSnapshotFn;
     const rangesObj = this.props.rateRangeObj;
     const trackingMarker = this.props.trackingMarker;
     const tdTime = this.props.trackingDiffTime;
@@ -429,6 +455,9 @@ class TrekDisplay extends Component<{
     const logOn = this.props.timerType === 'Log';
     const replayOn = (this.props.timerType === 'Play');
     const cmBackground = (logOn || replayOn) ? trekLogYellow : "red";
+    const okTxt = this.props.snapshotPrompt || 'CONTINUE';
+    const canTxt = 'CANCEL';
+    const footerHeight = CONTROLS_HEIGHT;
     // const badPoints = this.tInfo.badPointList && this.tInfo.badPointList.length > 0; // **Debug
 
     const styles = StyleSheet.create({
@@ -506,7 +535,8 @@ class TrekDisplay extends Component<{
         color: "white",
       },
       intervalTxt: {
-        fontSize: 10,
+        fontSize: 12,
+        fontFamily: fontRegular,
         color: "white",
       },
       speedDialTrigger: {
@@ -558,7 +588,7 @@ class TrekDisplay extends Component<{
       },
       legendLocation: {
         position: "absolute",
-        top: HEADER_HEIGHT,
+        bottom: markers ? INTERVAL_AREA_HEIGHT : 0,
         left: 0,
         right: 0,
       },
@@ -571,8 +601,9 @@ class TrekDisplay extends Component<{
         alignItems: "center",
       },
       legendHeader: {
-        fontSize: 16,
+        fontSize: 18,
         textAlign: "center",
+        fontFamily: fontRegular,
         color: highTextColor,
       },
       legendRangesArea: {
@@ -584,9 +615,6 @@ class TrekDisplay extends Component<{
         alignItems: "center",
         justifyContent: "center",
       },
-      legendRangeTextArea: {
-        flexDirection: "column",
-      },
       legendRangeValue: {
         flexDirection: "row",
         justifyContent: "space-between",
@@ -595,6 +623,7 @@ class TrekDisplay extends Component<{
       },
       legendRangeText: {
         color: highTextColor,
+        fontFamily: fontRegular,
       },
       legendRangeColor: {
         width: 15,
@@ -604,7 +633,7 @@ class TrekDisplay extends Component<{
         top: 0 + (logOn ? CONTROLS_HEIGHT - 10 : 0),
         flex: 1,
         marginLeft: logOn ? 0 : 56,
-        paddingVertical: 5,
+        // paddingVertical: 5,
         paddingRight: 5,
         paddingLeft: logOn ? 5 : 0,
         backgroundColor: logOn ? matchingMask_9 : trackingStatsBackgroundHeader,
@@ -625,18 +654,22 @@ class TrekDisplay extends Component<{
         justifyContent: "center",
       },
       trackingItemValue: {
-        fontSize: 32,
+        fontFamily: fontRegular,
+        fontSize: 34,
       },
       trackingTime: {
-        fontSize: 16,
+        fontSize: 18,
+        fontFamily: fontRegular,
         color: mediumTextColor
       },
       trackingItemUnits: {
-        fontSize: 26,
+        fontSize: 28,
+        fontFamily: fontRegular,
         marginTop: 4,
       },
       trackingHeader: {
-        fontSize: 18,
+        fontSize: 20,
+        fontFamily: fontRegular,
         color: highTextColor
       },
       badMarker1: {
@@ -647,6 +680,49 @@ class TrekDisplay extends Component<{
         borderColor: "white",
         backgroundColor: "black",
         overflow: "hidden"
+      },
+      sdLabelStyle: {
+        color: 'black',
+        fontSize: 13,
+        fontFamily: fontBold,
+        paddingHorizontal: 2,
+        backgroundColor: semitransWhite_8,
+        borderRadius: 8,
+      },
+      footer: {
+        zIndex: 15,
+        position: "absolute",
+        left: 0,
+        right: 0,
+        bottom: 0,
+        height: footerHeight,
+        flexDirection: "row",
+        alignItems: "center",
+        borderStyle: "solid",
+        borderTopColor: dividerColor,
+        borderTopWidth: 1,
+        backgroundColor: pageBackground
+      },
+      menuTouchArea: {
+        position: "absolute",
+        top: 0,
+        bottom: 0,
+        left: 0,
+        width: 30,
+        zIndex: 2,
+        backgroundColor: "transparent"
+      },
+      pauseButtonArea: {
+        position: "absolute",
+        top: SHORT_CONTROLS_HEIGHT + 10,
+        left: 10,
+      },
+      pauseButtonStyle: {
+        backgroundColor: semitransBlack_5, 
+        borderRadius: imageSelectorWidth/2,
+        borderStyle: "solid",
+        borderWidth: 1,
+        borderColor: semitransWhite_5,
       },
     })
 
@@ -764,11 +840,10 @@ class TrekDisplay extends Component<{
     // )}
 
     const  mapTypes : SpeedDialItem[] = 
-                        [ {icon: 'Orbit', label: 'Satellite', value: 'hybrid'},
-                          {icon: 'Landscape', label: 'Terrain', value: 'terrain'},
-                          {icon: 'Highway', label: 'Standard', value: 'standard'}];
+                        [ {icon: 'Orbit', label: 'Satellite', value: 'hybrid', lStyle: styles.sdLabelStyle},
+                          {icon: 'Landscape', label: 'Terrain', value: 'terrain', lStyle: styles.sdLabelStyle},
+                          {icon: 'Highway', label: 'Standard', value: 'standard', lStyle: styles.sdLabelStyle}];
 
-    // alert(JSON.stringify(styles.currMarker,null,2));
 
     return (
       <View style={styles.container}>
@@ -782,6 +857,11 @@ class TrekDisplay extends Component<{
               onPanDrag={() => this.mapMoved()}
               onPress={() => this.toggleShowMapControls()}
               moveOnMarkerPress={false}
+              initialRegion={{latitude: path[numPts-1].latitude,
+                longitude: path[numPts-1].longitude,
+                latitudeDelta: this.initRegionLatDelta,
+                longitudeDelta: this.initRegionLngDelta}
+              }
               region={this.mode === 'Current' ? 
                 { latitude: path[numPts-1].latitude,
                   longitude: path[numPts-1].longitude,
@@ -895,21 +975,10 @@ class TrekDisplay extends Component<{
             } */}
           </MapView>
         }
-        {(numPts === 0) && 
-          <MapView            // Map to show when waiting for START command
-            style={styles.map}
-            region={{
-              latitude: haveLocation ? tInfo.initialLoc.latitude : COUNTRY_CENTER_LAT_USA,
-              longitude: haveLocation ? tInfo.initialLoc.longitude : COUNTRY_CENTER_LNG_USA,
-              latitudeDelta: haveLocation ? 10: 20,
-              longitudeDelta: haveLocation ? 10 : 20,
-            }}
-
-          />
-        }
+        <View style={styles.menuTouchArea}/>
         {(showControls && numPts > 0 && this.props.rateRangeObj) &&
           <View style={styles.legendLocation}>
-          <FadeInTemp dimOpacity={0.2} onPressFn={this.props.toggleRangeDataFn}>            
+          <FadeInTemp dimOpacity={0.2} onPressFn={this.props.toggleRangeDataFn} viewTime={5000}>            
             <View style={styles.legendArea}>
               <View style={{flex: 1}}>               
                 <Text style={styles.legendHeader}>{rangesObj.legend.title}</Text>
@@ -932,7 +1001,7 @@ class TrekDisplay extends Component<{
         }
         {(numPts > 0 && trackingMarker) &&
           <View style={styles.trackingStatus}>
-            <View style={[styles.trackingGroup, {flex: .8}]}>
+            <View style={[styles.trackingGroup]}>
               <Text style={styles.trackingHeader}>{this.props.trackingHeader}</Text>
               {trackingTime !== undefined &&
                 <View style={styles.trackingItem}>
@@ -960,6 +1029,7 @@ class TrekDisplay extends Component<{
         {(showControls && numPts > 0) &&
           <SpeedDial
             bottom={this.props.bottom + minSDOffset + 40}
+            // right={10}
             icon={triggerIcon}
             triggerValue={this.props.speedDialValue}
             selectFn={this.props.changeZoomFn}
@@ -973,6 +1043,7 @@ class TrekDisplay extends Component<{
           <SpeedDial
             icon="Camera"
             bottom={this.props.bottom + minSDOffset + 120}
+            // right={10}
             selectFn={this.callUseCameraFn}
             style={styles.speedDialTrigger}
             iconSize="Large"
@@ -982,15 +1053,31 @@ class TrekDisplay extends Component<{
         {(showControls && numPts > 0) &&
           <SpeedDial
             top={70 + HEADER_HEIGHT}
+            // right={10}
             items={mapTypes}
             icon="LayersOutline"
+            menuColor="transparent"
             selectFn={this.props.changeMapFn}
             style={styles.speedDialTrigger}
+            itemIconsStyle={{backgroundColor: "black"}}
             horizontal={true}
             iconSize="Large"
             itemSize="Big"
-            fadeOut={0}
+            fadeOut={5000}
+            autoClose={5000}
           />
+        }
+        {showControls && this.props.pauseFn &&
+          <View style={styles.pauseButtonArea}>
+            <IconButton 
+              style={styles.pauseButtonStyle}
+              iconSize={40}
+              icon={!this.props.isPaused ? 'Pause' : 'Play'}
+              color={semitransWhite_8}
+              iconStyle={navIcon}
+              onPressFn={this.props.pauseFn}
+            />
+          </View>
         }
         {showControls && (showPrev || showNext) &&
           <View style={styles.imageSelectorArea}>
@@ -1021,6 +1108,34 @@ class TrekDisplay extends Component<{
               </View>
             }
           </View>
+        }
+        {this.props.takeSnapshotFn &&
+          <View style={[styles.footer]}>
+              <RectButton
+                rippleColor={rippleColor}
+                style={{flex: 1}}
+                onPress={() => this.props.takeSnapshotFn(undefined)}>
+                <View style={[footerButton, { height: footerHeight }]}>
+                  <Text
+                    style={[footerButtonText, { color: primaryColor }]}
+                  >
+                    {canTxt}
+                  </Text>
+                </View>
+              </RectButton>
+              <RectButton
+                rippleColor={rippleColor}
+                style={{flex: 1}}
+                onPress={() => this.takeMapSnapshot()}>
+                <View style={[footerButton, { height: footerHeight }]}>
+                  <Text
+                    style={[footerButtonText, { color: primaryColor }]}
+                  >
+                    {okTxt}
+                  </Text>
+                </View>
+              </RectButton>
+            </View>
         }
       </View>
     )   

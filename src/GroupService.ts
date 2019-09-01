@@ -2,7 +2,7 @@ import { action } from 'mobx'
 
 import { TrekType,MeasurementSystemType, TrekTypeDataNumeric } from './TrekInfoModel'
 import { LB_PER_KG } from './UtilsService';
-import { ThemeType } from './App';
+import { ThemeType, COLOR_THEME_DARK } from './App';
 import { ModalModel } from './ModalModel';
 import { StorageSvc } from './StorageService';
 
@@ -43,7 +43,7 @@ export class GroupSvc {
   }
 
   init = () => {
-    this.readGroups();
+    // this.readGroups();
     this.initializeObservables();
   }
 
@@ -94,12 +94,14 @@ export class GroupSvc {
 
   // set the theme property of the GroupsObj
   setTheme = (theme: ThemeType) => {
-    this.groups.theme = theme;
+    if(this.groups){
+      this.groups.theme = theme;
+    }
   }
 
   // get the theme property of the GroupsObj
   getTheme = () => {
-    return this.groups.theme;
+    return this.groups ? this.groups.theme : COLOR_THEME_DARK;
   }
 
   // set the measurementSystem property of the GroupsObj
@@ -143,16 +145,18 @@ export class GroupSvc {
 
   // set the value of the lastGroup property of the GroupsObj
   setLastGroup = (group: string) => {
-    this.groups.lastGroup = group;
+    if(this.groups){
+      this.groups.lastGroup = group;
+    }
   }
 
   // set the value of the lastGroup property of the GroupsObj
   getLastGroup = () => {
-    return this.groups.lastGroup;
+    return this.groups ? this.groups.lastGroup : '';
   }
 
   getGroupSelection = (pickerOpenFn : Function, currGroup: string, heading: string, 
-    allowNew = false, nameTest: RegExp) => {
+                       allowNew = false, nameTest: RegExp) => {
     let names = [];
     let values = [];
 
@@ -210,7 +214,7 @@ export class GroupSvc {
 
   // return true if there are groups in the groupList
   haveGroups = () => {
-    return this.groups.groups.length > 0;
+    return this.groups && this.groups.groups.length > 0;
   }
   // return true if the given name is in the list of groups
   isGroup = (name: string) : boolean => {

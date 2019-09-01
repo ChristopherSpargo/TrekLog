@@ -19,11 +19,7 @@ class TrekLogHeader extends Component<
     iconColor?: string,
     titleText?: string,
     backButtonFn?: Function,
-    headerRightIcon?: string,
-    headerRightIconColor?: string,
-    headerRightFn?: Function,
-    headerRightLabel?: string,
-    headerRightButtonStyle?: any, // style for the headerRight button area
+    actionButtons?: any[];
     logo?: boolean,           // true if show TrekLog logo
     group?: string,             // show specified group in header
     setGroupFn?: Function,      // function to call when use button pressed
@@ -40,16 +36,15 @@ class TrekLogHeader extends Component<
 > {
   render() {
     const {
-      navIconColor,
       headerBackgroundColor,
       headerBorderColor,
       headerTextColor,
       rippleColor
     } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
-    const { navIcon } = this.props.uiTheme;
+    const { navIcon, fontRegular } = this.props.uiTheme;
     const iconName = this.props.icon || this.props.trekInfo.type;
     const backFn = this.props.backButtonFn !== undefined;
-    const headerRt = this.props.headerRightFn !== undefined;
+    const actions = this.props.actionButtons !== undefined;
     const textML = iconName === "*" ? (backFn ? 0 : 16) : 10;
     const iconML = backFn ? 0 : 16;
     const headerButtonAreaSize = HEADER_ICON_SIZE + 8;
@@ -60,7 +55,6 @@ class TrekLogHeader extends Component<
     const bgColor = this.props.backgroundColor || headerBackgroundColor;
     const bdrColor = this.props.borderBottomColor || headerBorderColor;
     const useIconSize = 18;
-    const hrbStyle = this.props.headerRightButtonStyle || {};
     const haveGroupFn = this.props.setGroupFn;
 
     const styles = StyleSheet.create({
@@ -99,7 +93,7 @@ class TrekLogHeader extends Component<
       },
       text: {
         fontSize: 22,
-        fontWeight: "300",
+        fontFamily: fontRegular,
         color: htColor,
         marginRight: 8,
         marginLeft: textML
@@ -110,10 +104,6 @@ class TrekLogHeader extends Component<
         flexDirection: "row",
         justifyContent: "space-between"
       },
-      headerRightButtonArea: {
-        marginLeft: 10,
-        marginRight: this.props.group ? 0 : 16,
-      },
       headerRightButton: {
         height: headerButtonAreaSize,
         width: headerButtonAreaSize,
@@ -122,19 +112,28 @@ class TrekLogHeader extends Component<
       },
       logoText: {
         color: htColor,
-        fontSize: 36
+        fontFamily: fontRegular,
+        fontSize: 38
       },
       logo: {
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "center",
-        marginLeft: textML
+        marginLeft: textML,
+        marginRight: 20,
       },
       backButtonArea: {
         width: 56,
         height: 56,
         justifyContent: "center",
         alignItems: "center"
+      },
+      backButtonTarget: {
+        width: HEADER_ICON_SIZE + 5,
+        height: HEADER_ICON_SIZE + 5,
+        borderRadius: (HEADER_ICON_SIZE + 5) / 2,
+        alignItems: "center",
+        justifyContent: "center",
       },
       useArea: {
         flexDirection: "row",
@@ -156,6 +155,7 @@ class TrekLogHeader extends Component<
       },
       useText: {
         fontSize: 18,
+        fontFamily: fontRegular,
         color: groupTextColor
       }
     });
@@ -170,7 +170,7 @@ class TrekLogHeader extends Component<
         {backFn && (
           <View style={styles.backButtonArea}>
             <SvgButton
-              style={{ alignItems: "center", justifyContent: "center" }}
+              style={styles.backButtonTarget}
               onPressFn={() => this.props.backButtonFn()}
               borderWidth={0}
               size={BACK_BUTTON_SIZE}
@@ -196,18 +196,20 @@ class TrekLogHeader extends Component<
           {!this.props.logo && this.props.titleText && (
             <Text style={styles.text}>{this.props.titleText}</Text>
           )}
-          {headerRt && (
-            <View style={[styles.headerRightButtonArea, hrbStyle]}>
-              <IconButton
-                iconSize={HEADER_ICON_SIZE}
-                icon={this.props.headerRightIcon}
-                style={styles.headerRightButton}
-                iconStyle={navIcon}
-                color={this.props.headerRightIconColor || navIconColor}
-                borderColor="transparent"
-                onPressFn={this.props.headerRightFn}
-              />
-            </View>
+          {actions && 
+            this.props.actionButtons.map((item, index) => (           
+                <View style={item.style} key={index}>
+                  <IconButton
+                    iconSize={HEADER_ICON_SIZE}
+                    icon={item.icon}
+                    style={styles.headerRightButton}
+                    iconStyle={navIcon}
+                    color={item.iconColor || headerTextColor}
+                    borderColor="transparent"
+                    onPressFn={item.actionFn}
+                  />
+                </View>
+              )
           )}
           {this.props.group && (
             <RectButton

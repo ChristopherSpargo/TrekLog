@@ -2,7 +2,8 @@ import { PermissionsAndroid } from 'react-native';
 import RNFetchBlob, { RNFetchBlobStat } from 'react-native-fetch-blob'
 import { TREKLOG_SETTINGS_FILENAME, TREKLOG_FILE_FORMAT, TREKLOG_GOALS_FILENAME, 
           TREKLOG_FILE_EXT, TREKLOG_GROUPS_FILENAME, TREKLOG_GROUPS_DIRECTORY, 
-          TREKLOG_PICTURES_DIRECTORY, COLOR_THEME_DARK, TREKLOG_COURSES_DIRECTORY, TREKLOG_COURSES_FILENAME } from './App'
+          TREKLOG_PICTURES_DIRECTORY, COLOR_THEME_DARK, TREKLOG_COURSES_DIRECTORY, 
+          TREKLOG_COURSES_FILENAME } from './App'
 import { GoalObj } from './GoalsService';
 import { SettingsObj, GroupsObj } from './GroupService';
 import { TrekObj, RestoreObject, CURR_DATA_VERSION, TrekImageSet } from './TrekInfoModel';
@@ -10,9 +11,9 @@ import { UtilsSvc } from './UtilsService';
 import { CourseList, Course } from './CourseService';
 interface TrekData {
   _id             ?: string;   // mongoDB item id
-  userId          ?: string;   // Treklog
+  userId          ?: string;   // group name
   fileName        ?: string;   // name for file
-  data            ?: any;   // file contents
+  data            ?: any;      // file contents
 }
 
 export class StorageSvc {
@@ -63,7 +64,7 @@ export class StorageSvc {
   }
 
   // Format the path to the Courses directoruy (Groups/Courses)
-  private formatCoursesPath = () => {
+  formatCoursesPath = () => {
     return (this.formatGroupsPath() + '/' + TREKLOG_COURSES_DIRECTORY);
   }
 
@@ -89,8 +90,25 @@ export class StorageSvc {
 
     return new Promise<any>((resolve, reject) => {
       RNFetchBlob.fs.stat(tempUri)
-      .then((stats ) => {
+      .then((stats) => {
         let uri = picDir + '/' + stats.filename;
+        RNFetchBlob.fs.cp(stats.path, uri)
+        .then(() => resolve(uri))
+        .catch((err) => reject(err))
+      })
+      .catch((err) => reject(err))
+    })
+  }
+
+  // write the given picture to the TrekLog Pictures directory
+  // return the new uri
+  saveCourseMapImage = (courseName: string, tempUri : string) : Promise<string> => {
+    let picDir = this.formatTrekLogPicturesPath();
+
+    return new Promise<any>((resolve, reject) => {
+      RNFetchBlob.fs.stat(tempUri)
+      .then((stats) => {
+        let uri = picDir + '/' + courseName + '.jpg';
         RNFetchBlob.fs.cp(stats.path, uri)
         .then(() => resolve(uri))
         .catch((err) => reject(err))
@@ -137,48 +155,50 @@ export class StorageSvc {
 
     return new Promise((resolve, reject) => {
       if(this.directoriesPresent) {resolve('OK')}
-      if(this.checkStoragePermission()){
-        RNFetchBlob.fs.isDir(this.formatGroupsPath())       // Groups direcory?
-        .then((haveDir) => {
-         if(!haveDir) {
-            this.makeDirectory(this.formatGroupsPath())
-            .then(() =>{
-              allDone.push(this.storeGroupListFile({groups: [], lastGroup: '', 
-                       measurementSystem: 'US', theme: COLOR_THEME_DARK}))  // store empty GroupsObj
-            })
-          }
-        })
-        RNFetchBlob.fs.isDir(pDir)                         // Pictures directory?
-        .then((haveDir) => {
+      this.checkStoragePermission()
+      .then((perm) => {
+        if(perm){
+          let p1 = RNFetchBlob.fs.isDir(this.formatGroupsPath());       // Groups direcory?
+          allDone.push(p1);
+          p1.then((haveDir) => {
           if(!haveDir) {
-            allDone.push(RNFetchBlob.fs.mkdir(pDir))
-          }
-        })
-        RNFetchBlob.fs.isDir(cDir)                         // Courses directory?
-        .then((haveDir) => {
-          if(!haveDir) {
-            this.makeDirectory(cDir)
-            .then(() =>{
-              allDone.push(this.storeCourseListFile({courses: []}))  // store empty CourseList
-              Promise.all(allDone)
-              .then(() => {
-                this.directoriesPresent = true;
-                resolve('OK');
+              let p1a = this.makeDirectory(this.formatGroupsPath());
+              allDone.push(p1a);
+              p1a.then(() =>{
+                allDone.push(this.storeGroupListFile({groups: [], lastGroup: '', 
+                        measurementSystem: 'US', theme: COLOR_THEME_DARK}))  // store empty GroupsObj
               })
-              .catch((err) => reject('Error creating directories\n' + err))
-            })
-          }
+            }
+          })
+          let p2 = RNFetchBlob.fs.isDir(pDir);
+          allDone.push(p2);                         // Pictures directory?
+          p2.then((haveDir) => {
+            if(!haveDir) {
+              allDone.push(RNFetchBlob.fs.mkdir(pDir))
+            }
+          })
+          let p3 = RNFetchBlob.fs.isDir(cDir);                         // Courses directory?
+          allDone.push(p3);
+          p3.then((haveDir) => {
+            if(!haveDir) {
+              let p3a = this.makeDirectory(cDir);
+              allDone.push(p3a);
+              p3a.then(() =>{
+                allDone.push(this.storeCourseListFile({courses: []}))  // store empty CourseList
+              })
+            }
+          })
           Promise.all(allDone)
           .then(() => {
             this.directoriesPresent = true;
             resolve('OK');
           })
           .catch((err) => reject('Error creating directories\n' + err))
-        })
-      }
-      else {
-        reject('No Storage Permission');
-      }
+        }
+        else {
+          reject('No Storage Permission');
+        }
+      })
     })
   }
 
@@ -312,6 +332,15 @@ export class StorageSvc {
     return this.removeDataItem(this.formatCoursePath(course));
   }
 
+  // Read the Courses directory. Return an RNFetchBlobStat[]
+  readCoursesDirectory = () : Promise<RNFetchBlobStat[]> => {
+    return new Promise((resolve, reject) => {
+      RNFetchBlob.fs.lstat(this.formatCoursesPath())      // read directory for the courses
+      .then((coursesDir : RNFetchBlobStat[]) => resolve(coursesDir))
+      .catch(() => reject('ERROR: READING_GROUP_DIRECTORY'))
+    })
+  }
+
   // remove the file with the given path from the database
   removeDataItem = (path: string) : Promise<any> => {
     return RNFetchBlob.fs.unlink(path);
@@ -432,7 +461,7 @@ export class StorageSvc {
         }
       })
       .catch ((err) => {
-        // Error reading list of keys
+        // Error reading list of paths
         reject('ERROR: READING_PATHS\n' + err);
       })      
     })
@@ -564,13 +593,14 @@ export class StorageSvc {
     })
   }
 
-  // ***********************************************************************************************************
-  // this section is because Auto Backup would not work on my phone and I ended up getting banned from backups.
-  // I will hopefully only use this once
+  // ***************************************  MongoDB routines ****************************************
+  // I use this stuff to move treks from one device to another
+
+
   private apiUrl = 'https://serve-mdb.appspot.com/api/'
   private treksUrl = this.apiUrl + 'origins';
 
-  // read the list from the given list table in the database
+  // read all the treks stored in the MongoDB for the given group (uid)
   // returns: promise
   // get('/api/<list>')
   private readTrekFiles(uid: string): Promise<any | TrekData[]> {
@@ -579,7 +609,7 @@ export class StorageSvc {
     .catch(() => {})
   }
 
-  // write the given item to the given table in the database 
+  // write the given TrekData the MongoDB database 
   // use /api/tableName[/:id]
   // returns: promise
   private writeTrekFile(data: TrekData): Promise<any | string | TrekData> {
@@ -596,151 +626,73 @@ export class StorageSvc {
     .catch(() => {});
   }
 
-  // send all TrekLog files to mongoDB
-  backupTreksToMongo = () => {
-    let allDone : Promise<any>[] = [];
+  // write all treks from the given groups to the MongoDB
+  writeTreksToMongoDB = (groups: string[]) : Promise<any> => {
+    let allDone : Promise<any>[]= [];
+    let count = 0;
 
     return new Promise((resolve, reject) => {
-      this.fetchGroupListFile()
-      .then((ulf) => {
-        let groupList : any = JSON.parse(ulf);
-        groupList.groups = groupList.users;
-        groupList.users = undefined;
-        groupList.lastGroup = groupList.lastUser;
-        groupList.lastUser = undefined;
-        let tData = {
-          userId: 'Groups', //TREKLOG_GROUPS_DIRECTORY,
-          fileName: 'Groups.txt', //TREKLOG_GROUPS_FILENAME,
-          data: groupList
-        };
-        allDone.push(this.writeTrekFile(tData));            // write the list of groups file
-        let groups = groupList.groups;
-        for(let i=0; i<groups.length; i++){
-            allDone.push(this.backupGroupFiles(groups[i]));     // write all files for each group
-        };
-        // allDone.push(this.backupGroupFiles('Joan'));     // write all files for Joan
+      if(groups.length){
+        let p = this.readAllTrekFiles(groups)                 // read the treks from the device
+        allDone.push(p);
+        p.then((result) => {
+          let treks = result.list;
+          count = treks.length;
+          for(let j=0; j<treks.length; j++) {
+            allDone.push(this.writeTrekToMongoDb(treks[j]))
+          }
+        })
+        .catch((err) => reject('Error reading treks.\n' + err))
         Promise.all(allDone)
-        .then(() => resolve('All groups saved'))
-        .catch((err) => reject('Error saving groups\n' + err))
-      })
-      .catch((err) => reject(err))
+        .then(() => resolve(count + ' treks uploaded.'))
+        .catch((err) => reject('Error uploading files.\n' + err))
+      } else {
+        resolve("Nothing to do.");
+      }
     })
   }
 
-  // send files for given group to mongoDB
-  // store with userId = group
-  private backupGroupFiles = (group: string) => {
+  // write the given trek to the MongoDb
+  public writeTrekToMongoDb = (trek: TrekObj) => {
+    let trData = {
+      userId: trek.group,
+      fileName: trek.sortDate + TREKLOG_FILE_EXT,
+      data: trek
+    };
+    return this.writeTrekFile(trData);        // write trek
+  }
+
+  // read and store all the treks from the MongoDB with the given group as their userId field
+  // this will overwrite if trek already exists on device
+  public readTreksFromMongoDB = (groups: string[]) => {
     let allDone : Promise<any>[]= [];
+    let count = 0;
 
     return new Promise((resolve, reject) => {
-      
-      this.fetchGroupSettingsFile(group)
-      .then((settings) => {
-        let sets = JSON.parse(settings);
-        sets.group = sets.user;
-        sets.user = undefined;
-        let sData = {
-          userId: group,
-          fileName: TREKLOG_SETTINGS_FILENAME,
-          data: sets
-        }
-        allDone.push(this.writeTrekFile(sData));              // write group's settings
-        this.fetchGoalListFile(group) 
-        .then((goals) => {
-          let gData = {
-            userId: group,
-            fileName: TREKLOG_GOALS_FILENAME,
-            data: JSON.parse(goals)
-          }
-          allDone.push(this.writeTrekFile(gData))             // write goals list
-          this.readAllTrekFiles([group])
-          .then((result) => {
-            let list : any[] = result.list;
-            for(let i=0; i<list.length; i++){    
-              list[i].group = list[i].user;
-              list[i].user = undefined;
-              let trData = {
-                userId: group,
-                fileName: list[i].sortDate + TREKLOG_FILE_EXT,
-                data: list[i]
-              };
-              allDone.push(this.writeTrekFile(trData));        // write each trek
+      if(groups.length){
+        for(let i=0; i<groups.length; i++) {
+          let p = this.readTrekFiles(groups[i]);                 // read the treks from mongoDB
+          allDone.push(p);
+          p.then((files) => {
+            let uFiles = files;
+            count += uFiles.length;
+            for(let j=0; j<uFiles.length; j++) {
+              allDone.push(this.saveDataItem(this.formatGroupPath(groups[i]) + '/' + uFiles[j].fileName, 
+                                              JSON.stringify(uFiles[j].data)))
             }
-            Promise.all(allDone)
-            .then(() => {
-              resolve('OK');
-              // this.deleteGroupFiles(group)
-              // .then(() => resolve('OK'))
-              // .catch((err) => reject('Error unlinking ' + group + '\n' + err))
-            })
-            .catch((err) => reject('Error saving ' + group + '\n' + err))
           })
-          .catch((err) => reject('Reading Treks for ' + group + '\n' + err))
-        })
-      })
-      .catch((err) => reject(group + ':\n' + err))
+          .catch((err) => reject('Error reading files.\n' + err))
+        }
+        Promise.all(allDone)
+        .then(() => resolve(count + ' treks downloaded.'))
+        .catch((err) => reject('Error saving files.\n' + err))
+      } else {
+        resolve("Nothing to do.");
+      }
     })
   }
 
-  // restore all TrekLog files from mongoDb
-  restoreTreksFromMongo = () => {
-    let allDone : Promise<any>[] =[];
-    let error;
-
-    return new Promise((resolve, reject) => {
-      // RNFetchBlob.fs.isDir(this.formatGroupsPath())
-      // .then((found) => {
-      //   if(!found){
-          this.readTrekFiles(TREKLOG_GROUPS_DIRECTORY)                      // read the groups list from MongoDB
-          .then((uList) => {
-            error = "Error makdir Groups Directory\n";
-            this.makeDirectory(this.formatGroupsPath())                     // make the groups directory
-            .then(() => {
-              error = "Error parse uList\n";
-              let groupList = uList[0].data;
-              allDone.push(this.storeGroupListFile(groupList));               // save the list of groups
-              error = 'Something else'
-              for(let i=0; i<groupList.groups.length; i++) {
-                allDone.push(this.restoreGroupFiles(groupList.groups[i]))     // restore files for each group
-              }
-              Promise.all(allDone)
-              .then(() => resolve('Restored all groups'))
-              .catch((err) => reject('Error restoring groups\n' + err))
-            })
-            .catch(() => resolve(error))
-          })
-      //   }
-      //   else {resolve('Already done')}
-      // })
-      .catch((err) => resolve("Error Groups Directory\n" + err))
-    })
-  }
-
-  // restore files for given group from mongoDB
-  // files were stored with userId = group
-  private restoreGroupFiles = (group: string) => {
-    let allDone : Promise<any>[]= [];
-
-    return new Promise((resolve, reject) => {
-      this.makeDirectory(this.formatGroupPath(group))         // create path for group's files
-      .then(() => {
-        this.readTrekFiles(group)                            // read the group's data from mongoDB
-        .then((uFiles) => {
-          // alert(group + '|' + uFiles.length)
-          for(let i=0; i<uFiles.length; i++) {
-            allDone.push(this.saveDataItem(this.formatGroupPath(group) + '/' + uFiles[i].fileName, 
-                                           JSON.stringify(uFiles[i].data)))
-          }
-          Promise.all(allDone)
-          .then(() => resolve('OK'))
-          .catch((err) => reject('Error restoring ' + group + '\n' + err))
-        })
-      })
-    })
-  }
-
-  //***************************** Async ***********************************************/
-
+//***************************************** end of MongoDB routines **************************/
   // save the restore object
   storeRestoreObj = (resObj: RestoreObject) : Promise<any> => {
     let fileName = this.formatGroupsPath() + '/TrekRestoreObj.txt';

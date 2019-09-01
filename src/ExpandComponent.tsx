@@ -1,74 +1,69 @@
-import React from 'react';
+import React, { useState, useEffect } from "react";
 import { Animated } from 'react-native';
-import { observer } from 'mobx-react'
+import { AnimatedValue } from "react-navigation";
 
-@observer
-export class ExpandView extends React.Component<{ 
-  startValue ?: number,
-  endValue ?: number,
-  bgColor ?: string,
-  open ?: boolean,
-  style ?: any,      
-  duration : number,   
-}, {} > { 
+function ExpandView({ 
+  startValue = undefined,
+  endValue = undefined,
+  bgColor = undefined,
+  isOpen = undefined,
+  style = undefined,      
+  duration = undefined,   
+  openDelay = undefined,
+  closeDelay = undefined,
+  beforeOpenFn = undefined,
+  afterCloseFn = undefined,
+  children
+}) {
+  const [scaleAnim] = useState<AnimatedValue>(new Animated.Value(startValue));
 
-  state = {
-    fadeAnim: new Animated.Value(this.props.startValue)  // Initial value for opacity   
-  }
+  useEffect(() => {             // componentDidMount
+    close();           
+  },[]);
 
-  componentDidMount() {
-    requestAnimationFrame(() => {
-      this.open();
-    })
-  }
+  useEffect(() => {      
+    isOpen ? open() : close();           
+  },[isOpen]);
 
-  componentWillUnmount() {
-    this.close();
-  }
 
-  componentDidUpdate(prev){
-    // alert(this.props.open)
-    if (prev.open !== this.props.open){
-      this.props.open ? this.open() : this.close();
+  function open() {
+    if (beforeOpenFn) {
+      beforeOpenFn();
     }
-  }
-  
-  open = () => {
-    Animated.timing(                  // Animate over time
-      this.state.fadeAnim,            // The animated value to drive
+    Animated.timing(                          // Animate over time
+      scaleAnim,                              // The animated value to drive
       {
-        toValue: this.props.endValue, // Animate to final Y position
-        duration: this.props.duration, 
-        useNativeDriver: true,         
-      }
-    ).start();                        // Starts the animation
+        toValue: endValue,                    // Animate to final scale
+        duration: duration,                   // Make it take a while
+        delay: openDelay,
+        useNativeDriver: true,
+      }       
+    ).start();                                // Starts the animation
   }
 
-  close = () => {
-    Animated.timing(                  // Animate over time
-      this.state.fadeAnim,            // The animated value to drive
+  function close() {
+    Animated.timing(                          // Animate over time
+      scaleAnim,                              // The animated value to drive
       {
-        toValue: this.props.startValue,    // Animate to starting Y position
-        duration: 300,            
+        toValue: startValue,                  // Animate to starting opacity 
+        duration: duration,                   // Make it take a while
+        delay: closeDelay,
         useNativeDriver: true,         
       }
-    ).start();                        // Starts the animation
-  }
+      ).start(afterCloseFn ? afterCloseFn : undefined);  // Starts the animation
+    }
 
-  render() {
-    let { fadeAnim } = this.state;
     return (
-      <Animated.View                 // Special animatable View
+      <Animated.View                          // Special animatable View
         style={{
-          ...this.props.style,
-          backgroundColor: this.props.bgColor,
-          transform: [{translateY: fadeAnim}]         // Bind translateY to animated value
+          ...style,
+          backgroundColor: bgColor,
+          transform: [{scale: scaleAnim}]    // Bind scale transform to animated value
         }}
       >
-        {this.props.children}
+        {children}
       </Animated.View>
     );
-  }
 }
 
 export default ExpandView;

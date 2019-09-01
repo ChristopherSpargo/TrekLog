@@ -5,11 +5,11 @@ import { observer, inject } from 'mobx-react'
 import { observable, action } from 'mobx';
 import { NavigationActions } from 'react-navigation';
 
-import { FilterSvc, FilterSettingsObj } from './FilterService'
+import { FilterSvc, FilterSettingsObj, FILTERMODE_DASHBOARD, FILTERMODE_FROM_STATS } from './FilterService'
 import { TrekInfo, ALL_SELECT_BITS } from './TrekInfoModel'
-import { UtilsSvc } from './UtilsService';
+import { UtilsSvc, TIME_FRAMES, TIME_FRAME_DISPLAY_NAMES,
+         TimeFrameType } from './UtilsService';
 import IconButton from './IconButtonComponent';
-import { TIME_FRAMES, TIME_FRAME_DISPLAY_NAMES } from './ReviewComponent';
 import TrekTypeSelect from './TrekTypeSelectComponent';
 import SvgIcon from './SvgIconComponent';
 import { APP_ICONS } from './SvgImages';
@@ -39,26 +39,22 @@ class ExtraFilters extends Component<{
   @observable headerTitle;
 
   tInfo = this.props.trekInfo;
+  uSvc = this.props.utilsSvc;
   fS = this.props.filterSvc;
   AFFIndex: number;
   typeSels = 0;
   origFilter : FilterSettingsObj;
-  updateDshBrd = true;
+  updateDshBrd = '';
 
   activeNav : string = '';
 
   componentWillMount() {
     this.origFilter = this.props.navigation.getParam('existingFilter');
     this.updateDshBrd = this.tInfo.updateDashboard;
-    this.tInfo.updateDashboard = true;
     this.typeSels = this.tInfo.typeSelections;
     this.setRadioPickerOpen(false);
     this.setOpenItems(false);
     this.setHeaderTitle(this.props.navigation.getParam('title', ''))
-    if (this.fS.filterMode === 'Dashboard') {
-      this.tInfo.setTypeSelections(ALL_SELECT_BITS);
-      this.fS.filterTreks(false);
-    }
   }
 
   componentDidMount() {
@@ -71,11 +67,8 @@ class ExtraFilters extends Component<{
   componentWillUnmount() {
     this.fS.removeAfterFilterFn(this.AFFIndex - 1);
     this.tInfo.updateDashboard = this.updateDshBrd;
-    if (this.fS.filterMode === 'Dashboard') {
-      this.tInfo.setTypeSelections(this.typeSels);
-    }
-    else {
-      this.fS.filterTreks(true);
+    if (this.fS.filterMode !== FILTERMODE_DASHBOARD) {
+      this.fS.buildAfterFilter();
     }
     this.fS.filterMode = '';
   }
@@ -108,8 +101,23 @@ class ExtraFilters extends Component<{
     this.fS.setTypeSels(this.typeSels);
   }
 
+  callGetDateMin = () => {
+    this.fS.getDateMin()
+    .then(() => {})
+    .catch(() => {
+    })
+  }
+
+  callGetDateMax = () => {
+    this.fS.getDateMax()
+    .then(() => {
+    })
+    .catch(() => {})
+  }
+  
   openRadioPicker = () => {
-    let selNames = TIME_FRAMES.map((item) => item.name);
+    let selNames = TIME_FRAMES.map((item) => 
+          this.uSvc.formatTimeframeDisplayName(item.value as TimeFrameType))
     let selValues = TIME_FRAMES.map((item) => item.value);
 
     this.props.modalSvc.openRadioPicker({heading: 'Select A Timeframe', selectionNames: selNames,
@@ -117,6 +125,7 @@ class ExtraFilters extends Component<{
                               openFn: this.setRadioPickerOpen})
     .then((newTimeframe) => {
       this.fS.setTimeframe(newTimeframe);
+      this.fS.buildAfterFilter();
     })
     .catch(() =>{ 
     })
@@ -124,37 +133,43 @@ class ExtraFilters extends Component<{
 
   @action
   resetFilter = (fName: string) => {
-      switch(fName){
-        case 'Date':
-          this.fS.setTimeframe(this.origFilter.timeframe, false)
-        break;
-        case 'Dist':
-          this.fS.resetDistFilter(false);
-        break;
-        case 'Time':
-          this.fS.resetTimeFilter(false);
-        break;
-        case 'Speed':
-          this.fS.resetSpeedFilter(false);
-        break;
-        case 'Cals':
-          this.fS.resetCalsFilter(false);
-        break;
-        case 'Steps':
-          this.fS.resetStepsFilter(false);
-        break;
-      }
-      if(this.fS.filterMode === 'Dashboard') { this.tInfo.setTypeSelections(ALL_SELECT_BITS); }
+    if(this.fS.filterMode === FILTERMODE_DASHBOARD) { 
+      this.tInfo.setTypeSelections(ALL_SELECT_BITS); 
+    }
+    switch(fName){
+      case 'Date':
+        this.fS.setTimeframe(this.origFilter.timeframe)
+      break;
+      case 'Dist':
+        this.fS.resetDistFilter();
+      break;
+      case 'Time':
+        this.fS.resetTimeFilter();
+      break;
+      case 'Speed':
+        this.fS.resetSpeedFilter();
+      break;
+      case 'Cals':
+        this.fS.resetCalsFilter();
+      break;
+      case 'Steps':
+        this.fS.resetStepsFilter();
+      break;
+    }
+    if (fName !== 'Date') {
       this.fS.filterTreks();
+      this.fS.runAfterFilterFns();
+    }
   }
   
   render() {
 
-    const { cardLayout, navItem, navIcon, pageTitle } = this.props.uiTheme;
+    const { cardLayout, navItem, navIcon, pageTitle, fontRegular,
+            formTextInput, formNumberInput } = this.props.uiTheme;
     const { highTextColor, pageBackground, secondaryColor, trekLogBlue, listIconColor,
-            primaryColor, dividerColor, rippleColor, navItemBorderColor
+            primaryColor, dividerColor, rippleColor, navItemBorderColor, mediumTextColor
              } = this.props.uiTheme.palette[this.tInfo.colorTheme];
-    const cardHeight = 115;
+    const cardHeight = 130;
     const settingIconSize = 24;
     const resetIconColor = secondaryColor;
     const timeframeSelectIconSize = 26;
@@ -181,31 +196,30 @@ class ExtraFilters extends Component<{
         paddingBottom: 15,
       },
       labelText: {
-        color: highTextColor,
+        fontFamily: fontRegular,
+        color: mediumTextColor,
         marginLeft: 5,
         marginTop: -5,
-        fontSize: 16,
+        fontSize: 18,
       },
       titleText: {
+        fontFamily: fontRegular,
         color: primaryColor,
-        fontSize: 18
+        fontSize: 20
       },
       toText: {
         marginRight: 5,
-        fontSize: 16,
-        color: highTextColor
+        fontFamily: fontRegular,
+        fontSize: 18,
+        color: mediumTextColor
       },
       textInputItem: {
-        height: 40,
-        width: 200,
-        borderWidth: 0,
-        color: highTextColor,
-        fontWeight: "300",
-        fontSize: 18,
+        ...formTextInput,
+        ...formNumberInput,
         marginRight: 5,
       },      
       inputTextStyle: {
-        fontWeight: "300",
+        fontFamily: fontRegular,
         color: trekLogBlue,
         fontSize: 18,
       },
@@ -222,12 +236,9 @@ class ExtraFilters extends Component<{
         marginTop: -10,
       },
       dateInputText: {
-        fontWeight: "300",
+        fontFamily: fontRegular,
         color: trekLogBlue,
-        fontSize: 18,
-      },
-      numberInput: {
-        width: 75,
+        fontSize: 22,
       },
       mr10: {
         marginRight: 10
@@ -245,7 +256,8 @@ class ExtraFilters extends Component<{
       },
       resetIconLabel: {
         marginTop: -3,
-        fontSize: 12,
+        fontFamily: fontRegular,
+        fontSize: 14,
       },
       rowStart: {
         flexDirection: "row",
@@ -257,6 +269,11 @@ class ExtraFilters extends Component<{
         height: settingIconSize,
         marginRight: 6,
         backgroundColor: "transparent"
+      },
+      timeFrameName:{
+        fontSize: 22,
+        fontFamily: fontRegular,
+        color: highTextColor,
       },
       timeframeSelectButtonStyle: {
         height: timeframeSelectButtonSize,
@@ -277,12 +294,12 @@ class ExtraFilters extends Component<{
             <Text style={[pageTitle, {color: highTextColor}]}>Filter Settings</Text>
           </View>
           <ScrollView>
-            {this.fS.filterMode !== 'Dashboard' &&
+            {this.fS.filterMode !== FILTERMODE_DASHBOARD &&
               <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
                           duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
-                <SlideDownView startValue={-130} endValue={0} open={this.openItems} 
+                <SlideDownView startValue={-140} endValue={0} open={this.openItems} 
                                 duration={SCROLL_DOWN_DURATION}>
-                  <View style={[cardLayout, styles.cardCustom, {paddingTop: 10, height: cardHeight + 30}]}>
+                  <View style={[cardLayout, styles.cardCustom, {paddingTop: 10, minHeight: 140}]}>
                     <View style={styles.rowStart}>
                       <Text style={styles.titleText}>Types</Text>
                     </View>
@@ -306,7 +323,7 @@ class ExtraFilters extends Component<{
                       </View>
                     </View>
                       <TrekTypeSelect
-                        size={50}
+                        size={40}
                         selected={this.tInfo.typeSelections}
                         onChangeFn={this.fS.setType}
                       />
@@ -314,71 +331,78 @@ class ExtraFilters extends Component<{
                 </SlideDownView>
               </FadeInView>       
             }
-            <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
-                        duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
-              <SlideDownView startValue={-130} endValue={0} open={this.openItems} 
-                              duration={SCROLL_DOWN_DURATION}>
-                <View style={[cardLayout, styles.cardCustom, {paddingTop: 10, paddingBottom: 0}]}>
-                  <View style={styles.rowStart}>
-                      <Text style={styles.titleText}>Dates</Text>
-                  </View>
-                  <View style={styles.rowStart}>
-                    <SvgIcon
-                      style={styles.settingIcon}
-                      size={settingIconSize}
-                      paths={APP_ICONS['CalendarRange']}
-                      fill={listIconColor}
-                    />
-                    <Text style={styles.labelText}>Show treks from:</Text>
-                    <View style={styles.resetIconArea}>
-                      <IconButton
-                        icon="History"
-                        disabled={!timeframeChanged}
-                        color={resetIconColor}
-                        onPressFn={this.resetFilter}
-                        onPressArg={'Date'}
-                        style={styles.resetIcon}
+            {this.fS.filterMode !== FILTERMODE_DASHBOARD && 
+             this.fS.filterMode !== FILTERMODE_FROM_STATS &&
+              <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                          duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                <SlideDownView startValue={-140} endValue={0} open={this.openItems} 
+                                duration={SCROLL_DOWN_DURATION}>
+                  <View style={[cardLayout, styles.cardCustom, {paddingTop: 10, minHeight: 140}]}>
+                    <View style={styles.rowStart}>
+                        <Text style={styles.titleText}>Dates</Text>
+                    </View>
+                    <View style={styles.rowStart}>
+                      <SvgIcon
+                        style={styles.settingIcon}
+                        size={settingIconSize}
+                        paths={APP_ICONS['CalendarRange']}
+                        fill={listIconColor}
+                      />
+                      <Text style={styles.labelText}>Show treks from:</Text>
+                      <View style={styles.resetIconArea}>
+                        <IconButton
+                          icon="History"
+                          disabled={!timeframeChanged}
+                          color={resetIconColor}
+                          onPressFn={this.resetFilter}
+                          onPressArg={'Date'}
+                          style={styles.resetIcon}
+                        />
+                      </View>
+                    </View>
+                    <View style={[styles.rowLayout, {marginTop: -12, marginLeft: 80}]}>
+                      <RectButton
+                        rippleColor={rippleColor}
+                        onPress={this.openRadioPicker}
+                      >
+                        <Text style={styles.timeFrameName}>{TIME_FRAME_DISPLAY_NAMES[this.tInfo.timeframe]}</Text>
+                      </RectButton>
+                      <IconButton 
+                        iconSize={timeframeSelectIconSize}
+                        icon="CalendarEdit"
+                        style={{...navItem, ...styles.timeframeSelectButtonStyle}}
+                        borderColor={navItemBorderColor}
+                        raised
+                        iconStyle={navIcon}
+                        color={secondaryColor}
+                        onPressFn={this.openRadioPicker}
                       />
                     </View>
-                  </View>
-                    <View style={[styles.rowLayout, {marginTop: -12, marginLeft: 80}]}>
-                    <Text style={{color: highTextColor, fontSize: 18, width: 150}}>
-                          {TIME_FRAME_DISPLAY_NAMES[this.tInfo.timeframe]}</Text>
-                        <IconButton 
-                          iconSize={timeframeSelectIconSize}
-                          icon="CalendarEdit"
-                          style={{...navItem, ...styles.timeframeSelectButtonStyle}}
-                          borderColor={navItemBorderColor}
-                          raised
-                          iconStyle={navIcon}
-                          color={secondaryColor}
-                          onPressFn={this.openRadioPicker}
-                        />
+                    <View style={[styles.rowLayout]}>
+                      <RectButton
+                        rippleColor={rippleColor}
+                        onPress={this.callGetDateMin}
+                      >
+                        <View style={[styles.rowStart, styles.dateInputArea]}>
+                          <Text style={styles.dateInputText}>
+                          {this.fS.dateMin}</Text>
+                        </View>
+                      </RectButton>
+                      <Text style={[styles.toText, {marginTop: -8, marginLeft: 5}]}> - </Text>
+                      <RectButton
+                        rippleColor={rippleColor}
+                        onPress={this.callGetDateMax}
+                      >
+                        <View style={[styles.rowStart, styles.dateInputArea]}>
+                          <Text style={styles.dateInputText}>
+                          {this.fS.dateMax}</Text>
+                        </View>
+                      </RectButton>
                     </View>
-                  <View style={[styles.rowLayout]}>
-                    <RectButton
-                      rippleColor={rippleColor}
-                      onPress={this.fS.getDateMin}
-                    >
-                      <View style={[styles.rowStart, styles.dateInputArea]}>
-                        <Text style={styles.dateInputText}>
-                        {this.fS.dateMin === '' ? this.fS.dateDefMin : this.fS.dateMin}</Text>
-                      </View>
-                    </RectButton>
-                    <Text style={[styles.toText, {marginTop: -6, marginLeft: 5}]}> - </Text>
-                    <RectButton
-                      rippleColor={rippleColor}
-                      onPress={this.fS.getDateMax}
-                    >
-                      <View style={[styles.rowStart, styles.dateInputArea]}>
-                        <Text style={styles.dateInputText}>
-                        {this.fS.dateMax === '' ? this.fS.dateDefMax : this.fS.dateMax}</Text>
-                      </View>
-                    </RectButton>
-                  </View>
-                </View>  
-              </SlideDownView>
-            </FadeInView>       
+                  </View>  
+                </SlideDownView>
+              </FadeInView>     
+            }  
             <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
                         duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
               <SlideDownView startValue={-130} endValue={0} open={this.openItems} 
@@ -408,14 +432,14 @@ class ExtraFilters extends Component<{
                   </View>
                   <View style={styles.rowLayout}>
                     <TextInputField
-                      style={[styles.textInputItem, styles.numberInput]}
+                      style={styles.textInputItem}
                       onChangeFn={(text) => this.fS.setFilterItem('distMin', text)}
                       placeholderValue={this.fS.distMin !== '' ? this.fS.distMin : this.fS.distDefMin}
                       pvDisplayOnly={this.fS.distMin === ''}
                     />
                     <Text style={styles.toText}> to </Text>
                     <TextInputField
-                      style={[styles.textInputItem, styles.numberInput]}
+                      style={styles.textInputItem}
                       onChangeFn={(text) => this.fS.setFilterItem('distMax', text)}
                       placeholderValue={this.fS.distMax !== '' ? this.fS.distMax : this.fS.distDefMax}
                       pvDisplayOnly={this.fS.distMax === ''}
@@ -454,14 +478,14 @@ class ExtraFilters extends Component<{
                   </View>
                   <View style={styles.rowLayout}>
                     <TextInputField
-                      style={[styles.textInputItem, styles.numberInput]}
+                      style={styles.textInputItem}
                       onChangeFn={(text) => this.fS.setFilterItem('timeMin', text)}
                       placeholderValue={this.fS.timeMin ? this.fS.timeMin : this.fS.timeDefMin}
                       pvDisplayOnly={this.fS.timeMin === ''}
                     />
                     <Text style={styles.toText}> to </Text>
                     <TextInputField
-                      style={[styles.textInputItem, styles.numberInput]}
+                      style={styles.textInputItem}
                       onChangeFn={(text) => this.fS.setFilterItem('timeMax', text)}
                       placeholderValue={this.fS.timeMax ? this.fS.timeMax : this.fS.timeDefMax}
                       pvDisplayOnly={this.fS.timeMax === ''}
@@ -500,14 +524,14 @@ class ExtraFilters extends Component<{
                   </View>
                   <View style={styles.rowLayout}>
                     <TextInputField
-                      style={[styles.textInputItem, styles.numberInput]}
+                      style={styles.textInputItem}
                       onChangeFn={(text) => this.fS.setFilterItem('speedMin', text)}
                       placeholderValue={this.fS.speedMin ? this.fS.speedMin : this.fS.speedDefMin}
                       pvDisplayOnly={this.fS.speedMin === ''}
                     />
                     <Text style={styles.toText}> to </Text>
                     <TextInputField
-                      style={[styles.textInputItem, styles.numberInput]}
+                      style={styles.textInputItem}
                       onChangeFn={(text) => this.fS.setFilterItem('speedMax', text)}
                       placeholderValue={this.fS.speedMax ? this.fS.speedMax : this.fS.speedDefMax}
                       pvDisplayOnly={this.fS.speedMax === ''}
@@ -546,15 +570,15 @@ class ExtraFilters extends Component<{
                 </View>
                 <View style={styles.rowLayout}>
                   <TextInputField
-                    style={[styles.textInputItem, styles.numberInput]}
-                    onChangeFn={(text) => this.fS.setFilterItem('calsMin', text)}
+                      style={styles.textInputItem}
+                      onChangeFn={(text) => this.fS.setFilterItem('calsMin', text)}
                     placeholderValue={this.fS.calsMin ? this.fS.calsMin : this.fS.calsDefMin}
                     pvDisplayOnly={this.fS.calsMin === ''}
                   />
                   <Text style={styles.toText}> to </Text>
                   <TextInputField
-                    style={[styles.textInputItem, styles.numberInput]}
-                    onChangeFn={(text) => this.fS.setFilterItem('calsMax', text)}
+                      style={styles.textInputItem}
+                      onChangeFn={(text) => this.fS.setFilterItem('calsMax', text)}
                     placeholderValue={this.fS.calsMax ? this.fS.calsMax : this.fS.calsDefMax}
                     pvDisplayOnly={this.fS.calsMax === ''}
                   />
@@ -591,15 +615,15 @@ class ExtraFilters extends Component<{
                 </View>
                 <View style={styles.rowLayout}>
                   <TextInputField
-                    style={[styles.textInputItem, styles.numberInput]}
-                    onChangeFn={(text) => this.fS.setFilterItem('stepsMin', text)}
+                      style={styles.textInputItem}
+                      onChangeFn={(text) => this.fS.setFilterItem('stepsMin', text)}
                     placeholderValue={this.fS.stepsMin ? this.fS.stepsMin : this.fS.stepsDefMin}
                     pvDisplayOnly={this.fS.stepsMin === ''}
                   />
                   <Text style={styles.toText}> to </Text>
                   <TextInputField
-                    style={[styles.textInputItem, styles.numberInput]}
-                    onChangeFn={(text) => this.fS.setFilterItem('stepsMax', text)}
+                      style={styles.textInputItem}
+                      onChangeFn={(text) => this.fS.setFilterItem('stepsMax', text)}
                     placeholderValue={this.fS.stepsMax ? this.fS.stepsMax : this.fS.stepsDefMax}
                     pvDisplayOnly={this.fS.stepsMax === ''}
                   />

@@ -1,11 +1,11 @@
-import React, { Component } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { Component, MutableRefObject } from 'react';
+import { View, Text, StyleSheet, Image, Dimensions, FlatList } from 'react-native';
 import { RectButton } from 'react-native-gesture-handler'
 import { observer, inject } from 'mobx-react';
 import { action, observable } from 'mobx';
 
 import { TrekInfo, SWITCH_SPEED_AND_TIME, PLURAL_STEP_NAMES, STEP_NAMES, SPEED_UNIT_CHOICES,
-         WEIGHT_UNIT_CHOICES, TREK_TYPE_HIKE} from './TrekInfoModel';
+         WEIGHT_UNIT_CHOICES, TREK_TYPE_HIKE, STEPS_APPLY} from './TrekInfoModel';
 import { UtilsSvc, LB_PER_KG, TERRAIN_DESCRIPTIONS } from './UtilsService';
 import { APP_ICONS} from './SvgImages';
 import SvgIcon from './SvgIconComponent';
@@ -18,11 +18,14 @@ import { LoggingSvc } from './LoggingService';
 @inject('trekInfo', 'utilsSvc', 'uiTheme', 'filterSvc', 'modalSvc', 'weatherSvc', 'loggingSvc')
 @observer
 export class TrekDetails extends Component<{
-  heightAdj ?: number,             // hight of the display area
+  selected ?: number,           // number of selected item from associated list (barGraph)
+  heightAdj ?: number,          // hight of the display area
   sortBy?: string,              // what to highlight as current sort value
+  sortByDate?: boolean,         // true if sort by date in effect
   selectable ?: boolean,        // true if "show" selections are allowed/processed
   selectFn ?: Function,         // function to call when switch 'show' selections are allowed
   switchSysFn ?: Function,      // call if want to switch measurement systems
+  showImagesFn ?: Function,     // function to call if user taps an image
   uiTheme ?: any,
   filterSvc ?: FilterSvc,
   utilsSvc ?: UtilsSvc,
@@ -46,6 +49,14 @@ export class TrekDetails extends Component<{
     this.initializeObservables();
   }
 
+  componentDidUpdate(prevProps) {
+    if(prevProps.selected !== this.props.selected){
+      if(this.tInfo.haveTrekImages() && this.scrollViewRef){
+        this.scrollViewRef.scrollToOffset({offset: 0, animated: true});
+      }
+    }
+  }
+  
   // initialize all the observable properties in an action for mobx strict mode
   @action
   initializeObservables = () => {
@@ -119,7 +130,7 @@ export class TrekDetails extends Component<{
   }
 
   formattedCalories = (showTotal: boolean) => {
-    return showTotal ?  this.tInfo.currentCalories : this.tInfo.currentNetCalories;
+    return showTotal ?  this.tInfo.currentCalories : this.tInfo.currentNetCalories + '/min';
   }
 
   // toggle between displaying time/distance and distance/time
@@ -170,10 +181,18 @@ export class TrekDetails extends Component<{
     }
   }
 
+  // call the given function function to show the selected trek image
+  showSelectedImage = (set: number, image: number) => {
+    this.props.showImagesFn(set, image);
+  }
+
+
   render() {
+    const { width } = Dimensions.get('window');
     const { highTextColor, dividerColor, mediumTextColor, trekLogBlue, listIconColor, secondaryColor,
             pageBackground, disabledTextColor, highlightedItemColor, rippleColor
           } = this.props.uiTheme.palette[this.tInfo.colorTheme];
+    const { fontRegular, fontBold, fontItalic } = this.props.uiTheme;
     const tInfo = this.props.trekInfo;
     const uSvc = this.props.utilsSvc;
     const selectable = this.props.selectable;
@@ -181,15 +200,26 @@ export class TrekDetails extends Component<{
     const showSpeed = this.showSpeedOrTime === 'speed';
     const hasLabel = tInfo.trekHasLabel();
     const hasNotes = tInfo.trekHasNotes();
+    const hasImages = tInfo.haveTrekImages();
     const labelText = hasLabel ? tInfo.trekLabel : 'No Label';
     const noteText = hasNotes ? tInfo.trekNotes : 'No Notes'; 
     const sortButtonHeight = 43;
+    const trekImageHeight = sortButtonHeight * 3;
+    const trekImageWidth = trekImageHeight * .75;
     const sortIconSize = 20;
     const speedLabel = showSpeed ? 'Average Speed' : 'Average Pace';
     const stepsLabel = (this.showStepsPerMin) ? (STEP_NAMES[tInfo.type] + ' Rate')
                                               : PLURAL_STEP_NAMES[tInfo.type];
-    const calsLabel  = (this.showTotalCalories) ? 'Calories' : 'Calories/Min';
+    const calsLabel  = (this.showTotalCalories) ? 'Calories' : 'Calorie Rate';
     const carIconSize = 14;
+
+    let imageData = [];
+
+    if (hasImages) {
+      this.tInfo.trekImages.forEach((iSet, sIndex) => {
+        iSet.images.forEach((image, iIndex) => imageData.push({sNum: sIndex, iNum: iIndex, image: image}))
+      })
+    }
 
 
     const styles = StyleSheet.create({
@@ -224,12 +254,12 @@ export class TrekDetails extends Component<{
         paddingBottom: 10,
       },
       noteText: {
-        fontSize: 16,
+        fontFamily: fontRegular,
+        fontSize: 18,
       },
       noteNoText: {
         color: disabledTextColor,
-        fontStyle: "italic",
-        fontWeight: "normal"
+        fontFamily: fontItalic,
       },
       sortButtonIcon: {
         width: sortIconSize,
@@ -237,7 +267,8 @@ export class TrekDetails extends Component<{
         backgroundColor: "transparent"
       },
       sortButtonText: {
-        fontSize: 16,
+        fontSize: 18,
+        fontFamily: fontRegular,
         marginLeft: 10,
         color: highTextColor,
       },
@@ -249,9 +280,9 @@ export class TrekDetails extends Component<{
       },
       sortButtonValue: {
         paddingRight: 15,
-        fontSize: 18,
+        fontSize: 20,
         color: highTextColor,
-        fontWeight: "bold",
+        fontFamily: fontBold,
       },
       elevItem: {
         paddingLeft: 15,
@@ -259,24 +290,25 @@ export class TrekDetails extends Component<{
         alignItems: "center",
       },
       elevItemLabel: {
-        fontSize: 12,
+        fontSize: 14,
+        fontFamily: fontRegular,
         color: mediumTextColor,
       },
       elevValue: {
-        fontSize: 18,
+        fontSize: 20,
         color: highTextColor,
-        fontWeight: "bold",
+        fontFamily: fontBold,
       },
       windText: {
-        fontSize: 16,
+        fontSize: 18,
         color: highTextColor,
-        fontWeight: "bold",
+        fontFamily: fontBold,
       },
       windValue: {
         paddingHorizontal: 4,
-        fontSize: 18,
+        fontSize: 20,
         color: highTextColor,
-        fontWeight: "bold",
+        fontFamily: fontBold,
       },
       divider: {
         flex: 1,
@@ -290,7 +322,7 @@ export class TrekDetails extends Component<{
         borderColor: "transparent",
       },
       lightItalic: {
-        fontStyle: "italic",
+        fontFamily: fontItalic,
         color: disabledTextColor
       },
       selectable: {
@@ -303,15 +335,37 @@ export class TrekDetails extends Component<{
         height: carIconSize,
         backgroundColor: "transparent"
       },
+      imageRow: {
+        marginLeft: 15,
+        marginRight: 15,
+        paddingTop: 4,
+        paddingBottom: 4,
+        borderTopWidth: 1,
+        borderBottomWidth: 1,
+        borderStyle: "solid",
+        borderColor: dividerColor,
+        width: width - 30,
+        height: trekImageHeight,
+        flexDirection: "row",
+        alignItems: "flex-start",
+        backgroundColor: pageBackground,
+      },
+      trekImage: {
+        width: trekImageWidth,
+        height: trekImageHeight,
+        marginRight: 4,
+      },
     });
 
-    const SortItem = ({dividerCheck, sortType, canSelect, icon, label, valueFn, selValue}) => {
+    const SortItem = ({dividerCheck, sortType, canSelect, icon, label, valueFn, selValue, 
+                       sIcon=undefined, selIcon=undefined, selIconType=undefined, noHighlight=undefined}) => {
 
       return (  
         <View>      
           <View style={[styles.divider, dividerCheck.indexOf(sortVal) !== -1 ? styles.bcTrans : {}]}/>
           {canSelect &&
-            <View style={[styles.sortButton, sortVal === sortType ? styles.sortHighlight : {}]}>
+            <View style={[styles.sortButton, 
+                          (!noHighlight && sortVal === sortType) ? styles.sortHighlight : {}]}>
               <RectButton
                 rippleColor={rippleColor}
                 style={{flex: 1}}
@@ -335,6 +389,18 @@ export class TrekDetails extends Component<{
                   }
                 </View>
               </RectButton>
+              {selIcon && 
+                <View style={[styles.sortButtonArea, {paddingRight: 10}]}>
+                  <SvgButton
+                    onPressFn={() => this.callSelectFn(selIconType)}
+                    borderWidth={0}
+                    areaOffset={0}
+                    size={30}
+                    fill={trekLogBlue}
+                    path={APP_ICONS[sIcon]}
+                  />
+                </View>
+              }
               {selValue &&
                 <RectButton
                   rippleColor={rippleColor}
@@ -344,7 +410,7 @@ export class TrekDetails extends Component<{
                     </View>
                 </RectButton>
               }
-              {!selValue && 
+              {(!selValue && !selIcon) && 
                 <View style={styles.sortButtonArea}>
                   <Text style={styles.sortButtonValue}>{valueFn()}</Text>
                 </View>
@@ -352,7 +418,8 @@ export class TrekDetails extends Component<{
             </View>
           }
           {!canSelect &&
-            <View style={[styles.sortButton, sortVal === sortType ? styles.sortHighlight : {}]}>
+            <View style={[styles.sortButton, 
+                          (!noHighlight && sortVal === sortType) ? styles.sortHighlight : {}]}>
               <View style={styles.sortButtonTrigger}>
                 <SvgIcon
                   style={styles.sortButtonIcon}
@@ -362,6 +429,18 @@ export class TrekDetails extends Component<{
                 />
                 <Text style={styles.sortButtonText}>{label}</Text>
               </View>
+              {selIcon && 
+                <View style={[styles.sortButtonArea, {paddingRight: 10}]}>
+                  <SvgButton
+                    onPressFn={() => this.callSelectFn(selIconType)}
+                    borderWidth={0}
+                    areaOffset={0}
+                    size={30}
+                    fill={trekLogBlue}
+                    path={APP_ICONS[sIcon]}
+                  />
+                </View>
+              }
               {selValue &&
                 <RectButton
                   rippleColor={rippleColor}
@@ -371,7 +450,7 @@ export class TrekDetails extends Component<{
                     </View>
                 </RectButton>
               }
-              {!selValue && 
+              {!selValue && !selIcon && valueFn &&
                 <View>
                   <Text style={styles.sortButtonValue}>{valueFn()}</Text>
                 </View>
@@ -381,6 +460,22 @@ export class TrekDetails extends Component<{
           </View>
       )
     }
+
+    const _keyExtractor = (_item, index) => index.toString();
+
+    const _renderItem = ({item}) => (
+      <View style={styles.trekImage}>
+        <RectButton
+          rippleColor={rippleColor}
+          onPress={() => this.showSelectedImage(item.sNum, item.iNum)}
+        >
+            <Image source={{uri: 'file://' + item.image.uri}}
+              style={{width: trekImageWidth, height: trekImageHeight}}
+            />
+        </RectButton>
+      </View>
+    );
+
 
     return (
       <View>
@@ -395,22 +490,34 @@ export class TrekDetails extends Component<{
                     fill={listIconColor}
                   />
                   <Text style={[styles.sortButtonText, 
-                                !hasLabel ? styles.lightItalic : {fontWeight: "bold"}]}>{labelText}</Text>
+                                !hasLabel ? styles.lightItalic : {}]}>{labelText}</Text>
                 </View>
             </View>
-            <View style={styles.divider}/>
-            <View style={styles.sortButton}>
-              <View style={styles.sortButtonTrigger}>
-                <SvgIcon
-                  style={styles.sortButtonIcon}
-                  size={sortIconSize}
-                  paths={APP_ICONS['ClockStart']}
-                  fill={listIconColor}
+            {hasImages &&
+              <View style={styles.imageRow}>
+                <FlatList
+                  ref={e => this.scrollViewRef = e}
+                  data={imageData}
+                  keyExtractor={_keyExtractor}
+                  initialNumToRender={7}     // this must be integer
+                  horizontal
+                  renderItem={_renderItem}
                 />
-                <Text style={styles.sortButtonText}>
-                  { this.props.utilsSvc.formattedLongDateAbbr(tInfo.date) + ' at ' + tInfo.startTime}</Text>
               </View>
-            </View>
+            }
+            <SortItem
+              canSelect={selectable && this.props.sortByDate}
+              dividerCheck={[hasImages ? sortVal : 'Date']}
+              sortType={this.props.sortBy}
+              icon="ClockStart"
+              sIcon={this.props.sortByDate ? "CheckBoxChecked" : "CheckBoxOpen"}
+              label={this.props.utilsSvc.formattedLocaleDateDay(tInfo.date) + ' at ' + tInfo.startTime}
+              valueFn={undefined}
+              selValue={false}
+              selIcon={this.props.sortByDate !== undefined}
+              selIconType='Date'
+              noHighlight={true}
+            />
             <SortItem
               canSelect={selectable}
               dividerCheck={['Dist']}
@@ -425,7 +532,7 @@ export class TrekDetails extends Component<{
               dividerCheck={['Dist', 'Time']}
               sortType='Time'
               icon="TimerSand"
-              label="Time"
+              label="Duration"
               valueFn={tInfo.formattedDuration}
               selValue={false}
             />
@@ -447,15 +554,17 @@ export class TrekDetails extends Component<{
               valueFn={() => this.formattedCalories(this.showTotalCalories)}
               selValue={true}
             />
-            <SortItem
-              canSelect={selectable}
-              dividerCheck={['Cals', 'Steps']}
-              sortType='Steps'
-              icon={tInfo.type}
-              label={stepsLabel}
-              valueFn={() => tInfo.formattedSteps(this.showStepsPerMin)}
-              selValue={true}
-            />
+            {STEPS_APPLY[tInfo.type] && 
+              <SortItem
+                canSelect={selectable}
+                dividerCheck={['Cals', 'Steps']}
+                sortType='Steps'
+                icon={tInfo.type}
+                label={stepsLabel}
+                valueFn={() => tInfo.formattedSteps(this.showStepsPerMin)}
+                selValue={true}
+              />
+            }
             {tInfo.type === TREK_TYPE_HIKE &&
               <SortItem
                 canSelect={false}

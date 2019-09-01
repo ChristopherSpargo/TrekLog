@@ -1,6 +1,5 @@
-import React, { useContext } from "react";
-import { View, StyleSheet, Text, TouchableNativeFeedback } from "react-native";
-// import { withNavigation } from 'react-navigation'
+import React, { useContext, useEffect, useRef, useCallback } from "react";
+import { View, StyleSheet, Text, TouchableNativeFeedback, BackHandler } from "react-native";
 import { useObserver } from "mobx-react-lite";
 
 import { CONFIRM_Z_INDEX, BACKDROP_Z_INDEX, ModalSvcContext, UiThemeContext, TrekInfoContext } from "./App";
@@ -11,47 +10,48 @@ import { APP_ICONS } from "./SvgImages";
 
 // dialog used for basic NOTICES and CONFIRMATIONS
 
-function ConfirmationModal() {
+function ConfirmationModal({confirmOpen}) {
 
-  // const _didFocusSubscription = useRef();
-  // const _willBlurSubscription = useRef();
-
+  const bHandler = useRef(false);
   const modalSvc: ModalModel = useContext(ModalSvcContext);
   const trekInfo: TrekInfo = useContext(TrekInfoContext);
   const uiTheme: any = useContext(UiThemeContext);
   const smData = modalSvc.smData;
-  const contentLines = modalSvc.simpleIsOpen && smData.content.split("\n");
+  const contentLines = confirmOpen && smData.content.split("\n");
   const bigContentLines =
-    modalSvc.simpleIsOpen && smData.bigContent && smData.bigContent.split("\n");
+    confirmOpen && smData.bigContent && smData.bigContent.split("\n");
 
-    // useEffect(() => {
-    //   _didFocusSubscription.current = navigation.addListener('didFocus', () => {
-    //     BackHandler.addEventListener('hardwareBackPress', onBackButtonPressAndroid);
-    //   }); 
-    //   _willBlurSubscription.current = navigation.addListener('willBlur', () =>
-    //   BackHandler.removeEventListener('hardwareBackPress', onBackButtonPressAndroid));
-    //   return (() => {
-    //     // @ts-ignore
-    //     _didFocusSubscription.current && _didFocusSubscription.current.remove();
-    //     // @ts-ignore
-    //     _willBlurSubscription.current && _willBlurSubscription.current.remove();
-    //       })
-    // });
-  
-    // function onBackButtonPressAndroid() {
-    //   dismiss();
-    //   return true;
-    // }
+  const onBackButtonPressConfirm = useCallback(
+    () => {
+      dismiss();
+      return true;
+    }, [], // Tells React to memoize regardless of arguments.
+  );
 
-  // call the resolve method
+  useEffect(() => {                       // componentDidUpdate
+    if(confirmOpen && !bHandler.current) {
+      BackHandler.addEventListener('hardwareBackPress', onBackButtonPressConfirm); 
+      bHandler.current = true;
+    }
+  },[confirmOpen])
+
+  function removeListeners() {
+    BackHandler.removeEventListener('hardwareBackPress', onBackButtonPressConfirm);
+    bHandler.current = false;
+  }
+
+    // call the resolve method
   function close(response = "OK") {
     setTimeout(() => {
       modalSvc
         .closeSimpleModal(400)
         .then(() => {
+          removeListeners();
           modalSvc.smData.resolve(response);
         })
-        .catch(() => {});
+        .catch(() => {
+          removeListeners();
+        });
     }, 200);
   }
 
@@ -61,9 +61,12 @@ function ConfirmationModal() {
       modalSvc
         .closeSimpleModal(400)
         .then(() => {
+          removeListeners();
           modalSvc.smData.reject("CANCEL");
         })
-        .catch(() => {});
+        .catch(() => {
+          removeListeners();
+        });
     }, 200);
   }
 
@@ -78,10 +81,12 @@ function ConfirmationModal() {
     infoConfirmColor,
     infoConfirmTextColor,
     pageBackground,
+    dividerColor,
     rippleColor,
     contrastingMask_2
   } = uiTheme.palette[trekInfo.colorTheme];
-  const { cardLayout, roundedTop, roundedBottom, footerButton, footerButtonText } = uiTheme;
+  const { cardLayout, roundedTop, roundedBottom, footer, footerButton, footerButtonText,
+          formHeader, formHeaderText, formBody, formBodyText } = uiTheme;
   const titleColor = smData.dType === CONFIRM_INFO ? infoConfirmTextColor : warningConfirmTextColor;
   const bgColor = smData.dType === CONFIRM_INFO ? infoConfirmColor : warningConfirmColor;
   const iconColor =
@@ -115,47 +120,46 @@ function ConfirmationModal() {
       zIndex: CONFIRM_Z_INDEX
     },
     header: {
-      paddingLeft: 10,
-      flexDirection: "row",
-      alignItems: "center",
-      height: 40
+      ...formHeader,
+      ...roundedTop,
+      backgroundColor: bgColor,
+      borderBottomWidth: 0,
     },
     title: {
+      ...formHeaderText,
       color: titleColor,
-      fontSize: 20
     },
     content: {
-      flexDirection: "column",
-      alignItems: "center",
-      justifyContent: "center",
+      ...formBody,
+      padding: 0,
       paddingLeft: 20,
       paddingRight: 20,
       height: 100
     },
     contentText: {
-      fontSize: 18,
-      color: highTextColor
+      ...formBodyText,
+      color: highTextColor,
     },
     bigContentText: {
+      ...formBodyText,
       fontSize: 20,
-      color: highTextColor
+      color: highTextColor,
     },
     footer: {
-      flexDirection: "row",
-      justifyContent: "space-around",
-      alignItems: "center",
-      backgroundColor: cardLayout.backgroundColor
+      ...footer,
+      borderTopColor: dividerColor, 
+      backgroundColor: pageBackground,
     }
   });
 
   return useObserver(() => (
     <View style={styles.container}>
-      {modalSvc.simpleIsOpen && (
+      {confirmOpen && (
         <View style={styles.container}>
           <View style={styles.background}>
             <View style={styles.formArea}>
               <View style={[cardLayout, styles.cardCustom, roundedTop, roundedBottom]}>
-                <View style={[styles.header, roundedTop, { backgroundColor: bgColor }]}>
+                <View style={styles.header}>
                   {smData.headingIcon && (
                     <SvgIcon
                       style={{ marginRight: 6, backgroundColor: "transparent" }}

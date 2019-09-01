@@ -1,154 +1,189 @@
-import React from 'react';
-import { observer, inject } from 'mobx-react';
-import { observable, action } from 'mobx';
-import { View, StyleSheet, Text, Keyboard } from 'react-native';
+import React, { useContext, useState, useEffect, useRef, useCallback } from "react";
+import { View, StyleSheet, Text, Keyboard, BackHandler } from 'react-native';
+import { RectButton } from 'react-native-gesture-handler'
 
 import { APP_ICONS } from './SvgImages';
 import RadioGroup from './RadioGroupComponent';
 import SlideUpView from './SlideUpComponent';
-import { CONTROLS_HEIGHT } from './App';
+import { 
+  UiThemeContext,
+  TrekInfoContext,
+  LIMITS_FORM_Z_INDEX,
+  INVISIBLE_Z_INDEX,
+  FORMHEADER_HEIGHT,
+  FOOTER_HEIGHT,
+ } from './App';
 import SvgIcon from './SvgIconComponent';
 import { TrekInfo } from './TrekInfoModel';
 import TextInputField from './TextInputFieldComponent';
 import TimeInput from './TimeInputComponent';
-import { Course } from './CourseService';
 
-export type CourseTrackingMethod = 'courseTime' | 'bestTime' | 'timeLimit' | 'avgSpeed' | 'avgRate';
+export type CourseTrackingMethod = 'courseTime' | 'lastTime' | 'bestTime' | 'otherEffort' |
+                        'timeLimit' | 'avgSpeed' | 'avgRate';
 
 // dialog used for single value string input
 
-@inject('uiTheme', 'trekInfo')
-@observer
-class TrackingMethodForm extends React.Component<{   
-  open         : boolean,    // true if component is open
-  done        ?: string,    // 'Close' if call close function, 'Dismiss' if call dismiss function
-  method      ?: CourseTrackingMethod,
-  value       ?: number,
-  course      ?: Course,    // Course for selected course
-  onChangeFn  ?: Function,  // function to call on input changes
-  closeFn     ?: Function,  // function to call on finish
-  uiTheme     ?: any,
-  trekInfo    ?: TrekInfo,
-}, {} > {
+function TrackingMethodForm({
+  open       = undefined,     // true if component is open
+  inMethod   = undefined, 
+  inValue    = undefined, 
+  header     = undefined,     // text for header
+  title      = undefined,     // text for title
+  icon       = undefined,     // icon to display in header
+  course     = undefined,     // Course for selected course
+  trek       = undefined,     // sortDate and group of focus trek (selected in Course Details)
+  onChangeFn = undefined,     // function to call on input changes
+}) {
+  const uiTheme: any = useContext(UiThemeContext);
+  const trekInfo: TrekInfo = useContext(TrekInfoContext);
 
-  @observable value;
-  @observable method : CourseTrackingMethod;
-  @observable zValue;
+  const [value, setValue] = useState('');
+  const [method, setMethod] = useState();
+  const [zValue, setZValue] = useState(-1);
 
-  done = '';
-  closeCount = 0;
-  trackingMethods = ['courseTime', 'bestTime', 'timeLimit', 'avgSpeed', 'avgRate'];
-  trackingMethodsLabels = [
-    '.vs. standard time for course', 
-    '.vs. best time for course', 
-    '.vs. specific finish time', 
-    '.vs. specific average speed', 
-    '.vs. specific average pace'
+  const bHandler = useRef(false);
+
+  const onBackButtonPressTMethods = useCallback(
+    () => {
+      dismiss();
+      return true;
+    }, [], // Tells React to memoize regardless of arguments.
+  );
+
+  useEffect(() => {                       // componentDidUpdate
+    if(open && !bHandler.current) {
+      BackHandler.addEventListener('hardwareBackPress', onBackButtonPressTMethods); 
+      bHandler.current = true;
+    }
+  },[open])
+
+  useEffect(() => {                       // DidUpdate
+    if (inMethod !== method) {
+      updateMethod(inMethod);
+    }
+  },[inMethod])
+
+  function removeListeners() {
+    BackHandler.removeEventListener('hardwareBackPress', onBackButtonPressTMethods);
+    bHandler.current = false;
+  }
+
+  const trackingMethods = ['courseTime', 'lastTime', 'bestTime', 'otherEffort', 
+                           'timeLimit', 'avgSpeed', 'avgRate'];
+  const trackingMethodsLabels = [
+    'standard time for course', 
+    'last effort',
+    'best effort',
+    'other effort', 
+    'specific finish time', 
+    'specific average speed', 
+    'specific average pace'
   ];
 
-  constructor(props) {
-    super(props);
-    this.initializeObservables();
+  function setVisible() {
+    setZValue(LIMITS_FORM_Z_INDEX);
   }
 
-  componentDidUpdate() {
-    if (this.props.method && (this.trackingMethods.indexOf(this.method) === -1)){
-      this.setMethod(this.props.method);
-    }
-    if (this.props.done !== this.done){
-      this.done = this.props.done;
-      switch(this.done){
-        case 'Dismiss':
-          this.dismiss();
-          break;
-        case 'Close':
-          this.close();
-          break;
-        case 'Keyboard':
-          Keyboard.dismiss();
-          break;
-        default:
-      }
-    }
+  function setNotVisible() {
+    setZValue(INVISIBLE_Z_INDEX);
   }
 
-  // initialize all the observable properties in an action for mobx strict mode
-  @action
-  initializeObservables = () => {
-    this.value = '';
-    this.method = '' as CourseTrackingMethod;
-    this.zValue = -1;
+  function setValueInput(val: string) {
+    let v = parseFloat(val);
+    onChangeFn({value: v, method: method});
   }
 
-  @action
-  setZValue = (val: number) => {
-    this.zValue = val;
-  }
-
-  setVisible = () => {
-    this.setZValue(9);
-  }
-
-  setNotVisible = () => {
-    this.setZValue(-1);
-  }
-
-  @action
-  setValue = (val: string) => {
-      this.value = val;
-  }
-
-  setValueInput = () => {
-    let v = parseFloat(this.value);
-    this.props.onChangeFn({value: v, method: this.method});
-  }
-
-  @action
-  setMethod = (val: CourseTrackingMethod) => {
-    this.method = val;
-    this.setValue(''); 
+  function updateMethod(val: CourseTrackingMethod) {
+    setMethod(val);
+    setValue(''); 
     switch(val){
       case 'courseTime':
-        this.setValue(this.props.course.definingEffort.subject.duration.toString());
+        setValue(course.definingEffort.subject.duration.toString());
+        break;
+      case 'lastTime':
+        setValue(course.lastEffort.subject.duration.toString());
         break;
       case 'bestTime':
-        this.setValue(this.props.course.bestEffort.subject.duration.toString());
+        setValue(course.bestEffort.subject.duration.toString());
         break;
       default:
     }
   }
-
-  setMethodInput = (val: CourseTrackingMethod) => {
-    this.setMethod(val);
-    // this.setValueInput();
-  }
   
-    // call the close method, indicate OK
-  close = () => {
-      if (this.value === '') { 
-        this.setValue('0');
+  // call the close method, indicate OK
+  function close() {
+    let v = value;
+      if (value === '') { 
+        v = '0';
+        setValue(v);
       }
-      this.setValueInput();
+      setValueInput(v);
       Keyboard.dismiss();
-      this.props.closeFn(true);
-      this.setMethod('courseTime');
+      removeListeners();
+      trekInfo.limitsCloseFn(true);
   }
 
   // call the close method, indicate CANCEL
-  dismiss = () => {
+  function dismiss() {
       Keyboard.dismiss();
-      this.props.closeFn(false);
-      this.setValue('');
+      removeListeners();
+      trekInfo.limitsCloseFn(false);
   }
 
-  render() {
 
-    const { highTextColor, dividerColor, headerBackgroundColor, textOnPrimaryColor,
-            pageBackground } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
-    const { cardLayout, roundedTop } = this.props.uiTheme;
-    const formHt = 330 + CONTROLS_HEIGHT;
-    const cTime = this.method === 'courseTime';
-    const bTime = this.method === 'bestTime';
+    const { highTextColor, dividerColor, textOnPrimaryColor,
+            pageBackground, rippleColor,
+          } = uiTheme.palette[trekInfo.colorTheme];
+    const { cardLayout, roundedTop, footer, footerButton, footerButtonText,
+            formHeader, formHeaderText, formBodyText, formTextInput, formNumberInput,
+            fontRegular } = uiTheme;
+    const headerHeight = FORMHEADER_HEIGHT;
+    const footerHeight = FOOTER_HEIGHT;
+    const radioItemHt = 40;
+    const okTxt = 'CONTINUE';
+    const canTxt = 'CANCEL';
+    const cTime = method === 'courseTime';
+    const bTime = method === 'bestTime';
+    const lTime = method === 'lastTime';
+    const singleEffort = course.efforts.length === 1;
+
+    let replayChoices = [];
+    let replayLabels = [];
+    trackingMethods.forEach((method, idx) => {
+      switch(method){
+        case 'courseTime':
+          if(trek === undefined || trek.date !== course.definingEffort.subject.date || 
+                                        trek.group !== course.definingEffort.subject.group) {
+            replayChoices.push(method);
+            replayLabels.push(trackingMethodsLabels[idx])
+          }
+          break;
+        case 'bestTime':
+          if(trek === undefined || trek.date !== course.bestEffort.subject.date || 
+                                        trek.group !== course.bestEffort.subject.group) {
+            replayChoices.push(method);
+            replayLabels.push(trackingMethodsLabels[idx])
+          }
+          break;
+        case 'lastTime':
+          if(trek === undefined || trek.date !== course.lastEffort.subject.date || 
+                                        trek.group !== course.lastEffort.subject.group) {
+            replayChoices.push(method);
+            replayLabels.push(trackingMethodsLabels[idx])
+          }
+          break;
+        case 'otherEffort':
+          if(trek === undefined || singleEffort){
+            break;
+          }
+        default:
+          replayChoices.push(method);
+          replayLabels.push(trackingMethodsLabels[idx])
+      }
+    })
+
+    const bodyHeight = 118 + (replayChoices.length * radioItemHt);
+    const formHt = headerHeight + bodyHeight + footerHeight;
 
     const styles = StyleSheet.create({
       container: { ... StyleSheet.absoluteFillObject },
@@ -157,7 +192,7 @@ class TrackingMethodForm extends React.Component<{
         bottom: 0,
         left: 0,
         right: 0,
-        zIndex: this.zValue,
+        zIndex: zValue,
       },
       cardCustom: {
         marginTop: 0,
@@ -172,58 +207,56 @@ class TrackingMethodForm extends React.Component<{
         backgroundColor: pageBackground,
       },
       header: {
-        paddingLeft: 10,
-        flexDirection: "row",
-        alignItems: "center",
-        height: 40,
-        borderStyle: "solid",
+        ...formHeader,
         borderBottomColor: dividerColor,
-        borderBottomWidth: 1,
-        backgroundColor: headerBackgroundColor,
       },
       title: {
+        ...formHeaderText,
         color: textOnPrimaryColor,
-        fontSize: 18,
+        marginLeft: 5,
       },
       body: {
         flexDirection: "column",
         alignItems: "flex-start",
         justifyContent: "center",
         paddingTop: 8,
-        paddingBottom: 15,
-        marginLeft: 15,
+        paddingBottom: 10,
+        marginLeft: 20,
         marginRight: 15,
-
       },
       bodyText: {
-        fontSize: 16,
+        ...formBodyText,
         color: highTextColor,
+      },
+      footer: {
+        ...footer,
+        ...{borderTopColor: dividerColor, backgroundColor: pageBackground}
       },
       rowLayout: {
         flexDirection: "row",
         alignItems: "center",
       },
       textInputItem: {
-        height: 40,
-        width: 75,
-        borderWidth: 0,
-        fontWeight: "300",
-        fontSize: 18,
+        ...formTextInput,
+        ...formNumberInput,
         color: highTextColor,
       },      
       labelText: {
         color: highTextColor,
-        fontSize: 18,
-        marginBottom: 5,
-        marginLeft: 20,
+        fontSize: 20,
+        fontFamily: fontRegular,
+        marginBottom: 10,
+        marginLeft: 25,
       },
       inputVal: {
         marginTop: 10,
+        height: 45,
         alignSelf: "center",
         marginBottom: 10,
       },
       rgItem: {
-        paddingTop: 10,
+        paddingTop: 5,
+        paddingBottom: 5,
         backgroundColor: pageBackground,
         paddingRight: 0,
         paddingLeft: 0,
@@ -231,14 +264,17 @@ class TrackingMethodForm extends React.Component<{
       },
       rgLabel: {
         color: highTextColor,
-        fontSize: 18,
+        fontFamily: fontRegular,
+        fontSize: 20,
         paddingLeft: 10,
+        paddingRight: 10,
       },
       rateUnits: {
-        fontSize: 16,
+        fontFamily: fontRegular,
+        fontSize: 18,
         marginLeft: 15,
         color: highTextColor,
-      }
+      },
     })
 
     return (
@@ -248,9 +284,9 @@ class TrackingMethodForm extends React.Component<{
               startValue={formHt}
               endValue={0}
               bgColor="transparent"
-              open={this.props.open}
-              beforeOpenFn={this.setVisible}
-              afterCloseFn={this.setNotVisible}
+              open={open}
+              beforeOpenFn={setVisible}
+              afterCloseFn={setNotVisible}
               >
               <View style={[cardLayout, styles.cardCustom, roundedTop]}>
                 <View style={[styles.header, roundedTop]}>
@@ -259,67 +295,97 @@ class TrackingMethodForm extends React.Component<{
                     size={24}
                     widthAdj={0}
                     fill={textOnPrimaryColor}
-                    paths={APP_ICONS.Course}
+                    paths={APP_ICONS[icon]}
                   />
-                  <Text style={styles.title}>Course Challenge Method</Text>
+                  <Text style={styles.title}>{header}</Text>
                 </View>
                 <View style={styles.body}>
-                  <Text style={styles.labelText}>{'Challenge ' + this.props.course.name + ' Course:'}</Text>
+                  <Text style={styles.labelText}>{title}</Text>
                     <RadioGroup 
-                      onChangeFn={this.setMethodInput}
-                      selected={this.method}
-                      values={this.trackingMethods}
+                      onChangeFn={updateMethod}
+                      selected={method}
+                      values={replayChoices}
                       itemStyle={styles.rgItem}
-                      labels={this.trackingMethodsLabels}
+                      labels={replayLabels}
                       labelStyle={styles.rgLabel}
                       vertical
                       inline
                       align="start"
-                      itemHeight={40}
+                      itemHeight={radioItemHt}
                       radioFirst
                     />
-                    {(cTime || bTime) &&
+                    {(cTime || bTime || lTime) &&
                       <View style={styles.inputVal}>
                         <TimeInput
-                          timeVal={this.value}
+                          timeVal={value}
                         />
                       </View>
                     }
-                    {this.method === 'timeLimit' &&
+                    {method === 'timeLimit' &&
                       <View style={styles.inputVal}>
                         <TimeInput
-                          onChangeFn={this.setValue}
-                          timeVal={this.value}
+                          onChangeFn={setValue}
+                          timeVal={value}
                         />
                       </View>
                     }
-                    {this.method === 'avgSpeed' &&
+                    {method === 'avgSpeed' &&
                       <View style={[styles.rowLayout, styles.inputVal]}>
                         <View style={[styles.textInputItem]}>
                           <TextInputField
-                            onChangeFn={this.setValue}
-                            placeholderValue={this.value}
+                            onChangeFn={setValue}
+                            placeholderValue={value}
                           />
                         </View>
-                        <Text style={styles.rateUnits}>{this.props.trekInfo.speedUnits()}</Text>
+                        <Text style={styles.rateUnits}>{trekInfo.speedUnits()}</Text>
                       </View>
                     }
-                    {(this.method === 'avgRate') &&
+                    {(method === 'avgRate') &&
                       <View style={[styles.rowLayout, styles.inputVal]}>
                         <TimeInput
-                            onChangeFn={this.setValue}
-                            timeVal={this.value}
+                            onChangeFn={setValue}
+                            timeVal={value}
                         />
-                        <Text style={styles.rateUnits}>{'/' + this.props.trekInfo.distUnits()}</Text>
+                        <Text style={styles.rateUnits}>{'/' + trekInfo.distUnits()}</Text>
                       </View>
                     }
+                    {(method === 'otherEffort') &&
+                      <View style={[styles.rowLayout, styles.inputVal]}>
+                        <Text style={styles.labelText}>Press CONTINUE then select other effort.</Text>
+                      </View>
+                    }
+                </View>
+                <View style={[styles.footer]}>
+                  <RectButton
+                    rippleColor={rippleColor}
+                    style={{flex: 1}}
+                    onPress={dismiss}>
+                    <View style={footerButton}>
+                      <Text
+                        style={footerButtonText}
+                      >
+                        {canTxt}
+                      </Text>
+                    </View>
+                  </RectButton>
+                  <RectButton
+                    rippleColor={rippleColor}
+                    style={{flex: 1}}
+                    onPress={() => close()}>
+                    <View style={footerButton}>
+                      <Text
+                        style={footerButtonText}
+                      >
+                        {okTxt}
+                      </Text>
+                    </View>
+                  </RectButton>
                 </View>
               </View>
             </SlideUpView>
           </View>
       </View>
     )
-  }
 }
 
 export default TrackingMethodForm;

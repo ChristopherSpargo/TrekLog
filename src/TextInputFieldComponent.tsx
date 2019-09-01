@@ -16,7 +16,8 @@ class TextInputField extends React.Component<{
   autoFocus         ?: boolean,
   placeholderValue  ?: string,
   pvDisplayOnly     ?: boolean,     // true if use placeholder value is not to be returned as input
-  style             ?: any,
+  style             ?: any,         // style for the TextInput component
+  topAdjust         ?: number,      // amount to adjust container top position (marginTop)
   returnType        ?: string,      // defaults to 'text'
   onChangeFn        ?: Function,
   uiTheme           ?: any,
@@ -59,31 +60,31 @@ class TextInputField extends React.Component<{
 
   render() {
 
-    const { highTextColor, mediumTextColor, disabledTextColor 
+    const { highTextColor, mediumTextColor
           } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
+    const { formTextInput, formNumberInput } = this.props.uiTheme;
     const kbType = this.props.kbType || "numeric";
     const propStyle = this.props.style || {};
     const inputH = this.props.inputHeight || 45;
-    const inputW = this.props.inputWidth || propStyle.width || 80;
+    const inputW = this.props.inputWidth || propStyle.width || formNumberInput.width;
+    const topAdj = this.props.topAdjust === undefined ? -10 : this.props.topAdjust;
 
     const styles = StyleSheet.create({
       textInputItem: {
+        ...formTextInput,
         height: inputH,
         width: inputW,
-        borderWidth: 0,
-        fontWeight: "300",
-        fontSize: 20,
         color: highTextColor,
       },      
     })
 
     return (
-      <View style={{width: inputW, marginTop: -10, justifyContent: "center"}}>
+      <View style={{width: inputW, marginTop: topAdj, justifyContent: "center"}}>
         <TextInput
             style={[styles.textInputItem, propStyle]}
             onChangeText={(text) => this.setValue(text)}
             placeholder={this.props.placeholderValue}
-            placeholderTextColor={disabledTextColor}
+            placeholderTextColor={highTextColor}
             value={this.value}
             onBlur={this.setValueInput}
             onKeyPress={(key) => this.checkForEnter(key)}

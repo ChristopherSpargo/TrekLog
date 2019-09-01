@@ -7,6 +7,8 @@ import {
   LaLo,
   TrekPoint,
   TrackingObject,
+  TREK_TYPE_DRIVE,
+  RESP_OK,
 } from "./TrekInfoModel";
 import { UtilsSvc, MPH_TO_MPS, DRIVING_A_CAR_SPEED } from "./UtilsService";
 import { Course, CourseSvc} from './CourseService';
@@ -29,18 +31,24 @@ export const MIN_SIG_SPEED = {
   Walk: 0.2235,
   Run: 0.447,
   Bike: 1.341,
-  Hike: 0.2235
+  Hike: 0.2235,
+  Board: .447,
+  Drive: 1.341
 }; // used to smooth based on type
 export const KINK_FACTOR = 1.7; // min height (meters) of "kinks" in the route (think triangle height)
 export const MIN_POINT_DIST_LIMITED_WALK = 1; // minimum relevant when walking limited
 export const MIN_POINT_DIST_LIMITED_RUN = 1; // minimum relevant distance when running limited
 export const MIN_POINT_DIST_LIMITED_BIKE = 3; // minimum relevant distance when biking limited
 export const MIN_POINT_DIST_LIMITED_HIKE = 1; // minimum relevant distance when hiking limited
+export const MIN_POINT_DIST_LIMITED_BOARD = 3; // minimum relevant distance when boarding limited
+export const MIN_POINT_DIST_LIMITED_DRIVE = 7; // minimum relevant distance when driving limited
 export const MIN_POINT_DISTS_LIMITED = {
   Walk: MIN_POINT_DIST_LIMITED_WALK,
   Bike: MIN_POINT_DIST_LIMITED_BIKE,
   Run: MIN_POINT_DIST_LIMITED_RUN,
-  Hike: MIN_POINT_DIST_LIMITED_HIKE
+  Hike: MIN_POINT_DIST_LIMITED_HIKE,
+  Board: MIN_POINT_DIST_LIMITED_BOARD,
+  Drive: MIN_POINT_DIST_LIMITED_DRIVE
 };
 
 export const TREK_LIMIT_TYPE_TIME = 'Time';
@@ -125,8 +133,10 @@ export class LoggingSvc {
 
   startPositionTracking = (gotPos: Function) => {
     // Get the current GPS position
+    this.trekInfo.setWaitingForSomething("Location");
     this.locationSvc.getCurrentLocation(
       (location: Location) => {
+        this.trekInfo.setWaitingForSomething();
         gotPos(location);
         this.watchGeolocationPosition(gotPos, true);
       },
@@ -186,8 +196,7 @@ export class LoggingSvc {
   };
 
   @action
-  setLayoutOpts = (val: string, update = true) => {
-    this.trekInfo.setUpdateMap(update);
+  setLayoutOpts = (val: string) => {
     switch (val) {
       case "hybrid":
       case "terrain":
@@ -274,15 +283,14 @@ export class LoggingSvc {
       };
       let lastPt = tInfo.trekPointCount ? tInfo.pointList[tInfo.trekPointCount - 1] : undefined;
         // check for point unbelievably far from last pt (check for high implied speed)
-      let badPt =
-        lastPt && (newPt.s > 0) &&
-        this.utilsSvc.computeImpliedSpeed(newPt, lastPt) > newPt.s * 5;
+      let badPt = false;
+        // lastPt && (newPt.s > 0) &&
+        // this.utilsSvc.computeImpliedSpeed(newPt, lastPt) > newPt.s * 5;
 
       let secondZero = newPt.s === 0 && (lastPt && lastPt.s === 0);
 
       let newFirstPt = tInfo.trekPointCount === 1 && (badPt || secondZero)
       // leave out bad points and multiple 0-speed points
-      // alert(tInfo.trekPointCount + ' | ' + newFirstPt + ' | ' + badPt + ' | ' + secondZero)
       if (newFirstPt || !(badPt || secondZero)) {
   
         if (!newFirstPt) {
@@ -299,12 +307,15 @@ export class LoggingSvc {
               // need to establish tracking object
               this.setTrackingObj(this.trekInfo.trackingCourse, newPt.t,
                                            this.trekInfo.trackingMethod, this.trekInfo.trackingValue)
-              this.startTrackingMarker(this.trekInfo.trackingObj);
-              this.trekInfo.trackingCourse = undefined;
+              .then(() => {
+                this.startTrackingMarker(this.trekInfo.trackingObj);
+                this.trekInfo.trackingCourse = undefined;
+              })      
+              .catch((err) => alert(err))          
             }
           }
           tInfo.drivingACar =
-            tInfo.drivingACar || newPt.s / MPH_TO_MPS > DRIVING_A_CAR_SPEED;
+            tInfo.drivingACar || tInfo.type === TREK_TYPE_DRIVE || newPt.s / MPH_TO_MPS > DRIVING_A_CAR_SPEED;
           tInfo.updateSpeedNow();
           if (!tInfo.limitsActive) {
             // don't change distance filter if limited trek
@@ -579,7 +590,8 @@ export class LoggingSvc {
           label: this.trekInfo.trekLabel,
           notes: this.trekInfo.trekNotes,
           headingIcon: "NoteText",
-          cancelText: !newTrek ? "CANCEL" : undefined
+          okText: "SAVE",
+          cancelText: newTrek ? "SKIP" : "CANCEL"
         })
         .then((resp: any) => {
           this.trekInfo.setTrekLabelFormOpen(false);
@@ -669,31 +681,39 @@ export class LoggingSvc {
   // add one to start time since the timer must tick once before display begins
   setTrackingObj = (course: Course, startTime: number, trackingMethod: CourseTrackingMethod,
                       trackingValue: number) => {
-      let pList = this.courseSvc.getTrackingPath(course, trackingMethod);
-      let params = this.courseSvc.getTrackingParams(course, trackingMethod, trackingValue);
+    return new Promise<any>((resolve, reject) => {
 
-      this.trekInfo.trackingObj = {
-      courseName: course.name,
-      method: trackingMethod,
-      goalValue: trackingValue,
-      pointList: pList,
-      path: this.utilsSvc.cvtPointListToLatLng(pList),
-      markerLocation: pList[0],
-      markerValue: 0,
-      duration: params.dur,
-      distance: params.tDist,
-      maxValue: params.maxV,
-      initialValue: (startTime + 1) * params.inc,
-      incrementValue: params.inc,
-      timerInterval: 1000,
-      startTime: 0,
-      header:  this.courseSvc.formatTrackingHeader(trackingMethod, trackingValue),
-      timeDiff: 0,
-      distDiff: 0,
-      type: params.type
-    };
-    // alert(JSON.stringify(this.trackingObj,null,2))
-    this.trekInfo.setTrackingMarkerLocation(pList[0])
+      let pList : TrekPoint[];
+      this.courseSvc.getTrackingPath(course, trackingMethod)
+      .then((list) => {
+        pList = list;
+        let params = this.courseSvc.getTrackingParams(course, trackingMethod, trackingValue);
+
+        this.trekInfo.trackingObj = {
+          courseName: course.name,
+          method: trackingMethod,
+          goalValue: trackingValue,
+          pointList: pList,
+          path: this.utilsSvc.cvtPointListToLatLng(pList),
+          markerLocation: pList[0],
+          markerValue: 0,
+          duration: params.dur,
+          distance: params.tDist,
+          maxValue: params.maxV,
+          initialValue: (startTime + 1) * params.inc,
+          incrementValue: params.inc,
+          timerInterval: 1000,
+          startTime: 0,
+          header:  this.courseSvc.formatTrackingHeader(trackingMethod, trackingValue),
+          timeDiff: 0,
+          distDiff: 0,
+          type: params.type
+        };
+        this.trekInfo.setTrackingMarkerLocation(pList[0])
+        resolve(RESP_OK);
+      })
+      .catch((err) => reject(err))
+    })
   }
 
   // reset the tracking marker timer (recovering from a reset)

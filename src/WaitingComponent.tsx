@@ -18,6 +18,7 @@ function Waiting({
 
   const trekInfo: TrekInfo = useContext(TrekInfoContext);
   const { contrastingMask_9, textOffTheme, secondaryColor } = uiTheme.palette[trekInfo.colorTheme];
+  const { fontBold } = uiTheme;
   const textColor = textOffTheme;
   const bot = bottom || CONTROLS_HEIGHT;
   const styles = StyleSheet.create({
@@ -37,7 +38,8 @@ function Waiting({
       paddingHorizontal: 20
     },
     msgText: {
-      fontSize: 20,
+      fontSize: 22,
+      fontFamily: fontBold,
       color: textColor
     }
   });

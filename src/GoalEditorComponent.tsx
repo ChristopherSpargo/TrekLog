@@ -5,16 +5,15 @@ import { observable, action } from 'mobx';
 import { observer, inject } from 'mobx-react';
 
 import { GoalsSvc, CATestUnitsToTime } from './GoalsService'
-import { TrekInfo, TrekType, MSG_NO_LIST, RESP_CANCEL, FAKE_SELECTION } from './TrekInfoModel'
+import { TrekInfo, TrekType, MSG_NO_LIST, RESP_CANCEL, FAKE_SELECTION, STEPS_APPLY } from './TrekInfoModel'
 import { UtilsSvc } from './UtilsService';
 import { 
   GoalObj, GoalTypesArray, DIT_GOAL_CAT, CA_GOAL_CAT, CABurnGoalMetricUnitsArray,
   DITActivityTypesArray, DITGoalMetricUnitsArray, GoalCommentsArray,
-  CAActivityTypesArray, CAGoalMetricUnitsArray, CATestUnitsArray, GoalLabelsArray,
+  CAActivityTypesArray, CAActivityTypesWithStepsArray, CAGoalMetricUnitsArray, CATestUnitsArray, GoalLabelsArray,
 } from './GoalsService';
 import { ToastModel } from './ToastModel';
 import RadioGroup from './RadioGroupComponent';
-import { CONTROLS_HEIGHT, NAV_ICON_SIZE } from './App';
 import { APP_ICONS} from './SvgImages';
 import SvgIcon from './SvgIconComponent';
 import TextInputField from './TextInputFieldComponent';
@@ -184,6 +183,9 @@ class GoalEditor extends Component<{
                   (this.gS.goalMetricUnits !== 'time' && val === 'time');
     let changeC = (this.gS.goalMetricUnits === 'course' && val !== 'course') || 
                   (this.gS.goalMetricUnits !== 'course' && val === 'course');
+    if (val === 'steps' && !STEPS_APPLY[this.gS.goalActivity]) {
+      this.gS.goalActivity = '';
+    }
     if(changeC) {
       this.setOpenMetricValue(false);        
     }
@@ -223,6 +225,7 @@ class GoalEditor extends Component<{
     if (this.gS.goalList === null) { this.gS.goalList = []; }
     this.gS.goalList.push(this.props.utilsSvc.copyObj(goal) as GoalObj);
     this.gS.displayList.push(this.gS.processGoal(goal));
+    this.gS.sortGoals();
     this.gS.saveGoalList();
     if(afterAdd !== undefined) { afterAdd(); }
 }
@@ -232,6 +235,7 @@ class GoalEditor extends Component<{
   updateGoal = (index: number, goal: GoalObj) => {
     this.gS.goalList[index] = this.props.utilsSvc.copyObj(goal) as GoalObj;
     this.gS.displayList[index] = this.gS.processGoal(goal);
+    this.gS.sortGoals();
     this.gS.saveGoalList();
 }
 
@@ -265,7 +269,7 @@ class GoalEditor extends Component<{
 
 // allow user to select a course for this goal
 getCourse = () => {
-  this.cS.getCourseSelection(this.setRadioPickerOpen, this.gS.goalCourse || FAKE_SELECTION,  'Select A Course')
+  this.cS.getCourseSelection(this.setRadioPickerOpen, this.gS.goalCourse || FAKE_SELECTION,  'Select A Course', true)
   .then((sel) => {
       this.setGoalCourse(sel);
   })
@@ -285,20 +289,21 @@ getCourse = () => {
   render() {
 
     const { mediumTextColor, pageBackground, trekLogBlue, highTextColor, dividerColor, secondaryColor,
-            navIconColor, highlightedItemColor, primaryColor, rippleColor, navItemBorderColor, disabledTextColor
+            highlightedItemColor, primaryColor, rippleColor, navItemBorderColor, disabledTextColor
           } = this.props.uiTheme.palette[this.tInfo.colorTheme];
-    const { cardLayout, controlsArea, navItemWithLabel, navItemLabel, 
-            navItem, navIcon, pageTitle } = this.props.uiTheme;
+    const { cardLayout, footer, footerButton, footerButtonText,
+            navItem, navIcon, pageTitle, fontRegular } = this.props.uiTheme;
     const validGoal = this.gS.validGoal(); 
     const editNew = this.gS.goalEditMode === 'New'
     const CAMetricUnits = this.gS.goalActivity === "Burn" ? CABurnGoalMetricUnitsArray : CAGoalMetricUnitsArray;
     const sortButtonHeight = 50;
     const goalIconSize = 24;
-    const courseSelectIconSize = 26;
+    const courseSelectIconSize = 30;
     const courseSelectButtonSize = 40;
     const sortIconColor = highTextColor;
     const haveCourse = this.gS.goalCourse;
     const validCat = this.gS.goalCategory !== '';
+    const metricUnitsAreSteps = this.gS.goalMetricUnits === 'steps';
 
     const styles=StyleSheet.create({
       container: { ... StyleSheet.absoluteFillObject, backgroundColor: pageBackground },
@@ -315,13 +320,23 @@ getCourse = () => {
       labelText: {
         color: primaryColor,
         marginBottom: 5,
-        fontSize: 18
+        fontFamily: fontRegular,
+        fontSize: 20
       },
       goalArea: {
-        height: 60,
         marginTop: 10,
         paddingTop: 15,
         paddingBottom: 15,
+        paddingLeft: 10,
+        paddingRight: 10,
+        marginBottom: 15,
+        marginLeft: 5,
+        marginRight: 5,
+        elevation: 5,
+        borderColor: dividerColor,
+        borderStyle: "solid",
+        borderWidth: 1,
+        borderRadius: 3,
         backgroundColor: highlightedItemColor,
       },
       goalText: {
@@ -373,7 +388,8 @@ getCourse = () => {
       },
       descText: {
         color: mediumTextColor,
-        fontSize: 16,
+        fontFamily: fontRegular,
+        fontSize: 18,
       },
       divider: {
         flex: 1,
@@ -389,8 +405,7 @@ getCourse = () => {
         marginLeft: 30,
       },
       rgLabel: {
-        color: highTextColor,
-        fontSize: 16,
+        fontSize: 20,
         paddingLeft: 10,
         paddingRight: 10,
         flex: 1
@@ -409,9 +424,13 @@ getCourse = () => {
       courseName: {
         color: haveCourse ? highTextColor : disabledTextColor, 
         fontSize: 20,
-        marginLeft: 5, 
+        paddingLeft: 5, 
         fontStyle: haveCourse ? "normal" : "italic",
-        width: 150}
+      },
+      footer: {
+        ...footer,
+        ...{borderTopColor: dividerColor, backgroundColor: pageBackground}
+      },
     })
 
     const SettingHeader = ({icon, label, description}) => {
@@ -436,7 +455,7 @@ getCourse = () => {
     return(
       <View style={styles.container}>
         <RadioPicker pickerOpen={this.radioPickerOpen}/>
-        <View style={[styles.container, {bottom: CONTROLS_HEIGHT}]}>
+        <View style={styles.container}>
           <TrekLogHeader titleText={this.props.navigation.getParam('title','')}
                               icon="*"
                               backButtonFn={() =>  this.props.navigation.dispatch(goBack)}
@@ -458,7 +477,7 @@ getCourse = () => {
               </FadeInView>
             }
           <ScrollView>
-            <View style={[{paddingBottom: 20}]}>
+            <View>
               {(editNew && !validCat) &&
                 <View >
                   <View style={styles.sortButtonCol}>
@@ -602,8 +621,13 @@ getCourse = () => {
                                   color={secondaryColor}
                                   onPressFn={this.getCourse}
                                 />
-                                <Text style={styles.courseName}>
-                                  {!this.gS.goalCourse ? "None" : this.gS.goalCourse}</Text>
+                                <RectButton
+                                  rippleColor={rippleColor}
+                                  onPress={this.getCourse}
+                                >
+                                  <Text style={styles.courseName}>
+                                    {!this.gS.goalCourse ? "None" : this.gS.goalCourse}</Text>
+                                </RectButton>
                               </View>
                             </View>
                           </SlideDownView>
@@ -649,7 +673,7 @@ getCourse = () => {
                               <RadioGroup 
                                 onChangeFn={this.setGoalActivity}
                                 selected={this.gS.goalActivity}
-                                labels={CAActivityTypesArray}
+                                labels={metricUnitsAreSteps ? CAActivityTypesWithStepsArray : CAActivityTypesArray}
                                 values={CAActivityTypesArray}
                                 justify="start"
                                 itemHeight={30}
@@ -707,8 +731,13 @@ getCourse = () => {
                                   color={secondaryColor}
                                   onPressFn={this.getCourse}
                                 />
-                                <Text style={styles.courseName}>
-                                  {!this.gS.goalCourse ? "None" : this.gS.goalCourse}</Text>
+                                <RectButton
+                                  rippleColor={rippleColor}
+                                  onPress={this.getCourse}
+                                >
+                                  <Text style={styles.courseName}>
+                                    {!this.gS.goalCourse ? "None" : this.gS.goalCourse}</Text>
+                                </RectButton>
                               </View>
                             </View>
                           </SlideDownView>
@@ -784,37 +813,29 @@ getCourse = () => {
               }
             </View> 
           </ScrollView>
+          {!this.keyboardOpen && 
+            <View style={[styles.footer]}>
+              <RectButton
+                rippleColor={rippleColor}
+                style={{flex: 1}}
+                onPress={this.cancelGoalEdit}>
+                <View style={footerButton}>
+                  <Text style={footerButtonText}>CANCEL</Text>
+                </View>
+              </RectButton>
+              {validGoal &&
+                <RectButton
+                  rippleColor={rippleColor}
+                  style={{flex: 1}}
+                  onPress={validGoal ? this.saveGoalEdit : undefined}>
+                  <View style={footerButton}>
+                    <Text style={footerButtonText}>SAVE</Text>
+                  </View>
+                </RectButton>
+              }
+            </View>
+          }
         </View>    
-        {!this.keyboardOpen && 
-          <View style={controlsArea}>
-            <IconButton 
-              iconSize={NAV_ICON_SIZE}
-              icon="ArrowBack"
-              style={navItemWithLabel}
-              borderColor={navItemBorderColor}
-              iconStyle={navIcon}
-              color={navIconColor}
-              raised
-              onPressFn={this.cancelGoalEdit}
-              label="Cancel"
-              labelStyle={navItemLabel}
-          />
-            {validGoal &&
-              <IconButton 
-                iconSize={NAV_ICON_SIZE}
-                icon="CheckMark"
-                style={navItemWithLabel}
-                borderColor={navItemBorderColor}
-                iconStyle={navIcon}
-                color={navIconColor}
-                raised
-                onPressFn={this.saveGoalEdit}
-                label="Save"
-                labelStyle={navItemLabel}
-              />
-            }
-          </View>
-        }
       </View>
     )
   }

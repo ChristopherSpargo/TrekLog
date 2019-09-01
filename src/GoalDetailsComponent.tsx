@@ -3,22 +3,25 @@ import { View, StyleSheet, Text, BackHandler, ScrollView, Dimensions } from 'rea
 import LinearGradient from 'react-native-linear-gradient';
 import { observable, action } from 'mobx';
 import { observer, inject } from 'mobx-react';
-import { NavigationActions } from 'react-navigation';
+import { NavigationActions, StackActions } from 'react-navigation';
+import { ProgressCircle } from 'react-native-svg-charts';
 
-import { CONTROLS_HEIGHT, NAV_ICON_SIZE, HEADER_HEIGHT, INVISIBLE_Z_INDEX,
-         PAGE_TITLE_HEIGHT } from './App';
+import { HEADER_HEIGHT, INVISIBLE_Z_INDEX,
+         PAGE_TITLE_HEIGHT, PROGRESS_COLORS } from './App';
 import { GoalsSvc } from './GoalsService';
 import { TrekInfo, TrekObj } from './TrekInfoModel';
 import { UtilsSvc, M_PER_MILE } from './UtilsService';
-import { GoalDisplayObj, GoalObj } from './GoalsService';
-import { BarGraphInfo } from './FilterService';
+import { GoalDisplayObj, GoalObj, PROGRESS_RANGES } from './GoalsService';
 import { DIT_GOAL_CAT, CA_GOAL_CAT } from './GoalsService';
 import { APP_ICONS } from './SvgImages';
 import SvgIcon from './SvgIconComponent';
-import BarDisplay from './BarDisplayComponent';
+import BarDisplay, { BarGraphInfo } from "./BarDisplayComponent";
 import TrekDetails from './TrekDetailsComponent';
-import IconButton from './IconButtonComponent';
 import TrekLogHeader from './TreklogHeaderComponent';
+import SvgYAxis, { YAXIS_TYPE_MAP } from './SvgYAxisComponent';
+import SvgGrid from './SvgGridComponent';
+import NavMenu, { NavMenuItem } from './NavMenuComponent';
+import NavMenuTrigger from './NavMenuTriggerComponent'
 
 const goBack = NavigationActions.back() ;
 
@@ -51,6 +54,7 @@ class GoalDetails extends Component<{
   @observable scrollToTrek: number;
   @observable showStepsPerMin: boolean;
   @observable showTotalCalories: boolean;
+  @observable openNavMenu : boolean;
 
 
   _didFocusSubscription;
@@ -123,6 +127,7 @@ class GoalDetails extends Component<{
     this.scrollToTrek = -1;
     this.showStepsPerMin = false;
     this.showTotalCalories = true;
+    this.setOpenNavMenu(false);
    }
 
   // set observable that will cause the Interval barGraph to scroll to a given bar
@@ -133,12 +138,8 @@ class GoalDetails extends Component<{
 
   // move the Interval barGraph to the specified bar
   scrollIntervalGraph = (pos: number) => {
-    let oldVal = this.tInfo.updateGraph;
-
-    this.tInfo.setUpdateGraph(true);
     this.setScrollToInterval(pos);
     requestAnimationFrame(() => {
-      this.tInfo.setUpdateGraph(oldVal);
       this.setScrollToInterval(undefined);
     })
   }
@@ -151,14 +152,20 @@ class GoalDetails extends Component<{
 
   // move the Trek barGraph to the specified bar
   scrollTrekGraph = (pos: number) => {
-    let oldVal = this.tInfo.updateGraph;
 
-    this.tInfo.setUpdateGraph(true);
     this.setScrollToTrek(pos);
     requestAnimationFrame(() => {
-      this.tInfo.setUpdateGraph(oldVal);
       this.setScrollToTrek(undefined);
     })
+  }
+
+  @action
+  setOpenNavMenu = (status: boolean) => {
+    this.openNavMenu = status;
+  }
+
+  openMenu = () => {
+    this.setOpenNavMenu(true);
   }
 
   @action
@@ -168,7 +175,6 @@ class GoalDetails extends Component<{
     if((val !== -1) && this.trekGraphData.items && this.trekGraphData.items.length){
       bar = this.trekGraphData.items.findIndex((item) => item.index === val);
     }
-    if (val >= 0) { this.tInfo.setUpdateGraph(true); }
     this.selectedTrekBar = bar;
     this.selectedTrekIndex = val;
   }
@@ -181,7 +187,6 @@ class GoalDetails extends Component<{
       bar = this.intervalGraphData.items.findIndex((item) => item.index === val);
     }
     if (val >= 0) { 
-      this.tInfo.setUpdateGraph(true); 
       this.gS.setIntervalGraph(false);
     } else {
       this.gS.setIntervalGraph(true);
@@ -325,19 +330,19 @@ class GoalDetails extends Component<{
 
   // Display the map for the Trek at the given index in the items list of the given display object
   showTrekMap = () => {
+    this.tInfo.setShowMapControls(false);
     requestAnimationFrame(() => {
-      this.props.navigation.navigate('SelectedTrek', 
-        {title: this.props.utilsSvc.formattedLongDateAbbrDay(this.tInfo.date) + '  ' + this.tInfo.startTime,
-          changeTrekFn: this.changeTrek});
+      this.props.navigation.navigate({routeName: 'SelectedTrek', 
+        params: { title: this.props.utilsSvc.formattedLocaleDateAbbrDay(this.tInfo.date) + 
+                        '  ' + this.tInfo.startTime,
+                  changeTrekFn: this.changeTrek,
+                  checkTrekChangeFn: this.checkTrekChange,
+                }, key: 'Key-SelectedTrek'});
     })
   }
 
-  // Change to Next or Prev trek in the displayObj.treks array.
-  // Return the header label for the Trek.
-  // Return '' if user can't change in the selected direction
-  changeTrek = (dir: string, check = false) : string => {
+  checkTrekChange = (dir: string) => {
     let index = this.selectedTrekIndex;
-    let trek : TrekObj;
     let items = this.detailObj.items;
     let origInterval = this.selectedIntervalIndex;
     let newInterval = origInterval;
@@ -358,14 +363,48 @@ class GoalDetails extends Component<{
         while(items[index + 1].trek !== undefined) {index++;} 
       }
     }
-    if (check) { return ((index === this.selectedTrekIndex) || (items[index].trek === undefined)) ? "NO" : "OK"; }
-    if ((index === this.selectedTrekIndex) || (items[index].trek === undefined)) { return ''; } // can't move
-    if (newInterval !== origInterval){
-      this.tInfo.setUpdateGraph(true);
-      this.intervalSelected(newInterval, false);  // this builds trekGraphData for the new interval
-    }
-    trek = this.setCurrentTrek(index);        // this sets the selectedTrekBar property
-    return this.props.utilsSvc.formattedLongDateAbbrDay(trek.date) + '  ' + trek.startTime;
+    return ((index === this.selectedTrekIndex) || (items[index].trek === undefined)) ? -1 : index;
+  }
+
+  // Change to Next or Prev trek in the displayObj.treks array.
+  // Resolve the header label for the Trek.
+  // Resolve '' if user can't change in the selected direction
+  changeTrek = (dir: string) => {
+    let index = this.checkTrekChange(dir);
+    let trek : TrekObj;
+    let items = this.detailObj.items;
+    let origInterval = this.selectedIntervalIndex;
+    let newInterval = origInterval;
+
+    return new Promise<any>((resolve) => {      
+      if (index === -1) { 
+        resolve('');    // can't move
+      } else {    
+        index = this.selectedTrekIndex;
+        if (dir === 'Next') {
+          while((index !== (items.length - 1)) && (items[++index].trek === undefined)){
+            // change interval here
+            newInterval++;
+          }
+        }
+        if (dir === 'Prev'){
+          while((index !== 0) && (items[--index].trek === undefined)){
+            // change interval here
+            newInterval--;
+          }
+          if(newInterval !== origInterval){
+            // find last trek in prior interval
+            while(items[index + 1].trek !== undefined) {index++;} 
+          }
+        }
+        if (newInterval !== origInterval){
+          this.intervalSelected(newInterval, false);  // this builds trekGraphData for the new interval
+        }
+        trek = this.setCurrentTrek(index);        // this sets the selectedTrekBar property
+        this.tInfo.setShowMapControls(false);
+        resolve(this.props.utilsSvc.formattedLocaleDateAbbrDay(trek.date) + '  ' + trek.startTime);
+      }
+    }) 
   }
 
   setCurrentTrek = (trekIndex: number) : TrekObj => {
@@ -405,7 +444,11 @@ class GoalDetails extends Component<{
   }
 
   trekSelected = (index: number) => {
-    this.setCurrentTrek(index)
+    if (index === this.selectedTrekIndex) {
+      this.showTrekMap();
+    } else {
+      this.setCurrentTrek(index)
+    }
   }
 
   @action
@@ -428,17 +471,47 @@ class GoalDetails extends Component<{
       case 'Map':
         this.showTrekMap()
         break;
+      case "GoBack":
+        this.props.navigation.dispatch(goBack);
+        break;
+      case "Home":
+        this.tInfo.clearTrek();
+        this.props.navigation.dispatch(StackActions.popToTop());
+        break;
+      case "Summary":
+      case "Courses":
+      case "Settings":
+      case "Conditions":
+        this.tInfo.clearTrek();
+        let resetAction = StackActions.reset({
+              index: 1,
+              actions: [
+                NavigationActions.navigate({ routeName: 'Log', key: 'Home' }),
+                NavigationActions.navigate({ routeName: val, key: 'Key-' + val }),
+              ],
+            });
+        this.props.navigation.dispatch(resetAction);          
+        break;
       default:
     }
   }
 
+  // show the selected trek image
+  showTrekImage = (set: number, image = 0) => {
+    let title = this.tInfo.formatImageTitle(set, image);
+    this.props.navigation.navigate('Images', {cmd: 'show', setIndex: set, imageIndex: image, title: title});
+  }
+
   render() {
-    const {height} = Dimensions.get('window');
+    const {height, width} = Dimensions.get('window');
     this.detailObj = this.props.navigation.getParam('detailObj');
 
-    const { mediumTextColor, pageBackground, dividerColor, highTextColor, navItemBorderColor,
-            navIconColor, itemMeetsGoal, itemMissesGoal, listIconColor } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
-    const { cardLayout, controlsArea, navItemWithLabel, navItemLabel, navIcon, pageTitle } = this.props.uiTheme;
+    const { mediumTextColor, pageBackground, dividerColor, highTextColor,
+            itemMeetsGoal, itemMissesGoal, listIconColor, progressBackground
+          } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
+    const { cardLayout,
+            pageTitle, fontRegular, fontBold, fontLightItalic
+          } = this.props.uiTheme;
     const dObj = this.detailObj;
     const validDisplayObj = dObj !== undefined && dObj.items.length > 0;
     const statusBarHt = 0;
@@ -448,13 +521,39 @@ class GoalDetails extends Component<{
     const showEmpties = !chartForTreks && (this.emptyIntervals !== 0);
     const miHt = showEmpties ? 20 : 0;
     const graphHeight = 200;
+    const graphAreaWidth = width - 6;
+    const yAxisWidth = 60;
+    const graphWidth = graphAreaWidth - yAxisWidth - 10;
+    const maxBarHeightInterval = 155;
+    const maxBarHeightTrek = 145;
     const infoItemHeight = 45;
     const infoIconSize = 24;
     const showLegend = this.gS.intervalGraph;
     const legendHt = showLegend ? 30 : 0;
     const pTitle = this.formatDetailsTitle(dObj, this.selectedIntervalIndex, "page");
     const graphTitle = this.formatDetailsTitle(dObj, this.selectedIntervalIndex, "graph");
-    const areaHt = height - (statusBarHt + HEADER_HEIGHT + PAGE_TITLE_HEIGHT + pageTitleSpacing + CONTROLS_HEIGHT);
+    const areaHt = height - (statusBarHt + HEADER_HEIGHT + PAGE_TITLE_HEIGHT + pageTitleSpacing);
+    const prog = this.gS.computeProgress(dObj);
+    const progPct = Math.round(prog * 100);
+    const ind = this.uSvc.findRangeIndex(progPct, PROGRESS_RANGES);
+    const pColor = PROGRESS_COLORS[ind];
+    const showType = (dObj.goal.category === DIT_GOAL_CAT) ? "Time" : "Dist";
+    let navMenuItems : NavMenuItem[] = 
+    [ 
+        {icon: 'ArrowBack', label: 'Go Back', value: 'GoBack'},
+        {icon: 'Home', label: 'Home', value: 'Home'},
+        {icon: 'Pie', label: 'Activity', value: 'Summary'},
+        {icon: 'Course', label: 'Courses', value: 'Courses'},
+        {icon: 'Settings', label: 'Settings', value: 'Settings'},
+        {icon: 'PartCloudyDay', label: 'Conditions', value: 'Conditions'}]  
+    if (validDisplayObj && !showLegend) {
+      navMenuItems.unshift(
+        {label: 'Detail Options', 
+         submenu: [
+          {icon: 'Map', label: 'View Map', value: 'Map'},
+        ]}
+      )
+    } 
 
     const styles=StyleSheet.create({
       container: { ... StyleSheet.absoluteFillObject, backgroundColor: pageBackground },
@@ -481,31 +580,37 @@ class GoalDetails extends Component<{
       },
       titleArea: {
         height: titleHt + miHt,
+        marginBottom: 5,
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
       },
       titleText: {
         color: highTextColor,
-        fontSize: 18,
+        fontFamily: fontRegular,
+        fontSize: 20,
       },
       miText: {
-        color: highTextColor,
+        color: mediumTextColor,
+        fontFamily: fontLightItalic,
         fontSize: 14,
       },
       nothingText: {
         color: highTextColor,
-        fontSize: 20
+        fontFamily: fontRegular,
+        fontSize: 22
       },
       graphAndStats: {
         marginBottom: 5,
+        marginRight: 10,
         height: graphHeight,
       },
       graphArea: {
         backgroundColor: pageBackground,
+        marginLeft: 0,
       },
       graph: {
-        paddingLeft: 0
+        marginLeft: yAxisWidth,
       },
       infoIcon: {
         width: infoIconSize,
@@ -519,17 +624,19 @@ class GoalDetails extends Component<{
         marginRight: 5,
       },
       legendText: {
-        fontSize: 14,
+        fontSize: 16,
+        fontFamily: fontRegular,
         color: mediumTextColor,
       },
       infoLabel: {
-        fontSize: 16,
+        fontSize: 18,
+        fontFamily: fontRegular,
         color: highTextColor,
       },
       infoValue: {
         fontSize: 18,
+        fontFamily: fontBold,
         color: highTextColor,
-        fontWeight: "bold",
       },
       divider: {
         flex: 1,
@@ -549,146 +656,204 @@ class GoalDetails extends Component<{
         paddingTop: 0,
         height: areaHt,
       },
+      graphStyle: {
+        height: graphHeight,
+      },
+      barStyle: { 
+        height: graphHeight, 
+        width: 40,
+        borderColor: "transparent",
+        backgroundColor: "transparent",
+      },
+      listArea: {
+        ...cardLayout,
+        paddingBottom: 0,
+        paddingLeft: 0,
+        paddingRight: 0,
+        backgroundColor: pageBackground,
+      },
+      pageTitleAdj: {
+        color: highTextColor,
+        paddingLeft: 10,
+        paddingRight: 10,
+        marginBottom: 10,
+      },
     })
 
     return(
+      <NavMenu
+        selectFn={this.setActiveNav}
+        items={navMenuItems}
+        setOpenFn={this.setOpenNavMenu}
+        open={this.openNavMenu}> 
         <View style={styles.container}>
-          <View style={[styles.container, {bottom: CONTROLS_HEIGHT}]}>
+          <View style={[styles.container]}>
             <TrekLogHeader titleText={this.props.navigation.getParam('title','')}
                                 icon="*"
                                 backButtonFn={this.checkBackButton}
             />        
-            <View style={cardLayout}>
-              <Text style={[pageTitle, {color: highTextColor}]}>{pTitle}</Text>
-            </View>
-            {(validDisplayObj) && 
-              <View style={styles.scrollArea}>
-                <ScrollView>
-                  <View style={[cardLayout, {paddingTop: 0, paddingBottom: 0, paddingLeft: 2, 
-                                              paddingRight: 2, marginTop: 0}]}>
-                    <View style={[styles.titleArea]}>
-                      <Text style={styles.titleText}>{graphTitle}</Text>
-                      {showEmpties &&
-                        <View>
-                          <Text style={styles.miText}>
-                          {this.gS.formatMissingIntsMsg(dObj, this.emptyIntervals)}</Text>
+            <View style={styles.listArea}>
+              <NavMenuTrigger openMenuFn={this.openMenu}/>
+              <Text style={[pageTitle, styles.pageTitleAdj]}>{pTitle}</Text>
+              {(validDisplayObj) && 
+                <View style={styles.scrollArea}>
+                  <ScrollView>
+                    <View style={[cardLayout, {paddingTop: 0, paddingBottom: 0, paddingLeft: 2, 
+                                                paddingRight: 2, marginTop: 0}]}>
+                      <View style={[styles.titleArea]}>
+                        <Text style={styles.titleText}>{graphTitle}</Text>
+                        {showEmpties &&
+                          <View>
+                            <Text style={styles.miText}>
+                            {this.gS.formatMissingIntsMsg(dObj, this.emptyIntervals)}</Text>
+                          </View>
+                        }
+                      </View>
+                      <View style={styles.graphAndStats}>
+                        {this.trekGraphData &&
+                          <View style={[styles.graphArea]}>
+                            <View style={!chartForTreks ? styles.hidden : {}}>
+                              <SvgYAxis
+                                graphHeight={graphHeight}
+                                axisTop={maxBarHeightTrek}
+                                axisBottom={20}
+                                axisWidth={yAxisWidth}
+                                color={mediumTextColor}
+                                lineWidth={1}
+                                majorTics={5}
+                                title={this.trekGraphData.title}
+                                dataRange={this.trekGraphData.range}
+                                dataType={YAXIS_TYPE_MAP[showType]}
+                              />
+                              <View style={styles.graph}>
+                                <SvgGrid
+                                  graphHeight={graphHeight}
+                                  gridWidth={graphWidth}
+                                  lineCount={3}
+                                  color={dividerColor}
+                                  maxBarHeight={maxBarHeightTrek}
+                                  minBarHeight={20}
+                                />
+                                <BarDisplay 
+                                  data={this.trekGraphData.items} 
+                                  dataRange={this.trekGraphData.range}
+                                  selected={this.selectedTrekBar}
+                                  selectFn={this.trekSelected} 
+                                  maxBarHeight={maxBarHeightTrek}
+                                  style={styles.graphStyle}
+                                  barStyle={styles.barStyle}
+                                  minBarHeight={20}
+                                  scrollToBar={this.scrollToTrek}
+                                />
+                              </View>
+                            </View>
+                          </View>
+                        }
+                        {this.intervalGraphData &&
+                          <View style={[styles.graphArea]}>
+                            <View style={chartForTreks ? styles.hidden : {}}>
+                              <SvgYAxis
+                                graphHeight={graphHeight}
+                                axisTop={maxBarHeightInterval}
+                                axisBottom={20}
+                                axisWidth={yAxisWidth}
+                                color={mediumTextColor}
+                                lineWidth={1}
+                                majorTics={5}
+                                title={this.intervalGraphData.title}
+                                dataRange={this.intervalGraphData.range}
+                                dataType={YAXIS_TYPE_MAP[showType]}
+                              />
+                              <View style={styles.graph}>
+                                <SvgGrid
+                                  graphHeight={graphHeight}
+                                  gridWidth={graphWidth}
+                                  lineCount={3}
+                                  color={dividerColor}
+                                  maxBarHeight={maxBarHeightInterval}
+                                  minBarHeight={20}
+                                />
+                                <BarDisplay 
+                                  data={this.intervalGraphData.items} 
+                                  dataRange={this.intervalGraphData.range}
+                                  selected={this.selectedIntervalBar}
+                                  selectFn={this.intervalSelected} 
+                                  maxBarHeight={maxBarHeightInterval}
+                                  style={styles.graphStyle}
+                                  barStyle={styles.barStyle}
+                                  minBarHeight={20}
+                                  scrollToBar={this.scrollToInterval}
+                                />
+                              </View>
+                            </View>
                         </View>
                       }
-                    </View>
-                    <View style={styles.graphAndStats}>
-                      <View style={[styles.graphArea]}>
-                        <View style={styles.graph}>
-                          {this.trekGraphData &&
-                            <View style={!chartForTreks ? styles.hidden : {}}>
-                              <BarDisplay 
-                                data={this.trekGraphData.items} 
-                                dataRange={this.trekGraphData.range}
-                                selected={this.selectedTrekBar}
-                                selectFn={this.trekSelected} 
-                                barWidth={60}
-                                maxBarHeight={145}
-                                style={{height: 195, backgroundColor: "transparent"}}
-                                scrollToBar={this.scrollToTrek}
-                              />
+                      </View>
+                      {showLegend &&
+                        <View>
+                          <View style={[styles.rowAround, {height: legendHt, alignItems: "flex-start"}]}>
+                            <View style={styles.rowStart}>
+                              <LinearGradient colors={[itemMeetsGoal, pageBackground]} style={styles.legendBox}/>
+                              <Text style={styles.legendText}>Meets Goal</Text>
                             </View>
-                          }
-                          {this.intervalGraphData &&
-                            <View style={chartForTreks ? styles.hidden : {}}>
-                              <BarDisplay 
-                                data={this.intervalGraphData.items} 
-                                dataRange={this.intervalGraphData.range}
-                                selected={this.selectedIntervalBar}
-                                selectFn={this.intervalSelected} 
-                                barWidth={60}
-                                maxBarHeight={155}
-                                style={{height: 195, backgroundColor: "transparent"}}
-                                scrollToBar={this.scrollToInterval}
-                              />
+                            <View style={styles.rowStart}>
+                              <LinearGradient colors={[itemMissesGoal, pageBackground]} style={styles.legendBox}/>
+                              <Text style={styles.legendText}>Misses Goal</Text>
                             </View>
-                          }
+                          </View>
                         </View>
-                      </View>
+                      }
+                      {(!chartForTreks) &&
+                        <View>
+                          <View style={styles.rowBetween}>
+                            <View style={styles.rowStart}>
+                              <ProgressCircle
+                                style={styles.infoIcon}
+                                backgroundColor={progressBackground}
+                                strokeWidth={2}
+                                progress={prog}
+                                progressColor={pColor}
+                              />                         
+                              <Text style={styles.infoLabel}>Achievement Rate</Text>
+                            </View>
+                            <Text style={styles.infoValue}>
+                              {progPct + '%'}
+                            </Text>
+                          </View>
+                          <View style={styles.divider}/>
+                          <View style={styles.rowBetween}>
+                            <View style={styles.rowStart}>
+                              <SvgIcon
+                                style={styles.infoIcon}
+                                size={infoIconSize}
+                                paths={APP_ICONS['CalendarCheck']}
+                                fill={listIconColor}
+                              />
+                              <Text style={styles.infoLabel}>Activity For:</Text>
+                            </View>
+                            <Text style={styles.infoValue}>{dObj.dateRange.start + ' - ' + dObj.dateRange.end}</Text>
+                          </View>
+                          <View style={styles.divider}/>
+                        </View>
+                      }
+                      {chartForTreks &&
+                        <TrekDetails
+                          showImagesFn={this.showTrekImage}
+                        />
+                      }
                     </View>
-                    {showLegend &&
-                      <View>
-                        <View style={[styles.rowAround, {height: legendHt, alignItems: "flex-start"}]}>
-                          <View style={styles.rowStart}>
-                            <LinearGradient colors={[itemMeetsGoal, pageBackground]} style={styles.legendBox}/>
-                            <Text style={styles.legendText}>Meets Goal</Text>
-                          </View>
-                          <View style={styles.rowStart}>
-                            <LinearGradient colors={[itemMissesGoal, pageBackground]} style={styles.legendBox}/>
-                            <Text style={styles.legendText}>Misses Goal</Text>
-                          </View>
-                        </View>
-                      </View>
-                    }
-                    {(!chartForTreks) &&
-                      <View>
-                        <View style={styles.rowBetween}>
-                          <View style={styles.rowStart}>
-                            <SvgIcon 
-                              paths={APP_ICONS.Certificate}
-                              size={infoIconSize}
-                              fill="url(#grad)"
-                              fillPct={this.gS.computeProgress(dObj)}
-                              stroke={highTextColor}
-                              strokeWidth={.5}
-                              style={styles.infoIcon}
-                            />
-                            <Text style={styles.infoLabel}>Achievement Rate</Text>
-                          </View>
-                          <Text style={styles.infoValue}>
-                            {Math.round(this.gS.computeProgress(dObj) * 100) + '%'}
-                          </Text>
-                        </View>
-                        <View style={styles.divider}/>
-                        <View style={styles.rowBetween}>
-                          <View style={styles.rowStart}>
-                            <SvgIcon
-                              style={styles.infoIcon}
-                              size={infoIconSize}
-                              paths={APP_ICONS['CalendarCheck']}
-                              fill={listIconColor}
-                            />
-                            <Text style={styles.infoLabel}>Effective Date</Text>
-                          </View>
-                          <Text style={styles.infoValue}>{this.uSvc.dateFromSortDateYY(dObj.goal.dateSet)}</Text>
-                        </View>
-                        <View style={styles.divider}/>
-                      </View>
-                    }
-                    {chartForTreks &&
-                      <TrekDetails/>
-                    }
-                  </View>
-                </ScrollView>
-              </View>
-            }
+                  </ScrollView>
+                </View>
+              }
+            </View>
             {!validDisplayObj &&
               <View style={styles.centered}>
                 <Text style={styles.nothingText}>Nothing to Display</Text>
               </View>
             }
           </View>
-          {(chartForTreks) &&
-            <View style={controlsArea}>
-              <IconButton 
-                iconSize={NAV_ICON_SIZE}
-                icon="Map"
-                style={navItemWithLabel}
-                borderColor={navItemBorderColor}
-                iconStyle={navIcon}
-                color={navIconColor}
-                raised
-                onPressFn={this.setActiveNav}
-                onPressArg="Map"
-                label="Map"
-                labelStyle={navItemLabel}
-              />
-            </View>
-          }
         </View>    
+      </NavMenu>
     )
   }
   

@@ -1,4 +1,5 @@
 import React, { useContext, useState, useEffect, useRef } from "react";
+import { Location } from '@mauron85/react-native-background-geolocation';
 import {
   View,
   StyleSheet,
@@ -6,6 +7,7 @@ import {
   ScrollView,
 } from "react-native";
 import { RectButton } from 'react-native-gesture-handler'
+import { useObserver } from "mobx-react-lite";
 
 import {
   UiThemeContext,
@@ -57,7 +59,7 @@ function Conditions() {
 
   function getLocation() {
     // Get the current GPS position
-    locationSvc.getCurrentLocation((location) => {    
+    locationSvc.getCurrentLocation((location: Location) => {   
         currLocation.current = {latitude: location.latitude, longitude: location.longitude};
         locationSvc.stopGeolocation();
         getWeatherConds();
@@ -273,13 +275,10 @@ function Conditions() {
     )
   }
 
-return (
-    <View style={styles.container}>
-      <View style={[cardLayout, {marginBottom: 0, paddingBottom: 15}]}>
-        <Text style={[pageTitle, {color: highTextColor}]}>At Your Location</Text>
-      </View>
+  return useObserver(() => (
+    <View>
       {!weatherReady && 
-        <Waiting msg="Obtaining weather data"/>
+        <Waiting msg={'Obtaining weather conditions...'}/>
       }
       <ScrollView>
         {weatherReady &&
@@ -335,7 +334,7 @@ return (
         }
       </ScrollView>
     </View>
-  )
+  ))
 }
 
 export default Conditions;

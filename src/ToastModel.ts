@@ -20,6 +20,7 @@ export interface ToastData {
   content            ?: string,   // modal content
   time               ?: number,   // length of time (milliseconds) to display the toast
   location           ?: ToastLocation // location on screen for toast
+  waitForOK          ?: boolean,  // if true, display an OK button on the toast and wait for user to hit it
 }
 
 
@@ -46,6 +47,7 @@ export class ToastModel {
   @observable toastIsOpen;    // when true, Toast component will be open
 
   @observable tData  : ToastData;         // data object for Toast
+  timerId: number;
 
   constructor () {
     this.initializeObservables();
@@ -68,10 +70,8 @@ export class ToastModel {
     this.tData.bColor       = tData.bColor || this.TOAST_CONFIGS[this.tData.tType].bColor
     this.tData.time         = tData.time || this.TOAST_CONFIGS[this.tData.tType].time;
     this.tData.location     = tData.location || 'Bottom';
+    this.tData.waitForOK    = tData.waitForOK;
     this.toastIsOpen = true;
-    setTimeout(() => {
-      this.closeToast();
-    }, this.tData.time)
   }
 
   @action
