@@ -41,7 +41,6 @@ project.xcworkspace
 #
 android/.gradle
 android/app/build
-android/app/src/main/assets
 android/app/src/main/AndroidManifest.xml
 android/build
 android/gradle
