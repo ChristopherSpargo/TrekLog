@@ -26,6 +26,7 @@ class SvgButton extends Component<{
   svgHeightAdj ?: number,    // amount to add to the SVG height property
   pathXAdj ?: number,       // amount to add to the path x position
   borderWidth ?: number,    // optional border width spec
+  rippleColor ?: number,    // color for ripple effect
 }, {} > {
 
 
@@ -52,6 +53,7 @@ class SvgButton extends Component<{
     const propStyle = this.props.style || {};
     const htAdj = this.props.svgHeightAdj || 0;
     const widAdj = this.props.svgWidthAdj || 0;
+    const ripple = this.props.rippleColor !== undefined ? this.props.rippleColor : rippleColor;
     const fillColor = this.props.highlightColor ? 
                       (this.props.highlight ? this.props.highlightColor : dividerColor) :
                       this.props.fill;
@@ -87,7 +89,7 @@ class SvgButton extends Component<{
       <LongPressGestureHandler
             onHandlerStateChange={this.buttonLongPressed}
             minDurationMs={400}>
-        <BorderlessButton rippleColor={rippleColor} onPress={this.buttonPressed}>
+        <BorderlessButton rippleColor={ripple} onPress={this.buttonPressed}>
           <View style={[styles.container, propStyle, borderHighlight]}>
             <SvgIcon 
                 style={styles.appIcon}

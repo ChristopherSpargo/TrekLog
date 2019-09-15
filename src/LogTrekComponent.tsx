@@ -54,7 +54,8 @@ import {
 } from "./UtilsService";
 import { WeatherSvc } from "./WeatherSvc";
 import { GoalObj, GoalsSvc, GoalDisplayItem } from "./GoalsService";
-import { CONTROLS_HEIGHT, NAV_ICON_SIZE, HEADER_HEIGHT, TREKLOG_FILENAME_REGEX, COLOR_THEME_LIGHT } from "./App";
+import { BIG_CONTROLS_HEIGHT, NAV_ICON_SIZE, BIG_NAV_ICON_SIZE, HEADER_HEIGHT, 
+         TREKLOG_FILENAME_REGEX, COLOR_THEME_LIGHT } from "./App";
 import SpeedDial, { SpeedDialItem } from "./SpeedDialComponent";
 import TrekLogHeader from "./TreklogHeaderComponent";
 import { StorageSvc } from "./StorageService";
@@ -69,9 +70,7 @@ import CheckboxPicker from "./CheckboxPickerComponent";
 import { FilterSvc } from "./FilterService";
 import { CourseSvc, Course } from "./CourseService";
 import NavMenu from './NavMenuComponent';
-import NavMenuTrigger from './NavMenuTriggerComponent'
-import { resolve } from "url";
-import { rejects } from "assert";
+import PageTitle from './PageTitleComponent';
 
 
 const goBack = NavigationActions.back();
@@ -551,8 +550,6 @@ class LogTrek extends Component<
 
   abortLogging = discardText => {
     this.glS.shutDownGeolocation();
-    this.trekInfo.trackingCourse = undefined;
-    this.trekInfo.trackingObj = undefined;
     this.props.storageSvc.removeRestoreObj();
     this.trekInfo.resObj = undefined;
     this.trekInfo.setLimitsActive(false);
@@ -837,6 +834,7 @@ class LogTrek extends Component<
       this.trekInfo.trackingCourse = this.courseToTrack;
       this.startLogging()
       this.setTrackingMethodFormOpen(false);
+      this.showMap();
     } else {
       this.setTrackingMethodFormOpen(false);
       setTimeout(() => {
@@ -951,19 +949,19 @@ class LogTrek extends Component<
 
   // display the map view of the trek.  Call SelectedTrek if logging finished
   showMap = () => {
-    if (this.trekInfo.trekSaved){     
-      this.props.navigation.navigate("SelectedTrek", {
-        title:
-          this.props.utilsSvc.formattedLocaleDateAbbrDay(this.trekInfo.date) +
-          "  " +
-          this.trekInfo.startTime,
-        icon: this.trekInfo.type,
-        switchSysFn: this.trekInfo.switchMeasurementSystem,
-      });
-    } else {
+    // if (this.trekInfo.trekSaved){     
+    //   this.props.navigation.navigate("SelectedTrek", {
+    //     title:
+    //       this.props.utilsSvc.formattedLocaleDateAbbrDay(this.trekInfo.date) +
+    //       "  " +
+    //       this.trekInfo.startTime,
+    //     icon: this.trekInfo.type,
+    //     switchSysFn: this.trekInfo.switchMeasurementSystem,
+    //   });
+    // } else {
       this.trekInfo.setShowMapInLog(true);
       this.props.navigation.navigate("LogTrekMap");
-    }
+    // }
   }
 
   selectTrekType = (status: boolean) => {
@@ -1231,7 +1229,7 @@ class LogTrek extends Component<
       !stopOk && !this.trekInfo.pendingReview;
     const reviewOk =
       !stopOk && this.trekInfo.pendingReview;
-    const { controlsArea, navItem, navIcon, navItemWithLabel, navItemLabel,
+    const { controlsArea, navItem, navIcon, bigNavItemWithLabel, navItemWithLabel, navItemLabel,
             fontLight } = this.uiTheme;
     const {
       mediumTextColor,
@@ -1261,12 +1259,11 @@ class LogTrek extends Component<
     const hbgColor = bgImage ? pageBackgroundFilm : headerBackgroundColor;
     const tColor = bgImage ? mediumTextColor : headerTextColor;
     const nlColor = (bgImage && lightTheme) ? highTextColor : navIconColor
-    const disabledGroupTextColor = bgImage ? disabledTextColor : disabledHeaderTextColor; 
     const noMenu = formOpen || this.lockNavMenu;
 
     const headerActions = [
-      {icon: 'Image', iconColor: tColor, style: {marginTop: 10}, actionFn: this.trekInfo.toggleCurrentBackground},
-      {icon: 'YinYang', iconColor: tColor, style: {marginTop: 10}, actionFn: this.swapColorTheme}
+      // {icon: 'Image', iconColor: tColor, style: {marginTop: 10}, actionFn: this.trekInfo.toggleCurrentBackground},
+      {icon: 'YinYang', iconColor: tColor, style: {marginTop: 0}, actionFn: this.swapColorTheme}
     ];
     let navMenuItems;
     if (stopOk){    
@@ -1287,13 +1284,14 @@ class LogTrek extends Component<
                     {icon: 'TimerSand', label: 'Limit Time', value: 'StartT'},
                     {icon: 'CompassMath', label: 'Limit Distance', value: 'StartD'}
                   ]},
-        {icon: 'Pie', label: 'Activity', value: 'Summary'},
-        {icon: 'Course', label: 'Courses', value: 'Courses'},
-        {icon: 'Target', label: 'Goals', value: 'Goals'},
-        {icon: 'Settings', label: 'Settings', value: 'Settings'},
-        {icon: 'PartCloudyDay', label: 'Conditions', value: 'Conditions'},  
-        {icon: 'Download', label: 'Download Treks', value: 'Download'},
-        {icon: 'Upload', label: 'Upload Treks', value: 'Upload'}]
+          {icon: 'Pie', label: 'Activity', value: 'Summary'},
+          {icon: 'Course', label: 'Courses', value: 'Courses'},
+          {icon: 'Target', label: 'Goals', value: 'Goals'},
+          {icon: 'Settings', label: 'Settings', value: 'Settings'},
+          {icon: 'PartCloudyDay', label: 'Conditions', value: 'Conditions'},  
+          // {icon: 'Download', label: 'Download Treks', value: 'Download'},
+          // {icon: 'Upload', label: 'Upload Treks', value: 'Upload'}
+        ]
       }
     }
 
@@ -1303,15 +1301,23 @@ class LogTrek extends Component<
         backgroundColor: bgColor,
       },
       caAdjust: {
+        height: BIG_CONTROLS_HEIGHT,
         backgroundColor: bgColor,
+        alignItems: "flex-end",
+        paddingBottom: 5,
       },
       speedDialTrigger: {
         backgroundColor: bgImage ? almostTransparent : pageBackground,
         borderWidth: 0,
       },
+      youAre: {
+        fontSize: 24,
+        fontFamily: fontLight,
+        color: disabledTextColor
+      },
       bigTitle: {
-        marginTop: 15,
-        fontSize: 60,
+        marginTop: stopOk ? -15 : 25,
+        fontSize: startOk ? 60 : 50,
         fontFamily: fontLight,
         color: disabledTextColor
       },
@@ -1324,7 +1330,11 @@ class LogTrek extends Component<
       },
       navButton: {
         ...navItemWithLabel,
-        backgroundColor: bgImage ? almostTransparent : undefined,
+        backgroundColor: bgImage ? almostTransparent : "transparent",
+      },
+      bigNavButton: {
+        ...bigNavItemWithLabel,
+        backgroundColor: bgImage ? almostTransparent : "transparent",
       },
       navLabelColor: {
         color: nlColor,
@@ -1343,13 +1353,12 @@ class LogTrek extends Component<
             logo
             icon="*"
             actionButtons={headerActions}
-            group={this.trekInfo.group || "None"}
-            setGroupFn={startOk ? this.getDifferentGroup : undefined}
-            groupTextColor={startOk ? tColor : disabledGroupTextColor}
             backgroundColor={hbgColor}
             textColor={tColor}
             position="absolute"
             borderBottomColor={bgImage ? dividerColor : headerBorderColor}
+            openMenuFn={this.openMenu}
+            disableMenu={noMenu}
           />
           <RadioPicker pickerOpen={this.radioPickerOpen}/>
           <RadioPicker pickerOpen={this.coursePickerOpen}/>
@@ -1380,11 +1389,19 @@ class LogTrek extends Component<
             <View
               style={[
                 styles.container, (stopOk || reviewOk) ?
-                { top: HEADER_HEIGHT, bottom: CONTROLS_HEIGHT, alignItems: "center" } : 
+                { top: HEADER_HEIGHT, bottom: BIG_CONTROLS_HEIGHT, alignItems: "center" } : 
                 {top: HEADER_HEIGHT, alignItems: "center"}
               ]}
             >
-              <NavMenuTrigger openMenuFn={this.openMenu} menuStyle={{top: 10}} disabled={noMenu}/>
+              <PageTitle 
+                titleText=""
+                style={{marginBottom: 0, marginTop: 15}}
+                groupName={this.trekInfo.group || "None"}
+                setGroupFn={startOk ? this.getDifferentGroup : undefined}
+              />
+              {numPts > 0 && stopOk &&
+                <Text style={styles.youAre}>You are</Text>
+              }
               <Text style={styles.bigTitle}>{bigTitle}</Text>
               {!this.trekInfo.logging && !reviewOk && (
                 <View style={{ flex: 1, justifyContent: "center" }}>
@@ -1420,18 +1437,6 @@ class LogTrek extends Component<
             </View>
           {stopOk && (
             <View style={[controlsArea,styles.caAdjust]}>
-              <IconButton
-                iconSize={navIconSize}
-                icon="Stop"
-                style={styles.navButton}
-                borderColor={trekLogRed}
-                iconStyle={navIcon}
-                color={trekLogRed}
-                onPressFn={this.setActiveNav}
-                onPressArg="Stop"
-                label="Stop"
-                labelStyle={[navItemLabel, styles.navLabelColor]}
-            />
               {numPts > 0 && (
                 <IconButton
                   iconSize={navIconSize}
@@ -1446,6 +1451,18 @@ class LogTrek extends Component<
                   labelStyle={[navItemLabel, styles.navLabelColor]}
                   />
               )}
+              <IconButton
+                iconSize={BIG_NAV_ICON_SIZE}
+                icon="Stop"
+                style={styles.bigNavButton}
+                borderColor={trekLogRed}
+                iconStyle={navIcon}
+                color={trekLogRed}
+                onPressFn={this.setActiveNav}
+                onPressArg="Stop"
+                label="Stop"
+                labelStyle={[navItemLabel, styles.navLabelColor]}
+              />
               {numPts > 0 && (
                 <IconButton
                   iconSize={navIconSize}

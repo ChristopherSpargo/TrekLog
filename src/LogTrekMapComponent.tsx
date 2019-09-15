@@ -114,13 +114,13 @@ class LogTrekMap extends Component<{
     const stopOk = this.trekInfo.timerOn || this.trekInfo.logging || this.trekInfo.limitsActive;
     const reviewOk = !stopOk && this.trekInfo.pendingReview;
     const mapBottom = 0;
-    const { controlsArea } = this.props.uiTheme;
+    const { controlsArea, fontRegular, fontBold } = this.props.uiTheme;
     const sdIcon = this.trekInfo.speedDialZoom ? "ZoomOutMap" : "Location";
     const sdValue = this.trekInfo.speedDialZoom ? "All" : "Current";
-    const { highTextColor, trekLogBlue, matchingMask_5, matchingMask_7, rippleColor,
+    const { highTextColor, trekLogBlue, matchingMask_7, rippleColor,
             trackingStatsBackgroundHeader 
           } = this.palette;
-    const semiTrans = this.trekInfo.currentMapType === 'hybrid' ? matchingMask_7 : matchingMask_5;
+    const semiTrans = matchingMask_7;
     const distItem = this.formattedDist();
     const speedItem = this.formattedCurrentSpeed();
     const stepsItem = this.formattedSteps();
@@ -147,13 +147,13 @@ class LogTrekMap extends Component<{
       },
       shortStat: {
         fontSize: 24,
-        fontWeight: "300",
+        fontFamily: fontBold,
         color: highTextColor,
         marginBottom: 5,
       },
       bigStat: {
         fontSize: 44,
-        fontWeight: "300",
+        fontFamily: fontRegular,
         color: highTextColor,
       },
       caAdjust: {
@@ -165,6 +165,7 @@ class LogTrekMap extends Component<{
       },
       caTop: {
         top: 0,
+        height: CONTROLS_HEIGHT,
         backgroundColor: reviewTracking ? trackingStatsBackgroundHeader : semiTrans,
         bottom: undefined,
       },
@@ -203,26 +204,12 @@ class LogTrekMap extends Component<{
           trackingMarker={this.trekInfo.trackingMarkerLocation}
           trackingDiffDist={this.trekInfo.trackingDiffDist}
           trackingDiffTime={this.trekInfo.trackingDiffTime}
-          timerType={this.trekInfo.timerOn ? 'Log' : 'None'}
+          timerType={'Log'}
           trackingHeader={this.trekInfo.trackingObj ? this.trekInfo.trackingObj.header : undefined}
           trackingTime={this.trekInfo.trackingObj ? this.trekInfo.trackingObj.goalValue : undefined}
         />
         <View style={[controlsArea, styles.caAdjust, styles.caTop]}>
-          {(numPts > 0 && reviewOk) &&
-            <View style={[styles.stats, {justifyContent: "flex-start"}]}>
-              <View style={styles.backButtonArea}>
-                <SvgButton
-                  style={styles.backButtonTarget}
-                  onPressFn={() => this.setActiveNav('DontShowMap')}
-                  borderWidth={0}
-                  size={BACK_BUTTON_SIZE}
-                  fill={highTextColor}
-                  path={APP_ICONS.ArrowBack}
-                />
-              </View>
-            </View>
-          }
-          {(numPts > 0 && !reviewOk) &&
+          {(numPts > 0) &&
             <View style={styles.stats}>
               <View style={styles.backButtonArea}>
                 <SvgButton
@@ -237,27 +224,32 @@ class LogTrekMap extends Component<{
               <View style={[styles.statGroupStat, {flex: 1.6, justifyContent: "flex-start"}]}>
                   <Text style={[styles.bigStat, {fontSize: 56}]}>{this.trekInfo.formattedDuration()}</Text>
               </View>
-              <View style={styles.statGroupStat}>
-                  <Text style={styles.bigStat}>
-                    {this.props.utilsSvc.zeroSuppressedValue(distItem.value)}</Text>
-                  <Text style={styles.shortStat}>{distItem.units}</Text>
-              </View>             
+              <BorderlessButton
+                  rippleColor={rippleColor}
+                  style={{flex: 1}}
+                  onPress={this.trekInfo.switchMeasurementSystem}>
+                <View style={styles.statGroupStat}>
+                    <Text style={styles.bigStat}>
+                      {this.props.utilsSvc.zeroSuppressedValue(distItem.value)}</Text>
+                    <Text style={[styles.shortStat, {color: trekLogBlue}]}>{distItem.units}</Text>
+                </View>   
+              </BorderlessButton>          
             </View>
           }
         </View>
         <View style={[controlsArea, styles.caAdjust, styles.caBottom]}>
           {(numPts > 0 && !reviewOk) &&
             <View style={styles.stats}>
-                <BorderlessButton
+                {/* <BorderlessButton
                   rippleColor={rippleColor}
                   style={{flex: 1}}
-                  onPress={this.trekInfo.switchMeasurementSystem}>
-                  <View style={[styles.statGroupStat, {flex: 0}]}>
+                  onPress={this.trekInfo.switchMeasurementSystem}> */}
+                  <View style={styles.statGroupStat}>
                     <Text style={styles.bigStat}>
                     {this.props.utilsSvc.zeroSuppressedValue(speedItem.value)}</Text>
-                    <Text style={[styles.shortStat, {color: trekLogBlue}]}>{speedItem.units}</Text>
+                    <Text style={styles.shortStat}>{speedItem.units}</Text>
                   </View>
-                </BorderlessButton>
+                {/* </BorderlessButton> */}
                 {STEPS_APPLY[this.trekInfo.type] && 
                   <BorderlessButton
                     style={{flex: 1.3}}

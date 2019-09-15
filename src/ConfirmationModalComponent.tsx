@@ -1,6 +1,7 @@
 import React, { useContext, useEffect, useRef, useCallback } from "react";
-import { View, StyleSheet, Text, TouchableNativeFeedback, BackHandler } from "react-native";
+import { View, StyleSheet, Text, BackHandler } from "react-native";
 import { useObserver } from "mobx-react-lite";
+import { RectButton } from 'react-native-gesture-handler'
 
 import { CONFIRM_Z_INDEX, BACKDROP_Z_INDEX, ModalSvcContext, UiThemeContext, TrekInfoContext } from "./App";
 import { ModalModel, CONFIRM_INFO } from "./ModalModel";
@@ -131,10 +132,10 @@ function ConfirmationModal({confirmOpen}) {
     },
     content: {
       ...formBody,
-      padding: 0,
+      padding: 8,
       paddingLeft: 20,
       paddingRight: 20,
-      height: 100
+      minHeight: 100
     },
     contentText: {
       ...formBodyText,
@@ -186,10 +187,10 @@ function ConfirmationModal({confirmOpen}) {
                 </View>
                 <View style={[styles.footer, roundedBottom]}>
                   {smData.okText && smData.deleteText && (
-                    <TouchableNativeFeedback
-                      background={TouchableNativeFeedback.Ripple(rippleColor, false)}
-                      onPress={() => close(smData.deleteText)}
-                    >
+                    <RectButton
+                      rippleColor={rippleColor}
+                      style={{flex: 1}}
+                      onPress={() => close(smData.deleteText)}>
                       <View style={footerButton}>
                         <Text
                           style={[footerButtonText, { color: dangerColor }]}
@@ -197,13 +198,13 @@ function ConfirmationModal({confirmOpen}) {
                           {smData.deleteText}
                         </Text>
                       </View>
-                    </TouchableNativeFeedback>
+                    </RectButton>
                   )}
                   {!smData.notifyOnly && (
-                    <TouchableNativeFeedback
-                      background={TouchableNativeFeedback.Ripple(rippleColor, false)}
-                      onPress={dismiss}
-                    >
+                    <RectButton
+                      rippleColor={rippleColor}
+                      style={{flex: 1}}
+                      onPress={dismiss}>
                       <View style={footerButton}>
                         <Text
                           style={[footerButtonText, { color: cancelColor }]}
@@ -211,13 +212,13 @@ function ConfirmationModal({confirmOpen}) {
                           {smData.cancelText}
                         </Text>
                       </View>
-                    </TouchableNativeFeedback>
+                    </RectButton>
                   )}
                   {!smData.okText && smData.deleteText && (
-                    <TouchableNativeFeedback
-                      background={TouchableNativeFeedback.Ripple(rippleColor, false)}
-                      onPress={() => close(smData.deleteText)}
-                    >
+                    <RectButton
+                      rippleColor={rippleColor}
+                      style={{flex: 1}}
+                      onPress={() => close(smData.deleteText)}>
                       <View style={footerButton}>
                         <Text
                           style={[footerButtonText, { color: dangerColor }]}
@@ -225,13 +226,13 @@ function ConfirmationModal({confirmOpen}) {
                           {smData.deleteText}
                         </Text>
                       </View>
-                    </TouchableNativeFeedback>
+                    </RectButton>
                   )}
                   {smData.okText && (
-                    <TouchableNativeFeedback
-                      background={TouchableNativeFeedback.Ripple(rippleColor, false)}
-                      onPress={() => close(smData.okText)}
-                    >
+                    <RectButton
+                      rippleColor={rippleColor}
+                      style={{flex: 1}}
+                      onPress={() => close(smData.okText)}>
                       <View style={[footerButton, { marginRight: 1 }]}>
                         <Text
                           style={[footerButtonText, { color: okChoiceColor }]}
@@ -239,7 +240,7 @@ function ConfirmationModal({confirmOpen}) {
                           {smData.okText}
                         </Text>
                       </View>
-                    </TouchableNativeFeedback>
+                    </RectButton>
                   )}
                 </View>
               </View>

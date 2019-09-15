@@ -101,6 +101,9 @@ export const IMAGE_ORIENTATION_LANDSCAPE_90 = 4;
 export enum TrekImageOrientationType { IMAGE_ORIENTATION_PORTRATE , IMAGE_ORIENTATION_PORTRATE_180,
                             IMAGE_ORIENTATION_LANDSCAPE_270, IMAGE_ORIENTATION_LANDSCAPE_90 };
 
+export const IMAGE_STORE_FULL = "Full";
+export const IMAGE_STORE_COMPRESSED = "Compressed";
+
 export interface TrekImage {
   uri:          string,
   orientation:  TrekImageOrientationType,
@@ -221,6 +224,7 @@ export interface RestoreObject {
   trackingMethod  ?:    CourseTrackingMethod,
   trackinigValue  ?:    number,
   trackingCourse  ?:    Course,
+  groups ?:             GroupsObj,
 }
 
 export type MeasurementSystemType = "US" | "Metric";
@@ -475,7 +479,7 @@ export class TrekInfo {
             this.pendingInit = true;
             this.groupSvc.readGroups()       // read group list from database
             .then((groups : GroupsObj) => {
-              // set the current use to the most recent group
+              // set the current group to the most recent group
               this.setColorTheme(groups.theme || COLOR_THEME_DARK);
               this.setMeasurementSystem(groups.measurementSystem);
               this.setTrekLogGroupProperties(groups.lastGroup || groups.groups[0])
@@ -704,6 +708,7 @@ readAllTreks = (groups: string[]) => {
       trackingMethod:     this.trackingMethod,
       trackinigValue:     this.trackingValue,
       trackingCourse:     this.trackingCourse,
+      groups:             this.groupSvc.groups,
     }
     return rObj;
   }
@@ -719,6 +724,7 @@ readAllTreks = (groups: string[]) => {
             return ({l:{a: pt.latitude, o: pt.longitude}, 
                      t: Math.round((pt.time - this.startMS) / 1000), s: pt.speed}) as TrekPoint;
           })
+          this.groupSvc.groups = resObj.groups;
           this.setMeasurementSystem(resObj.measurementSystem);
           this.setTrekProperties(resObj.trek);
           this.updateStrideLengths(resObj.strideLengths);

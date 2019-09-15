@@ -10,6 +10,7 @@ export interface ModalData {
   content             ?: string,    // modal content
   label               ?: string,    // label text for labelForm
   notes               ?: string,    // notes text for labelForm
+  focus               ?: string,    // name of field to focus on initially (if any)
   bigContent          ?: string,    // content that should be bigger font
   itemList            ?: any[],     // list of items to show in body (for Goal Notification)
   selectionNames      ?: string[],  // list of selection names (for RadioPicker)
@@ -132,6 +133,7 @@ export class ModalModel {
     this.lfData.notes         = mData.notes || '';
     this.lfData.cancelText    = mData.cancelText;
     this.lfData.okText        = mData.okText || 'SAVE';
+    this.lfData.focus         = mData.focus;
     this.labelFormOpen = true;
     return new Promise((resolve, reject) => {
       this.lfData.resolve = resolve;

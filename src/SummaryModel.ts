@@ -1,7 +1,7 @@
 import { action, observable } from 'mobx';
 
 import { TrekInfo, TrekObj, SWITCH_SPEED_AND_TIME, NumericRange, TREK_TYPE_CHOICES,
-         TREK_SELECT_BITS, TrekTypeDataNumeric, STEPS_APPLY
+         TREK_SELECT_BITS, TrekTypeDataNumeric, STEPS_APPLY, TREKS_WITH_STEPS_BITS
        } from './TrekInfoModel'
 import { UtilsSvc, SortDateRange, DateInterval } from './UtilsService';
 import { BarData, BarGraphInfo } from "./BarDisplayComponent";
@@ -9,6 +9,7 @@ import { FilterSvc } from './FilterService';
 
 export type ActivityStatType = 'time' | 'dist' | 'cals' | 'steps';
 export const STAT_CATS : ActivityStatType[] = ['time', 'dist', 'cals', 'steps'];
+export const INTERVAL_CATS : DateInterval[] = ['daily', 'weekly', 'monthly']; 
 
 export interface ActivityBarGraphData {
   time: BarGraphInfo,
@@ -54,11 +55,14 @@ export class SummaryModel {
   @observable showSpeedOrTime;
   @observable showStepsPerMin;
   @observable showTotalCalories;
-  @observable showStatType;
+  @observable showStatType : ActivityStatType;
+  @observable statIndex;
   @observable showIntervalType;
+  @observable intervalIndex;
   @observable selectedInterval;
   @observable summaryZValue;
   @observable activeTypes : number;
+  @observable allowEmptyIntervals : boolean;
 
   activityData : ActivityStatsInterval[] = [];
   barGraphData: ActivityBarGraphData;
@@ -85,6 +89,7 @@ export class SummaryModel {
     this.setShowIntervalType('weekly');
     this.setSelectedInterval(-1);
     this.activeTypes = 0;
+    this.setAllowEmptyIntervals(true);
   }
 
   // set the value of the dataReady property
@@ -98,6 +103,11 @@ export class SummaryModel {
     this.summaryZValue = val;
   }
 
+  // set the status of the allowEmptyIntervals property
+  @action
+  setAllowEmptyIntervals = (status: boolean) => {
+    this.allowEmptyIntervals = status;
+  }
 
   // set the status of the openItems property
   @action
@@ -105,20 +115,40 @@ export class SummaryModel {
     this.openItems = status;
   }
 
+  // set the showStatType and statIndex properties
   @action
   setShowStatType = (sType: ActivityStatType) => {
     this.showStatType = sType;
+    this.statIndex = STAT_CATS.indexOf(sType)
   }
 
+  // set the showIntervalType and intervalIndex properties
   @action
-  setShowIntervalType = (iType: string) => {
+  setShowIntervalType = (iType: DateInterval) => {
     this.showIntervalType = iType;
+    this.intervalIndex = INTERVAL_CATS.indexOf(iType)
   }
 
   @action
   setSelectedInterval = (val: number) => {
     if(this.activityData.length || val === -1){
       this.selectedInterval = val;
+    }
+  }
+
+  //set the selectedInterval to the first interval that satisfies the allowEmptyIntervals property
+  findStartingInterval = () => {
+    if (this.allowEmptyIntervals) {
+      this.setSelectedInterval(0);
+    } else {  
+      let items = this.barGraphData[this.showStatType].items;
+      for(let i=0; i<items.length; i++){
+        if(!items[i].showEmpty){
+          this.setSelectedInterval(i);  // found one that isn't empty
+          return;
+        }
+      }
+      this.setSelectedInterval(-1);   // all empty intervals?
     }
   }
 
@@ -145,6 +175,19 @@ export class SummaryModel {
   toggleShowTotalCalories = () => {
     this.showTotalCalories = !this.showTotalCalories;
     this.buildGraphData();
+  }
+
+  // return true if any selected and active types involve steps
+  haveStepData = () => {
+    let activeAndSelected = this.tInfo.typeSelections & this.activeTypes;
+    return (activeAndSelected & TREKS_WITH_STEPS_BITS) !== 0;
+  }
+
+  // make sure the showStatType isn't 'steps' if they don't apply to the situation
+  checkShowStatType = () => {
+    if(this.showStatType === 'steps' && !this.haveStepData()) {
+      this.setShowStatType('cals');
+    }
   }
 
   // Tally data from relevant treks
@@ -177,6 +220,7 @@ export class SummaryModel {
     }
     this.fS.setFoundType(this.totalCounts(this.tInfo.typeSelections) !== 0);
     this.setActiveTypes();
+    this.checkShowStatType();
     this.buildGraphData();
     this.setOpenItems(true);
   }
@@ -355,7 +399,7 @@ export class SummaryModel {
     }
     // barItem.indicator = iData.endDate;   // interval date for display
     barItem.label1 = !data.treks ? noData : ''; 
-    barItem.showEmpty = !data.treks;
+    barItem.showEmpty = !data.treks || barItem.value === 0;
     barItem.indicator = iData.label;
     return barItem;
   }

@@ -55,8 +55,8 @@ function BarItem({
   const uiTheme: any = useContext(UiThemeContext);
   const trekInfo: TrekInfo = useContext(TrekInfoContext);
 
-  function barPressed (idx: number, bar: number) {
-      pressed(idx, bar);
+  function barPressed (idx: number, itemNumber: number) {
+      pressed(idx, itemNumber);
   }
 
     const { highTextColor, dividerColor, itemSelectedColor, itemMeetsGoal, itemMissesGoal,
@@ -253,6 +253,7 @@ function BarDisplay({
   openFlag=undefined,         // flag to control the animation of the graph bars
   data,                       // object with information for the graph bars
   dataRange,                  // range of values in the data {max,min,range}
+  allowEmptyBars = true,      // don't render empty bars if false
   scrollToBar = undefined,    // index of bar to scroll to (just to update the display)
   hideScrollBar = undefined,  // if true, don't show the scrollbar on the flatlist 
   animationDuration = undefined, // duration for the ExpandViewY component used for bars
@@ -273,9 +274,22 @@ function BarDisplay({
 
   useEffect(() => {
     if(scrollToBar !== undefined) { 
-      moveScrollPos(scrollToBar >= 0 ? scrollToBar : 0);
+      moveScrollPos(scrollToBar > 0 ? scrollToBar : 0);
     } else {
-      moveScrollPos(selected < 0 ? 0 : selected);
+      if(selected !== selectedBar.current) {
+        if (allowEmptyBars || selected < 0) {
+          moveScrollPos(selected < 0 ? 0 : selected);
+        } else {
+          let bar = 0, item = 0;
+          while(item < selected) {
+            if (!data[item].showEmpty) { 
+              bar++; 
+            }
+            item++;
+          }
+          moveScrollPos(bar);
+        }
+      }
     }
   },[scrollToBar, selected])
 
@@ -295,25 +309,31 @@ function BarDisplay({
 
   const _keyExtractor = (_item, index) => index.toString();
 
-  const _renderItem = ({item, index}) => (
-        <BarItem 
-          item={item}
-          index={index}
-          range={dataRange}
-          maxHt={maxBarHeight}
-          minHt={minHt}
-          graphHt={graphHeight}
-          lastItem={index === lastIndex}
-          selected={selected}
-          style={barStyle}
-          animationDuration={animationDuration}
-          pressed={barPressed}
-          open={openFlag}
-          animIndex={initRender}
-          iAngle={iAngle}
-          gradientEnd={gradientEnd}
-        />
-      );
+  const _renderItem = ({item, index}) =>
+        { if (!item.showEmpty || allowEmptyBars) {
+          return (
+            <BarItem 
+              item={item}
+              index={index}
+              range={dataRange}
+              maxHt={maxBarHeight}
+              minHt={minHt}
+              graphHt={graphHeight}
+              lastItem={index === lastIndex}
+              selected={selected}
+              style={barStyle}
+              animationDuration={animationDuration}
+              pressed={barPressed}
+              open={openFlag}
+              animIndex={initRender}
+              iAngle={iAngle}
+              gradientEnd={gradientEnd}
+            />
+          )
+        } else {
+          return null;
+      }
+    };
     // alert("rendering graph " + ++updateCount.current)
   return useObserver(() => (
         <FlatList

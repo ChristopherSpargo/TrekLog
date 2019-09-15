@@ -70,6 +70,8 @@
     "cacheDirectory": ".jest/cache"
   },
   "rnpm": {
-    "assets": ["./assets/fonts"]
+    "assets": [
+      "./assets/fonts"
+    ]
   }
 }

@@ -21,20 +21,23 @@ import TrekLogHeader from './TreklogHeaderComponent';
 import SvgYAxis, { YAXIS_TYPE_MAP } from './SvgYAxisComponent';
 import SvgGrid from './SvgGridComponent';
 import NavMenu, { NavMenuItem } from './NavMenuComponent';
-import NavMenuTrigger from './NavMenuTriggerComponent'
+import PageTitle from './PageTitleComponent';
+import { CourseSvc } from './CourseService';
 
 const goBack = NavigationActions.back() ;
 
-@inject('trekInfo', 'utilsSvc', 'uiTheme', 'goalsSvc')
+@inject('trekInfo', 'utilsSvc', 'uiTheme', 'goalsSvc', 'courseSvc')
 @observer
 class GoalDetails extends Component<{ 
   goalsSvc ?: GoalsSvc,
+  courseSvc ?: CourseSvc,
   utilsSvc ?: UtilsSvc,
   uiTheme ?: any,
   navigation ?: any,
   trekInfo ?: TrekInfo         // object with all non-gps information about the Trek
 }, {} > {
 
+  cS = this.props.courseSvc;
   tInfo = this.props.trekInfo;
   gS = this.props.goalsSvc;
   uSvc = this.props.utilsSvc;
@@ -496,7 +499,33 @@ class GoalDetails extends Component<{
     }
   }
 
-  // show the selected trek image
+  // Display the map for the effort at the given index in trekList
+  showCourseEffort = () => {
+    let trek = this.tInfo.getSaveObj();
+    this.cS.getCourse(trek.course)
+    .then((course) => {
+      let effort = this.cS.getTrekEffort(course, trek);
+      this.tInfo.setTrackingMethod(effort.subject.method);
+      this.tInfo.setTrackingValue(effort.subject.goalValue);      
+      this.tInfo.setShowMapControls(true)
+      this.cS.initCourseTrackingSnapshot(course, trek, effort)
+      .then(() => {        
+        // alert(JSON.stringify({...this.cS.trackingSnapshot, ...{coursePath: undefined, trekPath: undefined}},null,2))
+        this.props.navigation.navigate("SelectedTrek", {
+          title:
+            this.props.utilsSvc.formattedLocaleDateAbbrDay(trek.date) +
+            "  " +
+            trek.startTime,
+          icon: this.tInfo.type,
+          switchSysFn: this.tInfo.switchMeasurementSystem,
+        })
+      })
+      .catch(() => {})
+    })
+    .catch(() => {})
+};
+
+// show the selected trek image
   showTrekImage = (set: number, image = 0) => {
     let title = this.tInfo.formatImageTitle(set, image);
     this.props.navigation.navigate('Images', {cmd: 'show', setIndex: set, imageIndex: image, title: title});
@@ -672,12 +701,6 @@ class GoalDetails extends Component<{
         paddingRight: 0,
         backgroundColor: pageBackground,
       },
-      pageTitleAdj: {
-        color: highTextColor,
-        paddingLeft: 10,
-        paddingRight: 10,
-        marginBottom: 10,
-      },
     })
 
     return(
@@ -688,13 +711,14 @@ class GoalDetails extends Component<{
         open={this.openNavMenu}> 
         <View style={styles.container}>
           <View style={[styles.container]}>
-            <TrekLogHeader titleText={this.props.navigation.getParam('title','')}
-                                icon="*"
-                                backButtonFn={this.checkBackButton}
+            <TrekLogHeader 
+              titleText={this.props.navigation.getParam('title','')}
+              icon="*"
+              backButtonFn={this.checkBackButton}
+              openMenuFn={this.openMenu} 
             />        
             <View style={styles.listArea}>
-              <NavMenuTrigger openMenuFn={this.openMenu}/>
-              <Text style={[pageTitle, styles.pageTitleAdj]}>{pTitle}</Text>
+              <PageTitle titleText={pTitle}/>
               {(validDisplayObj) && 
                 <View style={styles.scrollArea}>
                   <ScrollView>
@@ -839,6 +863,7 @@ class GoalDetails extends Component<{
                       {chartForTreks &&
                         <TrekDetails
                           showImagesFn={this.showTrekImage}
+                          showCourseEffortFn={this.showCourseEffort}
                         />
                       }
                     </View>

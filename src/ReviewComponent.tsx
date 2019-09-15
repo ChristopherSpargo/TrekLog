@@ -28,7 +28,7 @@ import { CourseSvc } from "./CourseService";
 import SvgYAxis, { YAXIS_TYPE_MAP } from './SvgYAxisComponent';
 import SvgGrid from './SvgGridComponent';
 import NavMenu from './NavMenuComponent';
-import NavMenuTrigger from './NavMenuTriggerComponent'
+import PageTitle from './PageTitleComponent';
 
 export type SortByTypes = "Dist" | "Time" | "Date" | "Speed" | "Steps" | "Cals";
 export type ShowTypes = "Dist" | "Time" | "Steps" | "Speed" | "Cals" | "Date";
@@ -189,6 +189,7 @@ class ReviewTreks extends Component<
       // }
       // this.tInfo.pointList = newList;
       this.tInfo.setShowMapControls(false);
+      this.props.courseSvc.clearTrackingSnapshot();
       this.props.navigation.navigate({ 
           routeName: "SelectedTrek", 
           params: {
@@ -480,6 +481,29 @@ class ReviewTreks extends Component<
     this.props.navigation.navigate('Images', {cmd: 'show', setIndex: set, imageIndex: image, title: title});
   }
 
+  // Display the map for the effort at the given index in trekList
+  showCourseEffort = () => {
+      let trek = this.tInfo.getSaveObj();
+      this.props.courseSvc.getCourse(trek.course)
+      .then((course) => {
+        let effort = this.props.courseSvc.getTrekEffort(course, trek);
+        this.tInfo.setTrackingMethod(effort.subject.method);
+        this.tInfo.setTrackingValue(effort.subject.goalValue);      
+        this.tInfo.setShowMapControls(true)
+        this.props.courseSvc.initCourseTrackingSnapshot(course, trek, effort)
+        .then(() => {        
+          // alert(JSON.stringify({...this.cS.trackingSnapshot, ...{coursePath: undefined, trekPath: undefined}},null,2))
+          this.props.navigation.navigate("SelectedTrek", {
+            title: this.props.utilsSvc.formatTrekDateAndTime(trek.date, trek.startTime),
+            icon: this.tInfo.type,
+            switchSysFn: this.switchMeasurementSystem,
+          })
+        })
+        .catch(() => {})
+      })
+      .catch(() => {})
+  };
+
   render() {
     if (!this.updateView) {
       return (
@@ -502,13 +526,12 @@ class ReviewTreks extends Component<
     const statusBarHt = 0;
     const sortControlsHt = 30;
     const areaHt = height - (statusBarHt + pageTitleSpacing + HEADER_HEIGHT + PAGE_TITLE_HEIGHT);
-    const { cardLayout, pageTitle } = this.props.uiTheme;
+    const { cardLayout } = this.props.uiTheme;
     const {
       disabledTextColor,
       pageBackground,
       trekLogBlue,
       mediumTextColor,
-      highTextColor,
       dividerColor
     } = this.props.uiTheme.palette[this.tInfo.colorTheme];
     const gotTreks = this.fS.dataReady && !this.fS.filteredTreksEmpty();
@@ -527,7 +550,7 @@ class ReviewTreks extends Component<
           {icon: extraFilters ? 'FilterRemove' : 'Filter', label: 'Edit Filters', value: 'Filter'},
           {icon: 'Course', label: 'Link to Course', value: 'Course'},
           {icon: 'Map', label: 'View Map', value: 'Map'},
-          {icon: 'Upload', label: 'Upload Trek', value: 'Upload'},
+          // {icon: 'Upload', label: 'Upload Trek', value: 'Upload'},
         ]} :
         {label: 'Review Options', 
          submenu: [
@@ -609,9 +632,6 @@ class ReviewTreks extends Component<
         backgroundColor: "transparent",
       },
       pageTitleAdj: {
-        color: highTextColor,
-        paddingLeft: 10,
-        paddingRight: 10,
         marginBottom: 5,
       },
     });
@@ -630,100 +650,103 @@ class ReviewTreks extends Component<
                 titleText={this.headerTitle}
                 icon="*"
                 backButtonFn={() => this.props.navigation.dispatch(goBack)}
-                group={this.fS.groupList.length === 1 ? this.fS.groupList[0] : "Multiple"}
-                // setGroupFn={this.getDifferentGroups}
+                openMenuFn={this.openMenu}
               />
               <RadioPicker pickerOpen={this.coursePickerOpen} />
               <View style={[cardLayout, styles.noPadding, {paddingTop: 10, marginBottom: 0}]}>
-                <NavMenuTrigger openMenuFn={this.openMenu}/>
-                <Text style={[pageTitle, styles.pageTitleAdj]}>Trek Review</Text>
-              {gotTreks && 
-                <View style={styles.scrollArea}>
-                  <ScrollView>
-                    <View style={[cardLayout, styles.noPadding, {marginTop: 0}]}>
-                      <View style={styles.sortCtrls}>
-                        {this.fS.sortByDate && (
-                          <SvgButton
-                            onPressFn={this.fS.toggleSortDirection}
-                            borderWidth={0}
-                            areaOffset={0}
-                            size={30}
-                            fill={trekLogBlue}
-                            path={
-                              APP_ICONS[
-                                this.fS.sortDirection === "Descend"
-                                  ? "CalendarSortNewest"
-                                  : "CalendarSortOldest"
-                              ]
-                            }
-                          />
-                        )}
-                        {!this.fS.sortByDate && (
-                          <SvgButton
-                            onPressFn={this.fS.toggleSortDirection}
-                            style={sortAsc ? {transform: ([{ rotateX: "180deg" }])} : {}}
-                            borderWidth={0}
-                            areaOffset={0}
-                            size={30}
-                            fill={trekLogBlue}
-                            path={
-                              APP_ICONS.Sort
-                            }
-                          />
-                        )}
-                      </View>
-                      <View style={styles.graphAndStats}>
-                        <View style={styles.graphArea}>
-                          <SvgYAxis
-                            graphHeight={graphHeight}
-                            axisTop={maxBarHeight}
-                            axisBottom={20}
-                            axisWidth={yAxisWidth}
-                            color={mediumTextColor}
-                            lineWidth={1}
-                            majorTics={5}
-                            title={this.fS.barGraphData.title}
-                            dataRange={this.fS.barGraphData.range}
-                            dataType={YAXIS_TYPE_MAP[this.fS.show]}
-                          />
-                          <View style={styles.graph}>
-                            <SvgGrid
+                <PageTitle 
+                  titleText="Trek Review"
+                  groupName={this.fS.groupList.length === 1 ? this.fS.groupList[0] : "Multiple"}
+                  style={styles.pageTitleAdj}
+                />
+                {gotTreks && 
+                  <View style={styles.scrollArea}>
+                    <ScrollView>
+                      <View style={[cardLayout, styles.noPadding, {marginTop: 0}]}>
+                        <View style={styles.sortCtrls}>
+                          {this.fS.sortByDate && (
+                            <SvgButton
+                              onPressFn={this.fS.toggleSortDirection}
+                              borderWidth={0}
+                              areaOffset={0}
+                              size={30}
+                              fill={trekLogBlue}
+                              path={
+                                APP_ICONS[
+                                  this.fS.sortDirection === "Descend"
+                                    ? "CalendarSortNewest"
+                                    : "CalendarSortOldest"
+                                ]
+                              }
+                            />
+                          )}
+                          {!this.fS.sortByDate && (
+                            <SvgButton
+                              onPressFn={this.fS.toggleSortDirection}
+                              style={sortAsc ? {transform: ([{ rotateX: "180deg" }])} : {}}
+                              borderWidth={0}
+                              areaOffset={0}
+                              size={30}
+                              fill={trekLogBlue}
+                              path={
+                                APP_ICONS.Sort
+                              }
+                            />
+                          )}
+                        </View>
+                        <View style={styles.graphAndStats}>
+                          <View style={styles.graphArea}>
+                            <SvgYAxis
                               graphHeight={graphHeight}
-                              gridWidth={graphWidth}
-                              lineCount={3}
-                              color={dividerColor}
-                              maxBarHeight={maxBarHeight}
-                              minBarHeight={20}
-                            />
-                            <BarDisplay
-                              data={this.fS.barGraphData.items}
+                              axisTop={maxBarHeight}
+                              axisBottom={20}
+                              axisWidth={yAxisWidth}
+                              color={mediumTextColor}
+                              lineWidth={1}
+                              majorTics={5}
+                              title={this.fS.barGraphData.title}
                               dataRange={this.fS.barGraphData.range}
-                              selected={this.fS.selectedTrekIndex}
-                              selectFn={this.callTrekSelected}
-                              openFlag={this.openItems}
-                              maxBarHeight={maxBarHeight}
-                              style={styles.graphStyle}
-                              barStyle={styles.barStyle}
-                              labelAngle={0}
-                              minBarHeight={20}
-                              scrollToBar={this.fS.scrollToBar}
+                              dataType={YAXIS_TYPE_MAP[this.fS.show]}
                             />
+                            <View style={styles.graph}>
+                              <SvgGrid
+                                graphHeight={graphHeight}
+                                gridWidth={graphWidth}
+                                lineCount={3}
+                                color={dividerColor}
+                                maxBarHeight={maxBarHeight}
+                                minBarHeight={20}
+                              />
+                              <BarDisplay
+                                data={this.fS.barGraphData.items}
+                                dataRange={this.fS.barGraphData.range}
+                                selected={this.fS.selectedTrekIndex}
+                                selectFn={this.callTrekSelected}
+                                openFlag={this.openItems}
+                                maxBarHeight={maxBarHeight}
+                                style={styles.graphStyle}
+                                barStyle={styles.barStyle}
+                                labelAngle={0}
+                                minBarHeight={20}
+                                scrollToBar={this.fS.scrollToBar}
+                              />
+                            </View>
                           </View>
                         </View>
+                        <TrekDetails
+                          selectable
+                          sortBy={this.fS.sortBy}
+                          sortByDate={this.fS.sortByDate}
+                          selectFn={this.callSetSortBy}
+                          switchSysFn={this.switchMeasurementSystem}
+                          showImagesFn={this.showTrekImage}
+                          selected={this.fS.selectedTrekIndex}
+                          showCourseEffortFn={this.showCourseEffort}
+                        />
                       </View>
-                      <TrekDetails
-                        selectable
-                        sortBy={this.fS.sortBy}
-                        sortByDate={this.fS.sortByDate}
-                        selectFn={this.callSetSortBy}
-                        switchSysFn={this.switchMeasurementSystem}
-                        showImagesFn={this.showTrekImage}
-                        selected={this.fS.selectedTrekIndex}
-                      />
-                    </View>
-                  </ScrollView>
-                </View>
-              }
+                    </ScrollView>
+                  </View>
+                }
               </View>
               {!gotTreks && this.tInfo.typeSelections !== 0 && (
                 <View style={styles.emptyGraphArea}>

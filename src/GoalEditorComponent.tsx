@@ -26,6 +26,7 @@ import SlideDownView from './SlideDownComponent';
 import { SCROLL_DOWN_DURATION, FADE_IN_DURATION } from './App';
 import RadioPicker from './RadioPickerComponent';
 import { CourseSvc } from './CourseService';
+import PageTitle from './PageTitleComponent';
 
 const goBack = NavigationActions.back() ;
 
@@ -461,7 +462,7 @@ getCourse = () => {
                               backButtonFn={() =>  this.props.navigation.dispatch(goBack)}
           />        
           <View style={[cardLayout, {paddingBottom: 0}]}>
-            <Text style={[pageTitle, {color: highTextColor}]}>{this.getGoalPrompt()}</Text>
+            <PageTitle titleText={this.getGoalPrompt()} style={{paddingLeft: 0}}/>
           </View>
             {validCat &&
               <FadeInView startValue={0.1} endValue={1} open={this.openItems} 

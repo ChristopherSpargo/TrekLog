@@ -1,7 +1,7 @@
 import React, { Component } from 'react'
 import { View, StyleSheet, Text, ScrollView, Keyboard, 
           TouchableNativeFeedback, 
-          Group} from 'react-native'
+       } from 'react-native'
 import { observable, action } from 'mobx'
 import { observer, inject } from 'mobx-react'
 import { NavigationActions, StackActions } from 'react-navigation';
@@ -10,12 +10,14 @@ import { RectButton } from 'react-native-gesture-handler'
 import { TrekInfo, TrekType, MeasurementSystemType, DEFAULT_STRIDE_LENGTHS,
          WEIGHT_UNIT_CHOICES, STRIDE_UNIT_CHOICES, TREK_TYPE_CHOICES, TrekTypeDataNumeric,
          TREK_SELECT_BITS, SWITCH_MEASUREMENT_SYSTEM, SYSTEM_TYPE_METRIC, SYSTEM_TYPE_US, 
-         TREK_TYPE_WALK, TREK_TYPE_HIKE, TREK_TYPE_RUN, INVALID_NAMES} from './TrekInfoModel'
+         TREK_TYPE_WALK, TREK_TYPE_HIKE, TREK_TYPE_RUN, INVALID_NAMES,
+         IMAGE_STORE_FULL, IMAGE_STORE_COMPRESSED
+        } from './TrekInfoModel'
 import RadioGroup from './RadioGroupComponent';
 import TrekTypeSelect from './TrekTypeSelectComponent';
 import { ToastModel } from './ToastModel';
 import { CONTROLS_HEIGHT, COLOR_THEME_LIGHT, COLOR_THEME_DARK, ThemeType,
-         SCROLL_DOWN_DURATION, FADE_IN_DURATION, TREKLOG_FILENAME_REGEX } from './App';
+         SCROLL_DOWN_DURATION, FADE_IN_DURATION, TREKLOG_FILENAME_REGEX, SPEED_DIAL_Z_INDEX } from './App';
 import { UtilsSvc, LB_PER_KG, CM_PER_INCH } from './UtilsService';
 import { ModalModel, CONFIRM_INFO } from './ModalModel';
 import Waiting from './WaitingComponent';
@@ -31,7 +33,7 @@ import FadeInView from './FadeInComponent';
 import SlideDownView from './SlideDownComponent';
 import { GroupSvc, DEFAULT_WEIGHT, SettingsObj, WeightObj, GroupsObj } from './GroupService';
 import NavMenu, { NavMenuItem } from './NavMenuComponent';
-import NavMenuTrigger from './NavMenuTriggerComponent'
+import PageTitle from './PageTitleComponent';
 
 const goBack = NavigationActions.back() ;
 
@@ -59,6 +61,7 @@ class Settings extends Component<{
   @observable heightStr;
   @observable packWeightStr;
   @observable strideLengthStr;
+  @observable imageStorageMode : string;
   @observable keyboardOpen;
   @observable originalSettings : SettingsObj;
   @observable openItems;
@@ -76,6 +79,7 @@ class Settings extends Component<{
   strideLengths : TrekTypeDataNumeric;
   oldTheme : ThemeType;
   oldSystem : MeasurementSystemType;
+  oldImageMode : string;
 
   keyboardDidShowListener;
   keyboardDidHideListener;
@@ -88,14 +92,16 @@ class Settings extends Component<{
   componentWillMount() {
     // read the Groups object from the database
     this.setOriginalSettings(undefined);
-    this.setOpenItems(false);        
+    // this.setOpenItems(false);        
     this.gSvc.readGroups()
     .then((groups: GroupsObj) => {
       if(groups && groups.groups.length !== 0) {
         this.oldTheme = groups.theme;
         this.oldSystem = groups.measurementSystem;
+        this.oldImageMode = groups.imageStorageMode;
         this.setSystem(groups.measurementSystem || SYSTEM_TYPE_US);
-         this.changeGroup(this.props.trekInfo.group)
+        this.setImageStorageMode(groups.imageStorageMode || IMAGE_STORE_FULL)
+        this.changeGroup(this.props.trekInfo.group)
       } else {
           this.setNoGroups();
       }
@@ -120,7 +126,7 @@ class Settings extends Component<{
   // initialize all the observable properties in an action for mobx strict mode
   @action
   initializeObservables = () => {
-    this.dataReady = false;
+    this.setDataReady(false);
     this.changingGroup = false;
     this.group = '';
     this.system = SYSTEM_TYPE_METRIC;
@@ -129,6 +135,7 @@ class Settings extends Component<{
     this.weightStr = '0';
     this.packWeightStr = '0';
     this.strideLengthStr = {Walk: '0', Run: '0', Bike: '0', Hike: '0'};
+    this.imageStorageMode = IMAGE_STORE_FULL;
     this.keyboardOpen = false;
     this.originalSettings = undefined;
     this.setOpenItems(false);
@@ -166,7 +173,8 @@ class Settings extends Component<{
   // set the groups object to indicate no groups
   setNoGroups = () => {
     this.setDefaultSettings();
-    this.updateDataReady(true);
+    this.setDataReady(true);
+    this.setOpenItems(true);
     this.props.toastSvc.toastOpen({tType: "Error", content: "Please create a group."});
     // this.setGroup(NEW_GROUP);
     this.getDifferentGroup();
@@ -220,6 +228,7 @@ class Settings extends Component<{
     this.setDefaultType(TREK_TYPE_WALK);
     // switch to wrong measurementSystem type
     this.setSystem(SYSTEM_TYPE_METRIC);
+    this.setImageStorageMode(IMAGE_STORE_FULL);
     this.heightNum = 0;
     this.setHeight("0");
     this.weightDate = this.todayShortDate;
@@ -266,6 +275,7 @@ class Settings extends Component<{
     if(sGiven === undefined) { same = false; }
     if(this.theme !== this.oldTheme) { same = false; }
     if (this.system !== this.oldSystem) { same =  false; }
+    if (this.imageStorageMode !== this.oldImageMode) { same = false; }
     if (same){
       sNow = this.getSaveObj();
       same = this.uSvc.compareObjects(sNow, sGiven);
@@ -276,7 +286,7 @@ class Settings extends Component<{
   // Update the current TrekInfoModel settings from the given object
   @action
   updateTrekInfo = (saveObj: SettingsObj) => {
-    this.props.trekInfo.setMeasurementSystem(this.system)
+    this.props.trekInfo.setMeasurementSystem(this.system);
     this.props.trekInfo.setTrekLogGroupProperties(this.group, saveObj);
   }
 
@@ -284,8 +294,10 @@ class Settings extends Component<{
   saveGroupsList = () => {
     this.oldTheme = this.theme;
     this.oldSystem = this.system;
+    this.oldImageMode = this.imageStorageMode;
     this.gSvc.setTheme(this.theme);
     this.gSvc.setMeasurementSystem(this.system);
+    this.gSvc.setImageStorageMode(this.imageStorageMode);
     return this.gSvc.saveGroups(this.group);
   }
 
@@ -323,7 +335,7 @@ class Settings extends Component<{
 
   // update the status of the dataReady property
   @action
-  updateDataReady = (value: boolean) => {
+  setDataReady = (value: boolean) => {
     this.dataReady = value;
   }
 
@@ -366,6 +378,12 @@ class Settings extends Component<{
   @action
   setSystem = (value: MeasurementSystemType) => {
     this.system = value;
+  }
+
+  // set the value of the imageStorageMode property
+  @action
+  setImageStorageMode = (mode: string) => {
+    this.imageStorageMode = mode;
   }
 
   // set weight property 
@@ -424,7 +442,7 @@ class Settings extends Component<{
     this.getGroupSettings()
     .then(() =>{
       this.updateTrekInfo(this.originalSettings);
-      this.updateDataReady(true);
+      this.setDataReady(true);
       this.updateChangingGroup(false);
       requestAnimationFrame(() => {
         this.setOpenItems(true);
@@ -434,7 +452,7 @@ class Settings extends Component<{
       // Failed to read settings for new group
       this.setDefaultSettings();
       this.saveSettings();
-      this.updateDataReady(true);
+      this.setDataReady(true);
       this.props.toastSvc.toastOpen({tType: 'Info', content: 'Please enter initial settings.', time: 3000});
       this.updateChangingGroup(false);
       requestAnimationFrame(() => {
@@ -785,12 +803,6 @@ class Settings extends Component<{
         paddingRight: 0,
         backgroundColor: pageBackground,
       },
-      pageTitleAdj: {
-        color: highTextColor,
-        paddingLeft: 10,
-        paddingRight: 10,
-        marginBottom: 10,
-      },
     })
 
     const SettingHeader = ({icon, label, description}) => {
@@ -818,19 +830,21 @@ class Settings extends Component<{
         items={navMenuItems}
         setOpenFn={this.setOpenNavMenu}
         open={this.openNavMenu}> 
-          <RadioPicker pickerOpen={this.radioPickerOpen}/>
+        <RadioPicker pickerOpen={this.radioPickerOpen}/>
+        <View style={[styles.container, {paddingBottom: 10}]}>
+          <TrekLogHeader
+            icon="*"
+            titleText="Settings"
+            backButtonFn={() =>  this.props.navigation.dispatch(goBack)}
+            openMenuFn={this.openMenu}
+          />
           {this.dataReady &&
-          <View style={[styles.container, {paddingBottom: 10}]}>
-            <TrekLogHeader
-              icon="*"
-              titleText="Settings"
-              backButtonFn={() =>  this.props.navigation.dispatch(goBack)}
-              group={this.group || "None"}
-              setGroupFn={this.getDifferentGroup}
-            />
             <View style={styles.listArea}>
-              <NavMenuTrigger openMenuFn={this.openMenu}/>
-              <Text style={[pageTitle, styles.pageTitleAdj]}>TrekLog Settings</Text>
+              <PageTitle 
+                titleText="TrekLog Settings"
+                groupName={this.group || "None"}
+                setGroupFn={this.getDifferentGroup}
+              />
               <ScrollView>
                 <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
                           duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
@@ -838,7 +852,7 @@ class Settings extends Component<{
                             duration={SCROLL_DOWN_DURATION}>
                     <View style={[cardLayout, styles.cardCustom]}>
                       <SettingHeader icon={APP_ICONS.YinYang} label="Theme" 
-                                    description="Select the theme to be applied when TrekLog starts.  The theme applies to all groups."
+                                    description={`Select the theme to be applied when TrekLog starts. Theme applies to all groups.`}
                       />
                       <View style={styles.inputRow}>
                         <RadioGroup 
@@ -870,6 +884,30 @@ class Settings extends Component<{
                           selected={this.system}
                           labels={["Imperial", "Metric"]}
                           values={[SYSTEM_TYPE_US, SYSTEM_TYPE_METRIC]}
+                          labelStyle={{color: highTextColor, fontSize: 20}}
+                          justify='start'
+                          inline
+                          itemHeight={30}
+                          radioFirst
+                        />
+                      </View>
+                    </View>           
+                  </SlideDownView>
+                </FadeInView>       
+                <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                          duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                  <SlideDownView startValue={-cardHeight} endValue={0} open={this.openItems} 
+                            duration={SCROLL_DOWN_DURATION}>
+                    <View style={[cardLayout, styles.cardCustom]}>
+                      <SettingHeader icon={APP_ICONS.Compress} label="Image Compression" 
+                                    description="Use image compression to save storage"
+                      />
+                      <View style={styles.inputRow}>
+                        <RadioGroup 
+                          onChangeFn={this.setImageStorageMode}
+                          selected={this.imageStorageMode}
+                          labels={["Yes", "No"]}
+                          values={[IMAGE_STORE_COMPRESSED, IMAGE_STORE_FULL]}
                           labelStyle={{color: highTextColor, fontSize: 20}}
                           justify='start'
                           inline
@@ -1059,14 +1097,15 @@ class Settings extends Component<{
                 </FadeInView>       
               </ScrollView>
             </View>
-          </View>
           }
+          </View>
           {(showSave && !this.keyboardOpen && haveGroups) &&
             <SpeedDial 
               selectFn={this.saveSettings}
               bottom={CONTROLS_HEIGHT}
               style={styles.saveFab}
               icon="CheckMark"
+              triggerZ={SPEED_DIAL_Z_INDEX}
               raised
             />
           }

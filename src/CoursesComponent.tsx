@@ -4,7 +4,9 @@ import { RectButton } from 'react-native-gesture-handler'
 import { action, observable } from 'mobx'
 import { observer, inject } from 'mobx-react'
 import { NavigationActions, StackActions } from 'react-navigation';
+import { LatLng } from 'react-native-maps';
 
+import Waiting from './WaitingComponent';
 import { TrekInfo } from './TrekInfoModel'
 import { ToastModel } from './ToastModel';
 import { UtilsSvc } from './UtilsService';
@@ -16,7 +18,7 @@ import FadeInView from './FadeInComponent';
 import SlideDownView from './SlideDownComponent';
 import { SCROLL_DOWN_DURATION, FADE_IN_DURATION } from './App';
 import NavMenu, { NavMenuItem } from './NavMenuComponent';
-import NavMenuTrigger from './NavMenuTriggerComponent'
+import PageTitle from './PageTitleComponent';
 
 const goBack = NavigationActions.back() ;
 
@@ -29,12 +31,13 @@ class Courses extends Component<{
   uiTheme ?: any,
   modalSvc ?: ModalModel,
   toastSvc ?: ToastModel,
-  trekInfo ?: TrekInfo         // object with all non-gps information about the Trek
+  trekInfo ?: TrekInfo         // object with all information about the Trek
 }, {} > {
 
   @observable openItems;
   @observable headerTitle;
   @observable openNavMenu : boolean;
+  @observable dataReady;
 
   selectedCourse = -1;             // index of currently selected course list item (-1 if none)
   
@@ -42,28 +45,30 @@ class Courses extends Component<{
   cS = this.props.courseSvc;
   uSvc = this.props.utilsSvc;
   APCIndex = -1;
+  mapViewRefs : any[];
 
   renderCount = 0;
+  msgTxt = '';
 
   _didFocusSubscription;
   _willBlurSubscription;
 
   constructor(props) {
     super(props);
+    this.setHeaderTitle("Scanning...");
     this._didFocusSubscription = props.navigation.addListener(
       "didFocus",
       () => {
         this.setOpenItems(true)
-        // this.tI.clearTrek();
       }
     );
     this.initializeObservables();
   }
 
   componentDidMount() {
-    // requestAnimationFrame(() => {
-    //   this.setOpenItems(true);
-    //   })
+    requestAnimationFrame(() => {
+      this.setOpenItems(true);
+    })
     this.setTitleParam();
     this._willBlurSubscription = this.props.navigation.addListener(
       "willBlur",
@@ -74,9 +79,8 @@ class Courses extends Component<{
 
   componentWillMount() {
     // read the Course list from the database
-    // this.tI.clearTrackingItems();
-    // this.cS.getCourseList()
-    // .then(() => {
+    this.cS.getCourseList()
+    .then(() => {
       if (this.cS.courseList.length){
         // sort courses by lastEffort date (most recent first)
         this.cS.courseList.sort((a,b) => {
@@ -85,15 +89,19 @@ class Courses extends Component<{
         this.cS.setCourseListDisplayItems(this.tI.measurementSystem);
       }
       else {
-      // Course List is there but empty
-      this.props.toastSvc.toastOpen({tType: "Error", content: "Course list is empty."});
+        // Course List is there but empty
+        this.props.toastSvc.toastOpen({tType: "Error", content: "Course list is empty."});
       }
-    // })
-    // .catch(() => {
-    //   // Failed to read Course List
-    //   this.props.toastSvc.toastOpen({tType: "Error", content: "No course list found."});
-    //   this.setTitleParam();
-    // })
+      this.setOpenItems(false);
+      this.setDataReady(true);
+    })
+    .catch(() => {
+      // Failed to read Course List
+      this.props.toastSvc.toastOpen({tType: "Error", content: "No course list found."});
+      this.setTitleParam();
+      this.setOpenItems(false);
+      this.setDataReady(true);
+    })
   }
 
   componentWillUnmount() {
@@ -101,10 +109,12 @@ class Courses extends Component<{
     this.tI.clearTrek();
     this._didFocusSubscription && this._didFocusSubscription.remove();
     this._willBlurSubscription && this._willBlurSubscription.remove();
+    this.setDataReady(false);
   }
 
   initializeObservables = () => {
     this.setOpenNavMenu(false);
+    this.setDataReady(false);
   }
 
   @action
@@ -119,7 +129,7 @@ class Courses extends Component<{
   // Set the title in the header
   setTitleParam = (titleMsg?: string) => {
     if(this.cS.courseList && (this.cS.courseList.length > 0)) {
-      this.setHeaderTitle(titleMsg || 'Courses (' + this.cS.courseList.length + ')');
+      this.setHeaderTitle(titleMsg || ('Courses (' + this.cS.courseList.length + ')'));
     }
     else {
       this.setHeaderTitle("No Courses");
@@ -135,6 +145,11 @@ class Courses extends Component<{
   @action
   setOpenItems = (status: boolean) => {
     this.openItems = status;
+  }
+
+  @action
+  setDataReady = (status: boolean) => {
+    this.dataReady = status;
   }
 
   // edit the selected course
@@ -209,11 +224,8 @@ class Courses extends Component<{
       .then((trek) => {
         this.tI.setTrekProperties(trek);
         this.props.navigation.navigate("SelectedTrek", {
-          title:
-            this.uSvc.formattedLocaleDateAbbrDay(trek.date) +
-            "  " +
-            trek.startTime,
-          icon: trek.type,
+          title: this.cS.courseList[index].name,
+          icon: 'Course',
           switchSysFn: this.tI.switchMeasurementSystem,
           mapDisplayMode: 'noSpeeds'
         })
@@ -225,6 +237,17 @@ class Courses extends Component<{
           });
       })
     })
+  }
+
+  layoutMap = ( path: LatLng[], idx: number) => {
+    // requestAnimationFrame(() => {
+      if (this.mapViewRefs[idx]) { 
+        this.mapViewRefs[idx].fitToCoordinates(path,
+                                        {edgePadding: {top: 5, right: 5, 
+                                                        bottom: 5, left: 5}, 
+                                        animated: true});
+      }
+    // })
   }
 
   // Show the details of the given Course object
@@ -281,11 +304,14 @@ class Courses extends Component<{
   render() {
 
     const { mediumTextColor, disabledTextColor, dividerColor, highlightedItemColor, cardItemTitleColor,
-            pageBackground, highTextColor, rippleColor, primaryColor, altCardBackground
+            pageBackground, highTextColor, rippleColor, primaryColor, altCardBackground,
           } = this.props.uiTheme.palette[this.tI.colorTheme];
-    const { cardLayout, pageTitle, fontRegular } = this.props.uiTheme;
+    const { cardLayout, fontRegular } = this.props.uiTheme;
     const displayList = this.cS.courseList && this.cS.courseList.length > 0;
-    const courseCardHeight = 195 + 15;
+    // this.msgTxt += "rendering " + ++this.renderCount + '\n' + this.dataReady + '\n' + displayList + '\n';
+    // alert(this.msgTxt)
+    const courseCardHeight = 220 + 15;
+    const courseImageHt = 165;
     const navMenuItems : NavMenuItem[] = 
       [ {icon: 'Home', label: 'Home', value: 'Home'},
         {icon: 'Pie', label: 'Activity', value: 'Summary'},
@@ -325,7 +351,7 @@ class Courses extends Component<{
         flexDirection: "row",
         marginTop: 15,
         marginLeft: 15,
-        marginBottom: 20,
+        marginBottom: 10,
       },
       nameAndTimes: {
         flexDirection: "column",
@@ -389,7 +415,7 @@ class Courses extends Component<{
         borderStyle: "solid",
         borderColor: disabledTextColor,
         width: 100, 
-        height: 130, 
+        height: courseImageHt, 
         alignItems: "center", 
         backgroundColor: pageBackground, 
         justifyContent: "center"
@@ -401,15 +427,9 @@ class Courses extends Component<{
         paddingRight: 0,
         backgroundColor: pageBackground,
       },
-      pageTitleAdj: {
-        color: highTextColor,
-        paddingLeft: 10,
-        paddingRight: 10,
-        marginBottom: 10,
-      },
     })
 
-    let mapActions : SpeedDialItem[] =
+    let courseActions : SpeedDialItem[] =
                        [{icon: 'MapSearch', label: 'Scan', value: 'Scan'},
                        {icon: 'Edit', label: 'Rename', value: 'Rename'},
                        {icon: 'Delete', label: 'Delete', value: 'Delete'}];
@@ -426,10 +446,11 @@ class Courses extends Component<{
             titleText={this.headerTitle}
             icon="*"
             backButtonFn={() => this.props.navigation.dispatch(goBack)}
+            openMenuFn={this.openMenu}
           />
+          {this.dataReady &&
             <View style={styles.listArea}>
-              <NavMenuTrigger openMenuFn={this.openMenu}/>
-              <Text style={[pageTitle, styles.pageTitleAdj]}>Course List</Text>
+              <PageTitle titleText="Course List"/>
               <ScrollView snapToInterval={courseCardHeight} decelerationRate={.90}> 
                 {!displayList && 
                   <View style={styles.centered}>
@@ -439,99 +460,103 @@ class Courses extends Component<{
                 {displayList && 
                   <View style={{paddingBottom: 85}}>
                     {this.cS.courseList.map((dlItem, index) => (
-                      <FadeInView startValue={0} key={index} endValue={1} open={this.openItems} 
+                        <FadeInView startValue={0} key={index} endValue={1} open={this.openItems} 
                           duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
-                        <SlideDownView startValue={-180} endValue={0} open={this.openItems} 
-                            duration={SCROLL_DOWN_DURATION} style={{overflow: "hidden"}}>
-                          <View style={[cardLayout, styles.cardCustom, {overflow: "hidden"},
-                                      this.selectedCourse === index ? styles.courseHighlight : {}]}>
-                            <RectButton
-                              rippleColor={rippleColor}
-                              onPress={() => this.showSelectedCourse(index)}
-                            >
-                              <View style={styles.mapAndDist}>
-                                <View style={{width: 100, marginRight: 10}}>
-                                  {dlItem.courseImageUri && 
-                                    <RectButton
-                                      rippleColor={rippleColor}
-                                      onPress={() => this.showCourseMap(index)}
-                                    >
-                                      <View style={styles.courseImageArea}>
-                                        <Image source={{uri: 'file://' + dlItem.courseImageUri}}
-                                          style={{width: 98, height: 128}}
-                                        />
-                                      </View>
-                                    </RectButton>
-                                  }
-                                  {!dlItem.courseImageUri &&
-                                    <RectButton
-                                      rippleColor={rippleColor}
-                                      onPress={() => this.showCourseMap(index)}
-                                    >
-                                      <View style={styles.courseImageArea}>
-                                          <Text style={{color: disabledTextColor, fontSize: 20, fontStyle: "italic"}}>No Map</Text>
+                          <SlideDownView startValue={-180} endValue={0} open={this.openItems} 
+                              duration={SCROLL_DOWN_DURATION} style={{overflow: "hidden"}}>
+                            <View style={[cardLayout, styles.cardCustom, {overflow: "hidden"},
+                                        this.selectedCourse === index ? styles.courseHighlight : {}]}>
+                              <RectButton
+                                rippleColor={rippleColor}
+                                onPress={() => this.showSelectedCourse(index)}
+                              >
+                                <View style={styles.mapAndDist}>
+                                  <View style={{width: 100, marginRight: 10}}>
+                                    {dlItem.courseImageUri && 
+                                      <RectButton
+                                        rippleColor={rippleColor}
+                                        onPress={() => this.showCourseMap(index)}
+                                      >
+                                        <View style={styles.courseImageArea}>
+                                          <Image source={{uri: 'file://' + dlItem.courseImageUri}}
+                                            style={{width: 98, height: courseImageHt - 2}}
+                                          />
                                         </View>
-                                    </RectButton>
-                                  }
-                                  <Text style={styles.courseDist}>
-                                    {this.uSvc.formatDist(dlItem.definingEffort.subject.distance, this.tI.distUnits())}
-                                  </Text>
+                                      </RectButton>
+                                    }
+                                    {!dlItem.courseImageUri &&
+                                      <RectButton
+                                        rippleColor={rippleColor}
+                                        onPress={() => this.showCourseMap(index)}
+                                      >
+                                        <View style={styles.courseImageArea}>
+                                            <Text style={{color: disabledTextColor, fontSize: 20, fontStyle: "italic"}}>No Map</Text>
+                                          </View>
+                                      </RectButton>
+                                    }
+                                    <Text style={styles.courseDist}>
+                                      {this.uSvc.formatDist(dlItem.definingEffort.subject.distance, this.tI.distUnits())}
+                                    </Text>
+                                  </View>
+                                  <View style={styles.nameAndTimes}>
+                                    <Text style={styles.courseNameText}>{dlItem.name}</Text>
+                                    <View style={styles.effortRow}>
+                                      <Text style={styles.effortLabel}>Default:</Text> 
+                                      <Text style={styles.effortTime}>
+                                            {this.uSvc.timeFromSeconds(dlItem.definingEffort.subject.duration)}</Text>
+                                      <Text style={styles.effortDate}>
+                                            {this.uSvc.dateFromSortDateYY(dlItem.definingEffort.subject.date)}</Text>
+                                    </View>
+                                    {dlItem.lastEffort && 
+                                      <View style={styles.effortRow}>
+                                        <Text style={styles.effortLabel}>Last:</Text> 
+                                        <Text style={styles.effortTime}>
+                                              {this.uSvc.timeFromSeconds(dlItem.lastEffort.subject.duration)}</Text>
+                                        <Text style={styles.effortDate}>
+                                              {this.uSvc.dateFromSortDateYY(dlItem.lastEffort.subject.date)}</Text>
+                                      </View>
+                                    }
+                                    {dlItem.bestEffort && 
+                                      <View style={styles.effortRow}>
+                                        <Text style={styles.effortLabel}>Best:</Text> 
+                                        <Text style={styles.effortTime}>
+                                              {this.uSvc.timeFromSeconds(dlItem.bestEffort.subject.duration)}</Text>
+                                        <Text style={styles.effortDate}>
+                                              {this.uSvc.dateFromSortDateYY(dlItem.bestEffort.subject.date)}</Text>
+                                      </View>
+                                    }
+                                    </View>
                                 </View>
-                                <View style={styles.nameAndTimes}>
-                                  <Text style={styles.courseNameText}>{dlItem.name}</Text>
-                                  <View style={styles.effortRow}>
-                                    <Text style={styles.effortLabel}>Default:</Text> 
-                                    <Text style={styles.effortTime}>
-                                          {this.uSvc.timeFromSeconds(dlItem.definingEffort.subject.duration)}</Text>
-                                    <Text style={styles.effortDate}>
-                                          {this.uSvc.dateFromSortDateYY(dlItem.definingEffort.subject.date)}</Text>
-                                  </View>
-                                  {dlItem.lastEffort && 
-                                    <View style={styles.effortRow}>
-                                      <Text style={styles.effortLabel}>Last:</Text> 
-                                      <Text style={styles.effortTime}>
-                                            {this.uSvc.timeFromSeconds(dlItem.lastEffort.subject.duration)}</Text>
-                                      <Text style={styles.effortDate}>
-                                            {this.uSvc.dateFromSortDateYY(dlItem.lastEffort.subject.date)}</Text>
-                                    </View>
-                                  }
-                                  {dlItem.bestEffort && 
-                                    <View style={styles.effortRow}>
-                                      <Text style={styles.effortLabel}>Best:</Text> 
-                                      <Text style={styles.effortTime}>
-                                            {this.uSvc.timeFromSeconds(dlItem.bestEffort.subject.duration)}</Text>
-                                      <Text style={styles.effortDate}>
-                                            {this.uSvc.dateFromSortDateYY(dlItem.bestEffort.subject.date)}</Text>
-                                    </View>
-                                  }
-                                  </View>
-                              </View>
-                              <SpeedDial
-                                icon="DotsVertical"
-                                bottom={5}
-                                // right={15}
-                                iconColor={mediumTextColor}
-                                items={mapActions}
-                                sdIndex={index}
-                                selectFn={this.speedDialAction}
-                                style={styles.speedDialTrigger}
-                                horizontal={true}
-                                menuColor="transparent"
-                                itemIconsStyle={{backgroundColor: pageBackground}}
-                                itemIconsColor={primaryColor}
-                                iconSize="Small"
-                              />
-                            </RectButton>
-                          </View>
-                          {/* <View style={styles.divider}/> */}
-                        </SlideDownView>
-                      </FadeInView>       
-                      ))
+                                <SpeedDial
+                                  icon="DotsVertical"
+                                  bottom={5}
+                                  // right={15}
+                                  iconColor={mediumTextColor}
+                                  items={courseActions}
+                                  sdIndex={index}
+                                  selectFn={this.speedDialAction}
+                                  style={styles.speedDialTrigger}
+                                  horizontal={true}
+                                  menuColor="transparent"
+                                  itemIconsStyle={{backgroundColor: pageBackground}}
+                                  itemIconsColor={primaryColor}
+                                  iconSize="Small"
+                                />
+                              </RectButton>
+                            </View>
+                          </SlideDownView>
+                        </FadeInView>       
+                      )
+                    )
                     }
                   </View>
                 }
               </ScrollView>
             </View>
+          }
+          {(!this.dataReady) &&
+          <Waiting/>
+          }
         </View>
       </NavMenu>
     )

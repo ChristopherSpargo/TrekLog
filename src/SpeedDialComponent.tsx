@@ -2,8 +2,8 @@ import React, { Component } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { observable, action } from 'mobx';
 import { observer, inject } from 'mobx-react';
+import { BorderlessButton } from 'react-native-gesture-handler'
 
-import { SPEED_DIAL_Z_INDEX } from './App';
 import SlideUpView from './SlideUpComponent';
 import SlideLeftView from './SlideLeftComponent';
 import SvgIcon from './SvgIconComponent';
@@ -11,6 +11,7 @@ import IconButton from './IconButtonComponent';
 import FadeInTemp from './FadeInTempComponent';
 import { APP_ICONS } from './SvgImages';
 import { TrekInfo } from './TrekInfoModel';
+import { SPEED_DIAL_Z_INDEX } from './App';
 
 export interface SpeedDialItem  {
   label: string,
@@ -42,6 +43,7 @@ class SpeedDial extends Component<{
   horizontal ?: boolean,      // true if slide-out goes to left, false if goes up
   autoClose ?: number,        // milliseconds to wait before closing
   fadeOut ?: number,          // if present and not 0, number of milliseconds before fading out trigger
+  triggerZ ?: number,         // optional zIndex value for trigger
   trekInfo ?: TrekInfo,
   uiTheme ?: any
 }, {} > {
@@ -50,6 +52,7 @@ class SpeedDial extends Component<{
   @observable open;
 
   openTimerID : number;
+  menuOpacity = 0;
 
   constructor(props) {
     super(props);
@@ -69,10 +72,12 @@ class SpeedDial extends Component<{
   }
 
   setVisible = () => {
+    this.menuOpacity = 1;
     this.setZValue(4);
   }
 
   setNotVisible = () => {
+    this.menuOpacity = 0;
     this.setZValue(-1);
   }
 
@@ -127,7 +132,7 @@ class SpeedDial extends Component<{
     const SD_MENU_WIDTH = smallIcons ? 54 : 64;
     const labelAdj = bigItems ? -20 : -14;
     const { highTextColor, textOnSecondaryColor, secondaryColor, primaryColor,
-            matchingMask_7 } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
+            matchingMask_7, rippleColor } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
     const { fontLight } = this.props.uiTheme;
     const numItems = this.props.items ? this.props.items.length : undefined;
     const menuSize = numItems * SD_ITEM_SIZE + 5;
@@ -143,6 +148,7 @@ class SpeedDial extends Component<{
             ? this.props.top : undefined;
     const hMenuBottom = this.props.top === undefined 
             ? propBot + 0 : undefined;
+    const triggerRight = ((SD_MENU_WIDTH - triggerIconArea) / 2) + 5;
 
     const styles = StyleSheet.create({
       container: { ... StyleSheet.absoluteFillObject },
@@ -150,12 +156,13 @@ class SpeedDial extends Component<{
         position: "absolute",
         top: this.props.top,
         bottom: (this.props.top !== undefined) ? undefined : propBot,
-        right: ((SD_MENU_WIDTH - triggerIconArea) / 2) + 5,
+        right: triggerRight,
         width: triggerIconArea + 10,
         height: triggerIconArea + 10,
+        borderRadius: (triggerIconArea + 10) / 2,        
         alignItems: "center",
         justifyContent: "center",
-        zIndex: SPEED_DIAL_Z_INDEX,
+        zIndex: this.props.triggerZ,
       },
       shadowArea: {
         width: triggerIconArea,
@@ -163,7 +170,7 @@ class SpeedDial extends Component<{
         borderRadius: triggerIconArea / 2,        
         alignItems: "center",
         justifyContent: "center",
-        backgroundColor: "transparent"
+        backgroundColor: "transparent",
       },
       triggerIcon: {
         width: triggerIconArea,
@@ -201,7 +208,7 @@ class SpeedDial extends Component<{
         height: SD_MENU_WIDTH,
         zIndex: this.zValue,
         position: "absolute",
-        right: 10 + triggerIconArea + 1,
+        right: triggerRight + triggerIconArea,
         top: hMenuTop,
         bottom: hMenuBottom,
         overflow: "hidden",
@@ -228,6 +235,7 @@ class SpeedDial extends Component<{
         alignItems: "center",
         justifyContent: "flex-end",
         backgroundColor: slideoutBg,
+        zIndex: this.zValue,
       },
       label: {
         fontFamily: fontLight,
@@ -339,28 +347,28 @@ class SpeedDial extends Component<{
             </FadeInTemp>
           }
           {this.props.fadeOut === undefined && 
-            <IconButton 
-              iconSize={triggerIconSize}
-              icon={triggerIcon}
-              iconStyle={{backgroundColor: "transparent"}}
-              style={{...styles.triggerIcon, ...propStyle}}
-              color={triggerFill}
-              raised={this.props.raised}
-              onPressFn={this.toggleSpeedDial}
-            />
-        // <BorderlessButton
-          //     borderless={true}
-          //     rippleColor={rippleColor}
-          //     onPress={this.toggleSpeedDial}>
-          //     <View style={styles.shadowArea}>
-          //       <SvgIcon
-          //         paths={APP_ICONS[triggerIcon]}
-          //         size={triggerIconSize}
-          //         fill={triggerFill}
-          //         style={[styles.triggerIcon, propStyle]}
-          //       />
-          //     </View>
-          //   </BorderlessButton>
+            // <IconButton 
+            //   iconSize={triggerIconSize}
+            //   icon={triggerIcon}
+            //   iconStyle={{backgroundColor: "transparent"}}
+            //   style={{...styles.triggerIcon, ...propStyle}}
+            //   color={triggerFill}
+            //   raised={this.props.raised}
+            //   onPressFn={this.toggleSpeedDial}
+            // />
+            <BorderlessButton
+              borderless={true}
+              rippleColor={rippleColor}
+              onPress={this.toggleSpeedDial}>
+              <View style={styles.shadowArea}>
+                <SvgIcon
+                  paths={APP_ICONS[triggerIcon]}
+                  size={triggerIconSize}
+                  fill={triggerFill}
+                  style={[styles.triggerIcon, propStyle]}
+                />
+              </View>
+            </BorderlessButton>
           }
         </View>
       </View>

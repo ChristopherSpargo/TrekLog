@@ -643,7 +643,8 @@ export class FilterSvc {
       }
       treks.sort(this.sortFunc);
     }
-    this.setFTChecksum(cSum);
+    // add groupList.length to checksum to account for groups with no applicable treks
+    this.setFTChecksum(cSum + this.groupList.length);     
     this.setFilteredTreks(treks);
     this.setFilterRuns(++this.filterRuns);
     this.setFoundType(foundSelectedType);

@@ -15,7 +15,7 @@ import CheckboxPicker from "./CheckboxPickerComponent";
 import RadioPicker from './RadioPickerComponent';
 import { SummaryModel } from "./SummaryModel";
 import NavMenu from './NavMenuComponent';
-import NavMenuTrigger from './NavMenuTriggerComponent'
+import PageTitle from './PageTitleComponent';
 
 const goBack = NavigationActions.back();
 
@@ -159,6 +159,14 @@ class SummaryScreen extends Component<
             existingFilter: filter
           });
           break;
+        case "NoEmpties":
+          this.sumSvc.setAllowEmptyIntervals(false);
+          this.sumSvc.findStartingInterval();
+          break;
+        case "EmptiesOK":
+          this.sumSvc.setAllowEmptyIntervals(true);
+          this.sumSvc.findStartingInterval();
+          break;
         default:
       }
     });
@@ -200,11 +208,9 @@ class SummaryScreen extends Component<
       disabledTextColor,
       pageBackground,
       headerTextColor,
-      highTextColor,
     } = this.props.uiTheme.palette[this.tInfo.colorTheme];
     const {
       cardLayout,
-      pageTitle
     } = this.props.uiTheme;
     const extraFilters = this.fS.extraFilterSet();
     const headerActions = [
@@ -213,6 +219,9 @@ class SummaryScreen extends Component<
     const navMenuItems = 
     [ {label: 'Summary Options', 
       submenu: [{icon: extraFilters ? 'FilterRemove' : 'Filter', label: 'Edit Filters', value: 'ExtraFilters'},
+                (this.sumSvc.allowEmptyIntervals 
+                    ? {icon: 'NoEmpties', label: 'No Empty Intervals', value: 'NoEmpties'} 
+                    : {icon: 'EmptiesOK', label: 'Empty Intervals OK', value: 'EmptiesOK'}),
                 {icon: 'ChartBar', label: 'Review', value: 'Review'},
                ]},
     {icon: 'Home', label: 'Home', value: 'GoBack'},
@@ -252,9 +261,6 @@ class SummaryScreen extends Component<
         backgroundColor: pageBackground,
       },
       pageTitleAdj: {
-        color: highTextColor,
-        paddingLeft: 10,
-        paddingRight: 10,
         marginBottom: 0,
       },
     });
@@ -275,14 +281,15 @@ class SummaryScreen extends Component<
                 icon="*"
                 backButtonFn={() => this.props.navigation.dispatch(goBack)}
                 actionButtons={headerActions}
-                group={this.fS.groupList.length === 1 ? this.fS.groupList[0] : "Multiple"}
-                setGroupFn={this.getDifferentGroups}
+                openMenuFn={this.openMenu}
               />
               <View style={styles.listArea}>
-                <NavMenuTrigger openMenuFn={this.openMenu}/>
-                <Text style={[pageTitle, styles.pageTitleAdj]}>
-                  Activity Summary
-                </Text>
+              <PageTitle 
+                titleText="Activity Summary"
+                groupName={this.fS.groupList.length === 1 ? this.fS.groupList[0] : "Multiple"}
+                setGroupFn={this.getDifferentGroups}
+                style={styles.pageTitleAdj}
+              />
                 {this.props.trekInfo.dataReady && (
                   <DashBoard
                     pickerOpenFn={this.setRadioPickerOpen}

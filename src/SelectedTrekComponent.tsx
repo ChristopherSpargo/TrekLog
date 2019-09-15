@@ -13,7 +13,7 @@ import TrekDisplay, { mapDisplayModeType } from './TrekDisplayComponent';
 import NumbersBar from './NumbersBarComponent'
 import { TrekInfo, DIST_UNIT_LONG_NAMES, TrekObj, TrekPoint } from './TrekInfoModel';
 import { SHORT_CONTROLS_HEIGHT, INVISIBLE_Z_INDEX, INTERVAL_GRAPH_Z_INDEX, 
-         HEADER_HEIGHT, semitransBlack_9, semitransWhite_8, 
+         HEADER_HEIGHT
         } from './App';
 import Waiting from './WaitingComponent';
 import TrekLimitsForm, {LimitsObj} from './TrekLimitsComponent';
@@ -31,7 +31,6 @@ import { CourseTrackingSnapshot, CourseSvc } from './CourseService';
 import IncDecComponent from './IncDecComponent';
 import HorizontalSlideView from './HorizontalSlideComponent';
 import NavMenu from './NavMenuComponent';
-import NavMenuTrigger from './NavMenuTriggerComponent'
 
 const goBack = NavigationActions.back() ;
 const INTERVAL_CATS  = ['Distance', 'Time', 'Speed', 'Calories', 'Elevation'];
@@ -132,13 +131,14 @@ class SelectedTrek extends Component<{
     this.setOpenNavMenu(false);
   }
 
-   componentWillMount() {
+  componentWillMount() {
     this.changeTrekFn = this.props.navigation.getParam('changeTrekFn');
     this.checkTrekChangeFn = this.props.navigation.getParam('checkTrekChangeFn');
     this.switchSysFn = this.props.navigation.getParam('switchSysFn');
     this.mapDisplayMode = this.props.navigation.getParam('mapDisplayMode', 'normal');
     this.courseSnapshotName = this.props.navigation.getParam('takeSnapshotName');
     this.courseSnapshotMode = this.props.navigation.getParam('takeSnapshotMode');
+    // param mapSnapshotPrompt is the prompt displayed when creating or updating a course 
     this.mapSnapshotPrompt = this.props.navigation.getParam('takeSnapshotPrompt');
     this.setTrackingCoursePath(this.cS.trackingSnapshot)
     this.setTrackingShapshotItems(this.cS.trackingSnapshot);
@@ -151,9 +151,9 @@ class SelectedTrek extends Component<{
     this.setRateRangeObj(this.mapDisplayMode.includes('noSpeeds') ? undefined : this.currRangeData);
     this.iSvc.intervalData = undefined;
     this.setIntervalCatIndex(this.iSvc.show);
-   }
+  }
 
-   componentDidMount() {
+  componentDidMount() {
     this.keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', this.keyboardDidShow);
     this.keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', this.keyboardDidHide);
     requestAnimationFrame(() => {
@@ -162,13 +162,12 @@ class SelectedTrek extends Component<{
         this.takeCourseMapSnapshot();
       }
     })
-   }
+  }
 
   componentWillUnmount() {
     this.keyboardDidShowListener.remove();
     this.keyboardDidHideListener.remove();
     this.setStatsOpen(false);
-    this.tInfo.clearTrek();
     this.setTrackingShapshotItems(undefined);
     this.cS.clearTrackingSnapshot();
   }
@@ -204,7 +203,7 @@ class SelectedTrek extends Component<{
     this.setOpenItems(!this.openItems);
   }
 
-  // set observable that will cause the bar graph to scroll to a bar
+  // set observable that will cause the bar graph to scroll to the given bar
   @action
   setScrollToBar = (barNum: number) => {
     this.scrollToBar = barNum;
@@ -535,7 +534,7 @@ class SelectedTrek extends Component<{
     }
   }
 
-  // set items related to course challeng replay from the given snapshot
+  // set items related to course challenge replay from the given snapshot
   @action
   setTrackingShapshotItems = (ss: CourseTrackingSnapshot) => {
     if (ss === undefined) {
@@ -546,60 +545,87 @@ class SelectedTrek extends Component<{
       this.trackingTime = undefined;
       this.stopReplayTimer();
     } else {
+      let replayOn = this.replayTimerStatus !== "None";
+
       let coursePtInfo = this.lSvc.getPointAtLimit(ss.coursePath, ss.coursePos, 
                                                     ss.coursePosMax, ss.coursePosType);
       this.setCourseMarker(coursePtInfo.pt);
       let trekPtInfo = this.lSvc.getPointAtLimit(ss.trekPath, ss.trekPos, 
                                                   ss.trekPosMax, ss.trekPosType, true);
       this.snapshotTrekPath = trekPtInfo.path;
+      switch(ss.method){
+        case 'bestTime':
+        case 'courseTime':
+        case 'lastTime':
+        case 'otherEffort':
+          // since coursePos/trekPos are 'Time' in this case, we need to find when each were at a
+          // given 'Dist' to compute the time difference.
+          // we do this to account for stops during the trek
+          if (coursePtInfo.dist < trekPtInfo.dist){       
+            // trek is ahead
+            if (ss.coursePos < ss.coursePosMax){
+              let timeAtDistCourse;
 
-      if (ss.method === 'courseTime' || ss.method === 'bestTime' || 
-          ss.method === 'lastTime' || ss.method === 'otherEffort') {
+              // if(replayOn){
+                // replay is running
+                timeAtDistCourse = this.lSvc.getPointAtLimit(ss.coursePath, 
+                                                              trekPtInfo.dist, ss.courseDist, 'Dist').time;
+                this.setTrackingStatsTime(timeAtDistCourse - Math.min(ss.trekPos, ss.trekPosMax));
+              // } else {
+              //   // replay not yet started
+              //   timeAtDistCourse = this.lSvc.getPointAtLimit(ss.coursePath, 
+              //                                                 coursePtInfo.dist, ss.courseDist, 'Dist').time;
+              //   this.setTrackingStatsTime(ss.coursePosMax - timeAtDistCourse);
+              // }
+            } else {        
+              // but, course has finished. (course dist shorter than trek)
+              // show positions when course finished if replay not running, otherwise let trek play out
+              let t = replayOn ? Math.min(ss.trekPos, ss.trekPosMax) : ss.trekPosMax;
+              this.setTrackingStatsTime(ss.coursePosMax - t);
+            }
+          } else {                                        
+            // trek is behind 
+            if (ss.trekPos < ss.trekPosMax){
+              let timeAtDistTrek;
 
-        // since coursePos/trekPos are 'Time' in this case, we need to find when each were at a
-        // given 'Dist' to compute the time difference.
-        // we do this to account for stops during the trek
-        if (coursePtInfo.dist < trekPtInfo.dist){       
-          // trek is ahead
-          if (ss.coursePos < ss.coursePosMax){
-            let timeAtDistCourse = this.lSvc.getPointAtLimit(ss.coursePath, 
-                                                            trekPtInfo.dist, ss.courseDist, 'Dist').time;
-            this.setTrackingStatsTime(timeAtDistCourse - Math.min(ss.trekPos, ss.trekPosMax));
-          } else {        
-            // but, course has finished. (course dist shorter than trek)
-            // show positions when course finished if replay not running, otherwise let trek play out
-            let t = this.replayTimerStatus === "None" ? ss.trekPosMax : Math.min(ss.trekPos, ss.trekPosMax);
-            this.setTrackingStatsTime(ss.coursePosMax - t);
-          }
-        } else {                                        
-          // trek is behind 
-          if (ss.trekPos < ss.trekPosMax){
-            let timeAtDistTrek = this.lSvc.getPointAtLimit(ss.trekPath, 
+              // if(replayOn){
+                // replay is running
+                timeAtDistTrek = this.lSvc.getPointAtLimit(ss.trekPath, 
                                                             coursePtInfo.dist, ss.trekDist, 'Dist').time;
-            this.setTrackingStatsTime(Math.min(ss.coursePos, ss.coursePosMax) - timeAtDistTrek);
-          } else {        
-            // but, trek has finished. (trek dist shorter than course)
-            // show positions when trek finished if replay not running, otherwise let course play out
-            let t = this.replayTimerStatus === "None" ? ss.coursePosMax : Math.min(ss.coursePos, ss.coursePosMax);
-            this.setTrackingStatsTime(t - ss.trekPosMax);
+                this.setTrackingStatsTime(Math.min(ss.coursePos, ss.coursePosMax) - timeAtDistTrek);
+              // } else {
+              //   // replay not yet started
+              //   timeAtDistTrek = this.lSvc.getPointAtLimit(ss.trekPath, 
+              //                                               trekPtInfo.dist, ss.trekDist, 'Dist').time;
+              //   this.setTrackingStatsTime(timeAtDistTrek - ss.trekPosMax);
+              // }
+            } else {        
+              // but, trek has finished. (trek dist shorter than course)
+              // show positions when trek finished if replay not running, otherwise let course play out
+              let t = replayOn ? Math.min(ss.coursePos, ss.coursePosMax) : ss.coursePosMax ;
+              this.setTrackingStatsTime(t - ss.trekPosMax);
+            }
           }
-        }
-      } else {
+          break;
+        case 'avgRate':
+        case 'avgSpeed':
+        case 'timeLimit':
+          // here the course marker is advancing at a selected rate and the time data in the course path
+          // isn't being used.  Compute time-at-distance for course by dist/courseInc.
+          if (coursePtInfo.dist < trekPtInfo.dist){       // trek is ahead
+            let timeAtTrekDist = trekPtInfo.dist / ss.courseInc;
+            this.setTrackingStatsTime(timeAtTrekDist - trekPtInfo.time);
+          } else {                                        // trek is behind
+            let timeAtCourseDist = this.lSvc.getPointAtLimit(ss.trekPath, 
+                                                              coursePtInfo.dist, ss.trekDist, 'Dist').time;
 
-        // here the course marker is advancing at a selected rate and the time data in the course path
-        // isn't being used.  Compute time-at-distance for course by dist/courseInc.
-        if (coursePtInfo.dist < trekPtInfo.dist){       // trek is ahead
-          let timeAtTrekDist = trekPtInfo.dist / ss.courseInc;
-          this.setTrackingStatsTime(timeAtTrekDist - trekPtInfo.time);
-        } else {                                        // trek is behind
-          let timeAtCourseDist = this.lSvc.getPointAtLimit(ss.trekPath, 
-                                                            coursePtInfo.dist, ss.trekDist, 'Dist').time;
-
-          // we don't use coursePtInfo.time here since it reflects the actual time from the data
-          // in the course defining path.
-          let courseTimeAtDist = coursePtInfo.dist / ss.courseInc;
-          this.setTrackingStatsTime(courseTimeAtDist - timeAtCourseDist);
-        }
+            // we don't use coursePtInfo.time here since it reflects the actual time from the data
+            // in the course defining path.
+            let courseTimeAtDist = coursePtInfo.dist / ss.courseInc;
+            this.setTrackingStatsTime(courseTimeAtDist - timeAtCourseDist);
+          }
+          break;
+        default:
       }
       this.setTrackingStatsDist(trekPtInfo.dist - coursePtInfo.dist)
       ss.lastUpdateTime = new Date().getTime();
@@ -753,6 +779,9 @@ class SelectedTrek extends Component<{
   }
 
   // handle the uri (if any) passed back by the snapshot function in TrekDisplay component
+  // navigation parameter courseSnapshotName is the name of the course to update or create.
+  // navigation parameter courseSnapshotMode can be either 'Update' to change a course default or 
+  // 'New' to create a new course.
   courseMapSnapshotTaken = (uri?: string) => {
     let t = this.tInfo.getSaveObj();
 
@@ -1053,19 +1082,15 @@ class SelectedTrek extends Component<{
         <View style={styles.container}>
           {(showControls || tracking) &&
             <TrekLogHeader titleText={this.props.navigation.getParam('title', '')}
-                                      icon={this.props.navigation.getParam('icon', '')}
-                                      backgroundColor={tracking ? trackingStatsBackgroundHeader : matchingMask_7}
-                                      textColor={textOnTheme}
-                                      position="absolute"
-                                      backButtonFn={() => this.props.navigation.dispatch(goBack)}
-                                      borderBottomColor="transparent"
+                           icon={this.props.navigation.getParam('icon', '')}
+                           backgroundColor={tracking ? trackingStatsBackgroundHeader : matchingMask_7}
+                           textColor={textOnTheme}
+                           position="absolute"
+                           backButtonFn={() => this.props.navigation.dispatch(goBack)}
+                           borderBottomColor="transparent"
+                           openMenuFn={this.openMenu}
             />        
           }
-          <NavMenuTrigger menuStyle={{top: HEADER_HEIGHT + 10, 
-                                      backgroundColor: semitransBlack_9,
-                                      borderRadius: 12,
-                                      color: semitransWhite_8}} 
-                          openMenuFn={this.openMenu}/>
           <TrekDisplay 
             displayMode={this.mapDisplayMode}
             pathToCurrent={this.snapshotTrekPath ? this.snapshotTrekPath : this.tInfo.pointList}

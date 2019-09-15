@@ -8,7 +8,7 @@ import { ProgressCircle } from 'react-native-svg-charts';
 
 import { TrekInfo } from './TrekInfoModel'
 import { ToastModel } from './ToastModel';
-import { TREKLOG_GOALS_KEY, PROGRESS_COLORS } from './App';
+import { TREKLOG_GOALS_KEY, PROGRESS_COLORS, SPEED_DIAL_Z_INDEX } from './App';
 import { UtilsSvc } from './UtilsService';
 import { ModalModel, CONFIRM_INFO } from './ModalModel';
 import Waiting from './WaitingComponent';
@@ -19,7 +19,7 @@ import FadeInView from './FadeInComponent';
 import SlideDownView from './SlideDownComponent';
 import { SCROLL_DOWN_DURATION, FADE_IN_DURATION } from './App';
 import NavMenu, { NavMenuItem } from './NavMenuComponent';
-import NavMenuTrigger from './NavMenuTriggerComponent'
+import PageTitle from './PageTitleComponent';
 
 const goBack = NavigationActions.back() ;
 
@@ -309,7 +309,7 @@ class Goals extends Component<{
         borderColor: dividerColor,
         borderStyle: "solid",
         borderWidth: 1,
-        borderBottomWidth: 2,
+        borderBottomWidth: 2,         // to give it a little elevation look
         borderRadius: 3,
         backgroundColor: altCardBackground,
       },
@@ -390,12 +390,6 @@ class Goals extends Component<{
         paddingRight: 0,
         backgroundColor: pageBackground,
       },
-      pageTitleAdj: {
-        color: highTextColor,
-        paddingLeft: 10,
-        paddingRight: 10,
-        marginBottom: 10,
-      },
     })
 
     let mapActions : SpeedDialItem[] =
@@ -411,25 +405,18 @@ class Goals extends Component<{
         setOpenFn={this.setOpenNavMenu}
         open={this.openNavMenu}> 
         <View style={styles.container}>
-          <SpeedDial 
-            selectFn={this.addNewGoal}
-            bottom={10}
-            style={styles.addGoalFab}
-            icon="Plus"
-            raised
-          />
           <TrekLogHeader
             titleText={this.headerTitle}
             icon="*"
             backButtonFn={() => this.props.navigation.dispatch(goBack)}
-            group={this.tI.group || "None"}
-            groupTextColor={disabledHeaderTextColor}
+            openMenuFn={this.openMenu}
           />
           {this.gS.dataReady &&
-            // <View style={styles.itemsArea}>
               <View style={styles.listArea}>
-                <NavMenuTrigger openMenuFn={this.openMenu}/>
-                <Text style={[pageTitle, styles.pageTitleAdj]}>Goals List</Text>
+                <PageTitle 
+                  titleText="Goals List"
+                  groupName={this.tI.group || "None"}
+                />
                 <ScrollView snapToInterval={goalCardHeight} decelerationRate={.90}> 
                   {!displayList && 
                     <View style={styles.centered}>
@@ -501,11 +488,9 @@ class Goals extends Component<{
                                         itemIconsColor={textOnSecondaryColor}
                                         iconSize="Small"
                                       />
-                                    {/* </View> */}
                                   </View>
                                 </RectButton>
                               </View>
-                              {/* <View style={styles.divider}/> */}
                             </SlideDownView>
                           </FadeInView>       
                         )})
@@ -514,11 +499,18 @@ class Goals extends Component<{
                   }
                 </ScrollView>
               </View>
-            // </View>
           }
           {(!this.gS.dataReady) &&
             <Waiting/>
           }
+          <SpeedDial 
+            selectFn={this.addNewGoal}
+            bottom={10}
+            style={styles.addGoalFab}
+            icon="Plus"
+            triggerZ={SPEED_DIAL_Z_INDEX}
+            raised
+          />
         </View>
       </NavMenu>
     )

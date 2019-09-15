@@ -1,7 +1,7 @@
 import React from 'react';
 import { observer, inject } from 'mobx-react';
 import { observable, action } from 'mobx';
-import { View, StyleSheet, Text, TextInput, Keyboard } from 'react-native';
+import { View, StyleSheet, Text, TextInput, Keyboard, Dimensions } from 'react-native';
 import { RectButton } from 'react-native-gesture-handler'
 
 import { BACKDROP_Z_INDEX, LABEL_FORM_Z_INDEX } from './App';
@@ -123,18 +123,20 @@ class TrekLabelForm extends React.Component<{
   
   render() {
 
+    const { width } = Dimensions.get('window');
+    const bPadding = 10;
+    const cardWidth = width - (bPadding * 2);
     const mData = this.props.modalSvc.lfData;
     const { cardLayout, roundedTop, footer, footerButton, footerButtonText,
-            formTextInput } = this.props.uiTheme;
+            formTextInput, formHeader, formHeaderText } = this.props.uiTheme;
     const { highTextColor, dividerColor, mediumTextColor, pageBackground,
-            trekLogBlue, contrastingMask_3, primaryColor, textOnPrimaryColor, rippleColor
+            trekLogBlue, contrastingMask_3, textOnPrimaryColor, rippleColor
           } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
     const defHIcon = mData.headingIcon || "Edit";
     const labelPrompt = "Label:"
     const labelChars = (MAX_LABEL_LENGTH - this.labelValue.length) + " characters left";
     const notePrompt = "Note:";
     const noteChars =  (MAX_NOTE_LENGTH - this.noteValue.length) + " characters left";
-    const headerHeight = 40;
 
     const styles = StyleSheet.create({
       container: { ... StyleSheet.absoluteFillObject },
@@ -168,24 +170,16 @@ class TrekLabelForm extends React.Component<{
         backgroundColor: pageBackground,
       },
       header: {
-        paddingLeft: 10,
-        paddingBottom: 5,
-        flexDirection: "row",
-        alignItems: "flex-end",
-        height: headerHeight,
-        borderStyle: "solid",
+        ...formHeader,
         borderBottomColor: dividerColor,
-        borderBottomWidth: 1,
-        backgroundColor: primaryColor,
       },
       title: {
+        ...formHeaderText,
         color: textOnPrimaryColor,
-        fontSize: 18
       },
       body: {
         flexDirection: "column",
-        paddingTop: 10,
-        paddingHorizontal: 8,
+        padding: bPadding,
         minHeight: 100,
       },
       bodyText: {
@@ -202,21 +196,17 @@ class TrekLabelForm extends React.Component<{
       },
       textInputItem: {
         ...formTextInput,
-        width: 330,
-        marginRight: 10,
+        width: cardWidth,
         color: trekLogBlue,
       },      
+      labelAndCharsLeft: {
+        flexDirection: "row",
+        width: cardWidth,
+        justifyContent: "space-between",
+      },
       labelText: {
         color: mediumTextColor,
         fontSize: 16
-      },
-      charsLeft: {
-        flexDirection: "row",
-        width: 326,
-        justifyContent: "flex-end",
-        marginBottom: 10,
-        marginTop: -5,
-        height: 20,
       },
       charsLeftText: {
         fontSize: 14,
@@ -242,7 +232,10 @@ class TrekLabelForm extends React.Component<{
                     <Text style={styles.title}>{mData.heading}</Text>
                   </View>
                   <View style={styles.body}>
-                    <Text style={styles.labelText}>{labelPrompt}</Text>
+                    <View style={styles.labelAndCharsLeft}>
+                      <Text style={styles.labelText}>{labelPrompt}</Text>
+                      <Text style={styles.charsLeftText}>{labelChars}</Text>
+                    </View>
                     <View style={styles.rowLayout}>
                       <TextInput
                           style={[styles.textInputItem]}
@@ -250,12 +243,13 @@ class TrekLabelForm extends React.Component<{
                           value={this.labelValue}
                           underlineColorAndroid={mediumTextColor}
                           keyboardType="default"
+                          autoFocus={mData.focus === 'Label'}
                       /> 
                     </View>
-                    <View style={styles.charsLeft}>
-                      <Text style={styles.charsLeftText}>{labelChars}</Text>
+                    <View style={[styles.labelAndCharsLeft, {marginTop: bPadding}]}>
+                      <Text style={styles.labelText}>{notePrompt}</Text>
+                      <Text style={styles.charsLeftText}>{noteChars}</Text>
                     </View>
-                    <Text style={styles.labelText}>{notePrompt}</Text>
                     <TextInput
                         style={[styles.textInputItem, {height: 110}]}
                         onChangeText={(text) => this.setNoteValue(text)}
@@ -264,10 +258,8 @@ class TrekLabelForm extends React.Component<{
                         underlineColorAndroid={mediumTextColor}
                         numberOfLines={4}
                         keyboardType="default"
-                    /> 
-                    <View style={styles.charsLeft}>
-                      <Text style={styles.charsLeftText}>{noteChars}</Text>
-                    </View>
+                        autoFocus={mData.focus === 'Note'}
+                        /> 
                   </View>
                 </View>
                 {!this.keyboardOpen && 

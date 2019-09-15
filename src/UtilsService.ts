@@ -1,6 +1,6 @@
 import { LaLo, TrekPoint, TrekType, TrekTimeInterval, MeasurementSystemType, SMALL_DIST_UNITS,
          ElevationData, TREK_TYPE_WALK, TREK_TYPE_RUN, TREK_TYPE_BIKE, TREK_TYPE_HIKE, 
-         NumericRange, SMALL_DIST_CUTOFF, STEPS_APPLY, TREK_TYPE_BOARD, TREK_TYPE_DRIVE } from './TrekInfoModel'
+         NumericRange, SMALL_DIST_CUTOFF, STEPS_APPLY, TREK_TYPE_BOARD, TREK_TYPE_DRIVE, TrekObj } from './TrekInfoModel'
 import { LatLng } from 'react-native-maps';
 import { TREK_LIMIT_TYPE_TIME } from './LoggingService';
 import { ELEVATION_API_URL, GOOGLE_MAPS_API_KEY, MAX_ELEVATION_SAMPLES_PER_REQUEST } from './AppInfo'
@@ -473,7 +473,7 @@ export class UtilsSvc {
     let day   : number;
     let h     : number;   // hour
     let m     : number;   // minute
-    let fd;
+    let fd    : string;
 
     if (d && !/^[01]?\d\/[0123]?\d\/(\d\d|\d\d\d\d)$/.test(d)) { return ''; } // invalid given date format
     if (d) {
@@ -494,6 +494,28 @@ export class UtilsSvc {
   // return only the 8-char date portion of the sortDate (not the time)
   formatShortSortDate = (d ?: any, t ?: string) => {
     return this.formatSortDate(d, t).substr(0,8);
+  }
+    
+  // return a 17-char sortDate as yyyyMMddhhmmsskkk where kkk is number of milliseconds
+  formatLongSortDate = (d ?: any, t ?: string) => {
+    let dt    : Date;
+    let dStr = this.formatSortDate(d, t);
+
+    if (dStr !== ''){
+      if (d) {
+        dt = t ? new Date(d + ' ' + t) : new Date(d);
+      } else {
+        dt = new Date();    // no date, use current time
+      }
+      let s = dt.getSeconds();
+      if(s < 10) { dStr += '0'; } 
+      dStr += s;
+      let ms = dt.getMilliseconds();
+      if(ms < 10) { dStr += '0'; } 
+      if(ms < 100) { dStr += '0'; }
+      dStr += ms;
+    }
+    return dStr;
   }
     
   // return a standard date string dd/mm/yyyy from a sort date
@@ -576,6 +598,11 @@ export class UtilsSvc {
     return fd;
   };
   
+  // return the date and time for the given trek formatted for display
+  formatTrekDateAndTime = (date: string, time: string) => {
+    return (this.formattedLocaleDateAbbrDay(date) + "  " + time)
+  }
+
   // convert the distance given in meters to a value rounded to the selected precision in the given units
   getRoundedDist = (dist: number, units: string, noSmall = false) : number => {
     let precision = 10;
@@ -612,6 +639,7 @@ export class UtilsSvc {
   }
 
   formatDist = (dist: number, units: string, noSmall = false) : string => {
+    if(isNaN(dist)) { dist = 0; }
     if (!noSmall && (dist < SMALL_DIST_CUTOFF) && (units in SMALL_DIST_UNITS)) { 
       units = SMALL_DIST_UNITS[units]; 
     }
@@ -675,6 +703,7 @@ export class UtilsSvc {
   // return a time formatted as 'h:mm:ss' if colons, 'hhmmss' if 6digit or 'NN hr NN min NN sec' if hms
   // from the given time in seconds
   timeFromSeconds = (sec: number, format : "hm" | "hms" | "colons" | "6digit" = 'colons') => {
+    if(isNaN(sec)){ sec = 0; };
     sec = Math.round(sec);
     let s = sec % 60;
     let m = format === 'hm' ? Math.round(sec / 60) % 60 : Math.trunc(sec / 60) % 60;

@@ -26,6 +26,7 @@ class IconButton extends Component<{
   onPressArg ?: any,
   raised ?: boolean,
   horizontal ?: boolean,    // align label to right of icon if true, under icon if false
+  rippleColor ?: number,    // optional color for the ripple effect
   trekInfo ?: TrekInfo,
   uiTheme ?: any,
 }, {} > {
@@ -51,7 +52,8 @@ class IconButton extends Component<{
     const bdrColor = this.props.disabled ? dividerColor : (this.props.borderColor || propStyle.borderColor || disabledTextColor);
     const iStyle = this.props.iconStyle || {};
     const iFill = this.props.disabled ? disabledTextColor : this.props.color;
-    const raise = this.props.raised ? 2 : 0;
+    const raise = this.props.raised ? 2 : undefined;
+    const ripple = this.props.rippleColor !== undefined ? this.props.rippleColor : rippleColor
 
 
     const styles = StyleSheet.create({
@@ -82,12 +84,13 @@ class IconButton extends Component<{
           {this.props.icon &&
             <View style={styles.shadowArea}>
               <BorderlessButton
-                rippleColor={rippleColor}
+                rippleColor={ripple}
                 style={{flex: propStyle.flex, borderColor: bdrColor, backgroundColor: "transparent"}}
                 borderless={true}
                 onPress={(!this.props.disabled && this.props.onPressFn) ? this.doOnPress : undefined}
               >
-                <View style={{...styles.button, ...propStyle, ...{borderColor: bdrColor, backgroundColor: bgColor}}}>
+                <View style={{...styles.button, ...propStyle, 
+                              ...{borderColor: bdrColor, backgroundColor: bgColor}}}>
                   <SvgIcon 
                     size={iconSize}
                     style={[styles.icon, iStyle]}
@@ -107,7 +110,7 @@ class IconButton extends Component<{
     } else {
       return ( 
         <TouchableNativeFeedback
-          background={TouchableNativeFeedback.Ripple(rippleColor, false)}
+          background={TouchableNativeFeedback.Ripple(ripple, false)}
           onPress={(!this.props.disabled && this.props.onPressFn) ? this.doOnPress : undefined}
           >
           <View style={{...styles.button, ...propStyle, 

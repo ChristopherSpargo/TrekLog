@@ -2,14 +2,15 @@ import React from "react";
 import { Component } from "react";
 import { View, StyleSheet, Text } from "react-native";
 import { observer, inject } from "mobx-react";
+import { RectButton } from "react-native-gesture-handler";
 
 import { TrekInfo } from "./TrekInfoModel";
-import { HEADER_HEIGHT, HEADER_ICON_SIZE, BACK_BUTTON_SIZE, HEADER_Z_INDEX } from "./App";
+import { HEADER_HEIGHT, HEADER_ICON_SIZE, BACK_BUTTON_SIZE, HEADER_Z_INDEX,
+         MENUTRIGGER_AREA, MENUTRIGGER_SIZE } from "./App";
 import SvgIcon from "./SvgIconComponent";
 import { APP_ICONS } from "./SvgImages";
 import IconButton from "./IconButtonComponent";
 import SvgButton from "./SvgButtonComponent";
-import { RectButton } from "react-native-gesture-handler";
 
 @inject("trekInfo", "uiTheme")
 @observer
@@ -28,18 +29,28 @@ class TrekLogHeader extends Component<
     textColor?: string;       // color to use for header text
     borderBottomColor?: string; // set for bottom Border
     position?: string;        // set to absolute or not (relative)
+    openMenuFn?: Function;    // show menu icon at right end of header if present
+    disableMenu?: boolean;    // show menu icon as disabled and don't call openMenuFn if pressed
     uiTheme?: any;
     trekInfo?: TrekInfo;
     navigation?: any;
   },
   {}
 > {
+
+  callOpenMenuFn = () => {
+    if(!this.props.disableMenu){
+      this.props.openMenuFn();
+    }
+  }
+
   render() {
     const {
       headerBackgroundColor,
       headerBorderColor,
       headerTextColor,
-      rippleColor
+      disabledHeaderTextColor,
+      headerRippleColor
     } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
     const { navIcon, fontRegular } = this.props.uiTheme;
     const iconName = this.props.icon || this.props.trekInfo.type;
@@ -54,8 +65,7 @@ class TrekLogHeader extends Component<
     const groupTextColor = this.props.groupTextColor || htColor;
     const bgColor = this.props.backgroundColor || headerBackgroundColor;
     const bdrColor = this.props.borderBottomColor || headerBorderColor;
-    const useIconSize = 18;
-    const haveGroupFn = this.props.setGroupFn;
+    const groupIconSize = 18;
 
     const styles = StyleSheet.create({
       header: {
@@ -135,16 +145,16 @@ class TrekLogHeader extends Component<
         alignItems: "center",
         justifyContent: "center",
       },
-      useArea: {
+      groupArea: {
         flexDirection: "row",
         alignItems: "flex-end",
         marginRight: 8,
         padding: 8,
         height: HEADER_HEIGHT
       },
-      useIcon: {
-        width: useIconSize,
-        height: useIconSize,
+      groupIcon: {
+        width: groupIconSize,
+        height: groupIconSize,
         marginRight: 4,
         marginBottom: 3,
         backgroundColor: "transparent"
@@ -153,10 +163,17 @@ class TrekLogHeader extends Component<
         flexWrap: "wrap",
         // marginRight: 8,
       },
-      useText: {
+      groupText: {
         fontSize: 18,
         fontFamily: fontRegular,
         color: groupTextColor
+      },
+      menuArea: {
+        justifyContent: "center",
+        alignItems: "center",
+        width: MENUTRIGGER_AREA,
+        height: MENUTRIGGER_AREA,
+        marginRight: 10,
       }
     });
 
@@ -200,6 +217,7 @@ class TrekLogHeader extends Component<
             this.props.actionButtons.map((item, index) => (           
                 <View style={item.style} key={index}>
                   <IconButton
+                    rippleColor={headerRippleColor}
                     iconSize={HEADER_ICON_SIZE}
                     icon={item.icon}
                     style={styles.headerRightButton}
@@ -211,23 +229,19 @@ class TrekLogHeader extends Component<
                 </View>
               )
           )}
-          {this.props.group && (
-            <RectButton
-              rippleColor={rippleColor}
-              //if setGroupFn is undefined, disable this button
-              onPress={haveGroupFn ? () => this.props.setGroupFn() : undefined}
-            >
-              <View style={styles.useArea}>
-                <SvgIcon
-                  style={styles.useIcon}
-                  size={useIconSize}
-                  paths={APP_ICONS.FolderOpenOutline}
-                  fill={styles.useText.color}
-                />
-                <Text style={[styles.useText, styles.flexWrap]}>{this.props.group}</Text>
-              </View>
-            </RectButton>
-          )}
+          {this.props.openMenuFn &&
+            <View style={styles.menuArea}>
+              <SvgButton
+                rippleColor={headerRippleColor}
+                onPressFn={this.callOpenMenuFn}
+                borderWidth={0}
+                areaOffset={0}
+                size={MENUTRIGGER_SIZE}
+                fill={this.props.disableMenu ? disabledHeaderTextColor : htColor}
+                path={ APP_ICONS.Menu }
+              />
+            </View>
+          }
         </View>
       </View>
     );

@@ -161,7 +161,7 @@ function Conditions() {
     disabledTextColor,
     trekLogBlue
   } = uiTheme.palette[trekInfo.colorTheme];
-  const { cardLayout, pageTitle } = uiTheme;
+  const { cardLayout } = uiTheme;
   const sortIconSize = 24;
   const sortButtonHeight = 53;
 
@@ -278,7 +278,9 @@ function Conditions() {
   return useObserver(() => (
     <View>
       {!weatherReady && 
-        <Waiting msg={'Obtaining weather conditions...'}/>
+        <View style={{height: 400}}>
+          <Waiting msg={'Obtaining weather conditions...'}/>
+        </View>
       }
       <ScrollView>
         {weatherReady &&

@@ -22,7 +22,7 @@ import TrekLogHeader from "./TreklogHeaderComponent";
 import CheckboxPicker from "./CheckboxPickerComponent";
 import RadioPicker from "./RadioPickerComponent";
 import { StorageSvc } from "./StorageService";
-import { CourseSvc, Course, CourseDetailObject } from "./CourseService";
+import { CourseSvc, Course, CourseDetailObject, CourseEffort } from "./CourseService";
 import TrackingMethodForm from './TrackingMethodComponent';
 import { FilterSvc, SortDirection, SORT_DIRECTIONS, 
          SORT_DIRECTION_OTHER } from './FilterService';
@@ -30,7 +30,7 @@ import SvgYAxis, { YAXIS_TYPE_MAP } from './SvgYAxisComponent';
 import SvgGrid from './SvgGridComponent';
 import SpeedDial from './SpeedDialComponent';
 import NavMenu from './NavMenuComponent';
-import NavMenuTrigger from './NavMenuTriggerComponent'
+import PageTitle from './PageTitleComponent';
          
 export type SortByTypes = "Dist" | "Time" | "Date" | "Speed" | "Steps" | "Cals";
 export type ShowTypes = "Dist" | "Time" | "Steps" | "Speed" | "Cals" | "Date";
@@ -301,14 +301,13 @@ class CourseDetails extends Component<
   };
 
   // Display the map for the effort at the given index in trekList
-  showTrekMap = (subjectEffort: number, targetEffort?: number) => {
+  showTrekMap = (subjectEffort: number, useEffortTarget: boolean, targetTrek?: TrekObj) => {
     if (this.trekList.length) {
       let trek = this.trekList[subjectEffort].trek;
-      let effort = this.trekList[subjectEffort].effort;
+      let effort = useEffortTarget ? this.trekList[subjectEffort].effort : undefined;
       this.tInfo.setTrekProperties(trek);
       this.tInfo.setShowMapControls(true)
-      this.props.courseSvc.initCourseTrackingSnapshot(this.focusCourse, trek, effort,
-                          targetEffort !== undefined ? this.trekList[targetEffort].trek : undefined)
+      this.props.courseSvc.initCourseTrackingSnapshot(this.focusCourse, trek, effort, targetTrek)
       .then(() => {        
         // alert(JSON.stringify({...this.cS.trackingSnapshot, ...{coursePath: undefined, trekPath: undefined}},null,2))
         this.props.navigation.navigate("SelectedTrek", {
@@ -379,7 +378,9 @@ class CourseDetails extends Component<
   // respond to graph bar being pressed
   callTrekSelected = (indx: number) => {
     if (indx === this.selectedTrekIndex) {
-      this.showTrekMap(indx);
+      this.tInfo.setTrackingMethod(this.trekList[indx].effort.subject.method);
+      this.tInfo.setTrackingValue(this.trekList[indx].effort.subject.goalValue);      
+      this.showTrekMap(indx, true);
     } else {
       this.trekSelected(indx)
     }
@@ -499,11 +500,12 @@ class CourseDetails extends Component<
   // call showTrekMap with the two choices
   otherEffortSelected = () => {
     this.targetEffort = this.selectedTrekIndex;
-    this.setSelectedTrekIndex(this.subjectEffort);
+    let trek = this.trekList[this.targetEffort].trek; // get the trek selected as target
+    this.setSelectedTrekIndex(this.subjectEffort);    // restore selectedTrekIndex to that of subject
     this.setOtherEffortSelect(false);
-    this.tInfo.setTrackingValue(this.trekList[this.targetEffort].trek.duration);
+    this.tInfo.setTrackingValue(trek.duration);
     this.tInfo.setTrackingMethod('otherEffort');
-    this.showTrekMap(this.subjectEffort, this.targetEffort);
+    this.showTrekMap(this.subjectEffort, false, trek);
   }
 
   // user has selected to configure the replay of the selected trek on this course
@@ -515,7 +517,7 @@ class CourseDetails extends Component<
         this.subjectEffort = this.selectedTrekIndex;
         this.setOtherEffortSelect(true);    // allow user to select target effort
       } else {
-        this.showTrekMap(this.selectedTrekIndex);
+        this.showTrekMap(this.selectedTrekIndex, false);
       }
     } else {
       this.setTrackingMethodFormOpen(false);
@@ -705,7 +707,7 @@ class CourseDetails extends Component<
           this.setDefiningEffort(this.selectedTrekIndex);
           break;
         case "Map":
-          this.showTrekMap(this.selectedTrekIndex);
+          this.showTrekMap(this.selectedTrekIndex, true);
           break;
         case "Replay":
           this.openTrackingMethodForm();
@@ -749,13 +751,12 @@ class CourseDetails extends Component<
     const statusBarHt = 0;
     const sortControlsHt = 30;
     const areaHt = height - (statusBarHt + pageTitleSpacing + HEADER_HEIGHT + PAGE_TITLE_HEIGHT);
-    const { cardLayout, pageTitle } = this.props.uiTheme;
+    const { cardLayout } = this.props.uiTheme;
     const {
       disabledTextColor,
       pageBackground,
       trekLogBlue,
       mediumTextColor,
-      highTextColor,
       dividerColor,
       secondaryColor
     } = this.props.uiTheme.palette[this.tInfo.colorTheme];
@@ -860,12 +861,6 @@ class CourseDetails extends Component<
         paddingRight: 0,
         backgroundColor: pageBackground,
       },
-      pageTitleAdj: {
-        color: highTextColor,
-        paddingLeft: 10,
-        paddingRight: 10,
-        marginBottom: 10,
-      },
       saveFab: {
         backgroundColor: secondaryColor,
       },
@@ -885,12 +880,12 @@ class CourseDetails extends Component<
                 titleText={this.headerTitle}
                 icon="*"
                 backButtonFn={() => this.props.navigation.dispatch(goBack)}
+                openMenuFn={this.openMenu}
               />
               <CheckboxPicker pickerOpen={this.checkboxPickerOpen} />
               <RadioPicker pickerOpen={this.coursePickerOpen} />
               <View style={styles.listArea}>
-                <NavMenuTrigger openMenuFn={this.openMenu}/>
-                <Text style={[pageTitle, styles.pageTitleAdj]}>Course Detail</Text>
+                <PageTitle titleText="Course Detail"/>
                 {gotTreks && 
                   <View style={styles.scrollArea}>
                     <ScrollView>
@@ -970,6 +965,7 @@ class CourseDetails extends Component<
                           selectFn={this.setSortBy}
                           switchSysFn={this.switchMeasurementSystem}
                           showImagesFn={this.showTrekImage}
+                          showGroup={true}
                         />
                       </View>
                     </ScrollView>

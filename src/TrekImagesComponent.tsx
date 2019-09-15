@@ -147,6 +147,7 @@ class TrekImages extends Component<{
   }
 
   componentWillUnmount() {
+    window.clearTimeout(this.backgroundTimeoutID);
     this.setCameraIsOpen(false);
     this.setVideoRecording(false);
     this.setPicturePaused(false);
@@ -315,6 +316,12 @@ class TrekImages extends Component<{
     }, 3000);
   }
 
+  // image loaded successfully, clear timeoud and loading message
+  clearImageBackgroundTextTimeout = () => {
+    window.clearTimeout(this.backgroundTimeoutID);
+    this.setImageBackgroundText("");
+  }
+
   // reset the zoom factor for the picture image
   resetImageZoom = () => {
     if(this.imageZoomRef){
@@ -385,6 +392,7 @@ class TrekImages extends Component<{
   // respond to onLoad video event
   videoLoaded = (data) => {
     if (this.videoPlayerRef) { this.videoPlayerRef.seek(0); }
+    this.clearImageBackgroundTextTimeout();
     this.setVideoDuration(data.duration);
     this.videoDurationStr = this.props.utilsSvc.timeFromSeconds(data.duration);
     this.setVideoPaused(true);
@@ -530,7 +538,9 @@ class TrekImages extends Component<{
 
   handlePicture = (data: any, type: TrekImageType, loc: TrekPoint) => {
     this.setWaitingForSave(true);
-    this.props.storageSvc.saveTrekLogPicture(data.uri)
+    let imageName = this.props.utilsSvc.formatLongSortDate();
+    // store image as longSortDate.extension (jpg, mp4, etc.)
+    this.props.storageSvc.saveTrekLogPicture(data.uri, imageName)
     .then((uri) => {
       this.tInfo.addTrekImage(uri, data.deviceOrientation, type, loc.l, this.imageTime);
       this.setWaitingForSave(false);
@@ -757,7 +767,7 @@ class TrekImages extends Component<{
               zoom={this.cameraZoom}
               flashMode={RNCamera.Constants.FlashMode.off}
               permissionDialogTitle={'Permission to use camera'}
-              permissionDialogMessage={'We need your permission to use your phone\'s camera'}
+              permissionDialogMessage={'TrekLog needs your permission to use the camera'}
               playSoundOnCapture={true}
             />
             {(!this.videoRecording && !this.picturePaused) &&
@@ -823,6 +833,7 @@ class TrekImages extends Component<{
                     >
                       <Image source={{uri: this.currentImage.uri}} 
                         style={{flex:1}}
+                        onLoad={this.clearImageBackgroundTextTimeout}
                       />
                     </ImageZoom>
                   }

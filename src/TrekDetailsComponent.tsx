@@ -1,4 +1,4 @@
-import React, { Component, MutableRefObject } from 'react';
+import React, { Component } from 'react';
 import { View, Text, StyleSheet, Image, Dimensions, FlatList } from 'react-native';
 import { RectButton } from 'react-native-gesture-handler'
 import { observer, inject } from 'mobx-react';
@@ -26,6 +26,8 @@ export class TrekDetails extends Component<{
   selectFn ?: Function,         // function to call when switch 'show' selections are allowed
   switchSysFn ?: Function,      // call if want to switch measurement systems
   showImagesFn ?: Function,     // function to call if user taps an image
+  showGroup ?: boolean,         // show group property if true
+  showCourseEffortFn ?: Function, // function to call if user taps on course item
   uiTheme ?: any,
   filterSvc ?: FilterSvc,
   utilsSvc ?: UtilsSvc,
@@ -151,8 +153,8 @@ export class TrekDetails extends Component<{
     this.showTotalCalories = !this.showTotalCalories;
   }
 
-  callEditTrekLabel = () => {
-    this.props.loggingSvc.editTrekLabel()
+  callEditTrekLabel = (field: string) => {
+    this.props.loggingSvc.editTrekLabel(false, field)
     .then(() => {})
     .catch(() => {})
   }
@@ -176,6 +178,9 @@ export class TrekDetails extends Component<{
         break;
       case 'Cals':
         this.toggleShowTotalCalories();
+        break;
+      case 'Course':
+        this.props.showCourseEffortFn();
         break;
       default:
     }
@@ -480,7 +485,6 @@ export class TrekDetails extends Component<{
     return (
       <View>
         <View style={styles.sortControls}>
-          {/* <ScrollView ref={e => this.scrollViewRef = e}> */}
             <View style={styles.sortButton}>
                 <View style={styles.sortButtonTrigger}>
                   <SvgIcon
@@ -492,6 +496,14 @@ export class TrekDetails extends Component<{
                   <Text style={[styles.sortButtonText, 
                                 !hasLabel ? styles.lightItalic : {}]}>{labelText}</Text>
                 </View>
+                <SvgButton 
+                  style={{alignItems: "center", justifyContent: "center"}}
+                  onPressFn={() => this.callEditTrekLabel('Label')}
+                  borderWidth={0}
+                  size={34}
+                  fill={trekLogBlue}
+                  path={APP_ICONS["Edit"]}
+                />
             </View>
             {hasImages &&
               <View style={styles.imageRow}>
@@ -518,6 +530,17 @@ export class TrekDetails extends Component<{
               selIconType='Date'
               noHighlight={true}
             />
+            {this.props.showGroup &&
+              <SortItem
+                canSelect={false}
+                dividerCheck={['Date', 'Group']}
+                sortType='None'
+                icon="FolderOpenOutline"
+                label="Group"
+                valueFn={() => tInfo.group}
+                selValue={false}
+              />
+            }
             <SortItem
               canSelect={selectable}
               dividerCheck={['Dist']}
@@ -610,7 +633,7 @@ export class TrekDetails extends Component<{
                 sortType='None'
                 icon="SlopeUphill"
                 label="Grade"
-                valueFn={() => this.tInfo.formattedElevationGainPct() + ' - ' + TERRAIN_DESCRIPTIONS[this.tInfo.hills]}
+                valueFn={() => tInfo.formattedElevationGainPct() + ' - ' + TERRAIN_DESCRIPTIONS[tInfo.hills]}
                 selValue={false}
               />
             }
@@ -618,11 +641,11 @@ export class TrekDetails extends Component<{
               <SortItem
                 canSelect={false}
                 dividerCheck={[]}
-                sortType='None'
+                sortType='Course'
                 icon="Course"
                 label="Course"
-                valueFn={() => this.tInfo.course}
-                selValue={false}
+                valueFn={() => tInfo.course}
+                selValue={(this.props.showCourseEffortFn !== undefined) ? true : false}
               />
             }
             {tInfo.hasWeather() &&
@@ -691,7 +714,7 @@ export class TrekDetails extends Component<{
               </View>
               <SvgButton 
                 style={{alignItems: "center", justifyContent: "center"}}
-                onPressFn={this.callEditTrekLabel}
+                onPressFn={() => this.callEditTrekLabel('Note')}
                 borderWidth={0}
                 size={34}
                 fill={trekLogBlue}
@@ -701,7 +724,6 @@ export class TrekDetails extends Component<{
             <View style={[styles.sortButton, styles.trekNote]}>
               <Text style={[styles.sortButtonValue, hasNotes ? styles.noteText : styles.noteNoText]}>{noteText}</Text>
             </View>
-          {/* </ScrollView> */}
         </View>
       </View>
     );

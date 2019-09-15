@@ -1,5 +1,5 @@
 import { Alert } from 'react-native';
-import BackgroundGeolocation, { ConfigureOptions, Location } from '@mauron85/react-native-background-geolocation';
+import BackgroundGeolocation, { ConfigureOptions } from '@mauron85/react-native-background-geolocation';
 
 import { TrekInfo } from './TrekInfoModel'
 import { StorageSvc } from './StorageService';

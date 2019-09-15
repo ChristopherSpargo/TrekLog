@@ -15,6 +15,7 @@ import {
 } from "./App";
 import TrekStats from "./TrekStatsComponent";
 import SvgButton from './SvgButtonComponent';
+import SvgIcon from "./SvgIconComponent";
 import { APP_ICONS } from './SvgImages';
 
 @inject("trekInfo", "utilsSvc", "uiTheme")
@@ -69,15 +70,16 @@ class NumbersBar extends Component<
   };
 
   render() {
-    const { height } = Dimensions.get("window");
+    const { height } = Dimensions.get('window');
+    const tInfo = this.props.trekInfo;
     const {
       highTextColor,
+      mediumTextColor,
       disabledTextColor,
       secondaryColor,
       statsBackgroundColor,
-    } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
+    } = this.props.uiTheme.palette[tInfo.colorTheme];
     const { cardLayout, roundedTop, fontRegular, fontItalic, fontLight } = this.props.uiTheme;
-    const tInfo = this.props.trekInfo;
     const small = this.props.format === 'small';
     const labelText = tInfo.trekLabel
       ? tInfo.trekLabel
@@ -85,9 +87,10 @@ class NumbersBar extends Component<
       ? tInfo.type + " in progress"
       : "No Label";
     const noLabel = labelText === "No Label";
-    const nHt = small ? 270 : (height - CONTROLS_HEIGHT - HEADER_HEIGHT);
+    const nHt = small ? 280 : (height - CONTROLS_HEIGHT - HEADER_HEIGHT);
     const statsAreaHt = nHt;
     const areaHeight = statsAreaHt;
+    const typeIconSize = 20;
 
     const styles = StyleSheet.create({
       container: {
@@ -131,10 +134,11 @@ class NumbersBar extends Component<
         justifyContent: "space-between",
         alignItems: "center",
         paddingRight: 5,
+        paddingLeft: 5,
       },
       labelText: {
         flex: 1,
-        textAlign: "center",
+        // textAlign: "center",
         fontSize: small ? 22 : 24,
         fontFamily: noLabel ? fontItalic : fontLight,
         color: noLabel ? disabledTextColor : highTextColor
@@ -143,6 +147,24 @@ class NumbersBar extends Component<
         fontSize: small ? 14 : 16,
         fontFamily: fontRegular,
         color: secondaryColor,
+      },
+      typeAndDate: {
+        flexDirection: "row",
+        justifyContent: "center",
+        alignItems: "center",
+        paddingRight: 5,
+        paddingLeft: 5,
+      },
+      typeIcon: {
+        width: typeIconSize,
+        height: typeIconSize,
+        marginRight: 10,
+        backgroundColor: "transparent",
+      },
+      trekDate: {
+        fontSize: small ? 18 : 20,
+        fontFamily: fontRegular,
+        color: mediumTextColor,
       }
     });
 
@@ -170,16 +192,22 @@ class NumbersBar extends Component<
                     path={ APP_ICONS.Close }
                   />
                 </View>
+                <View style={styles.typeAndDate}>
+                  <SvgIcon
+                    style={styles.typeIcon}
+                    size={typeIconSize}
+                    paths={APP_ICONS[tInfo.type]}
+                    fill={mediumTextColor}
+                  />
+                  <Text style={styles.trekDate}>
+                    {this.uSvc.formatTrekDateAndTime(tInfo.date, tInfo.startTime)}
+                  </Text>
+                </View>
                 {(this.props.interval !== undefined && this.props.interval >= 0) &&
                   <Text style={styles.intervalText}>{'Interval ' + (this.props.interval + 1)}</Text>
                 }
               </View>
-              <View
-                style={{
-                  flex: 1,
-                  alignItems: "center"
-                }}
-              >
+              <View style={{flex: 1, alignItems: "center"}}>
                 <TrekStats
                   logging={tInfo.timerOn}
                   trekType={tInfo.type}

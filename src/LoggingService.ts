@@ -581,7 +581,7 @@ export class LoggingSvc {
   };
 
   // Let the user edit the trek label and notes
-  editTrekLabel = (newTrek = false) => {
+  editTrekLabel = (newTrek = false, focusField?: string) => {
     return new Promise((resolve, reject) => {
       this.trekInfo.setTrekLabelFormOpen(true);
       this.modalSvc
@@ -591,7 +591,8 @@ export class LoggingSvc {
           notes: this.trekInfo.trekNotes,
           headingIcon: "NoteText",
           okText: "SAVE",
-          cancelText: newTrek ? "SKIP" : "CANCEL"
+          cancelText: newTrek ? "SKIP" : "CANCEL",
+          focus: focusField
         })
         .then((resp: any) => {
           this.trekInfo.setTrekLabelFormOpen(false);
@@ -651,6 +652,7 @@ export class LoggingSvc {
           newP = this.utilsSvc.pointWithinSegment(points[i-1].l, points[i].l, part);
           if(!isFinite(newP.a) || val < 0){ 
             // bit of bad data (0 dist segment or 0 time segment?)
+            alert('bad data ' + val + ' | ' + newP.a )
             return undefined;
           }
           let lastPt = {l: newP, t: newPTime, s: points[i-1].s};
@@ -668,6 +670,7 @@ export class LoggingSvc {
       }
       return { pt: points[nPts-1], dist: dAccum, time: tAccum, path: getPath ? path : undefined};
     }
+    alert('no points' )
     return undefined;
   }
 
@@ -685,9 +688,9 @@ export class LoggingSvc {
 
       let pList : TrekPoint[];
       this.courseSvc.getTrackingPath(course, trackingMethod)
-      .then((list) => {
-        pList = list;
-        let params = this.courseSvc.getTrackingParams(course, trackingMethod, trackingValue);
+      .then((result) => {
+        pList = result.list;
+        let params = this.courseSvc.getTrackingParams(course, trackingMethod, trackingValue, result.trek);
 
         this.trekInfo.trackingObj = {
           courseName: course.name,
@@ -718,19 +721,21 @@ export class LoggingSvc {
 
   // reset the tracking marker timer (recovering from a reset)
   restartTrackingMarker = (tObj: TrackingObject) => {
-    if(tObj.markerValue < tObj.maxValue){
+    setTimeout(() => {
+      if(tObj.markerValue < tObj.maxValue){
 
-        // adjust the marker value to account for the elapsed time since lastUpdate
-      let elapsedTics = (new Date().getTime() - tObj.startTime) / tObj.timerInterval;
-      let startValue  = tObj.initialValue + (elapsedTics * tObj.incrementValue);
-      this.startTrackingMarker(tObj, tObj.startTime, startValue);
-    } else {
+          // adjust the marker value to account for the elapsed time since lastUpdate
+        let elapsedTics = (new Date().getTime() - tObj.startTime) / tObj.timerInterval;
+        let startValue  = tObj.initialValue + (elapsedTics * tObj.incrementValue);
+        this.startTrackingMarker(tObj, tObj.startTime, startValue);
+      } else {
 
-      // don't restart timer, just display the differentials
-      this.trekInfo.setTrackingDiffDist(tObj.distDiff);
-      this.trekInfo.setTrackingDiffTime(tObj.timeDiff);
-      this.trekInfo.setTrackingMarkerLocation(tObj.markerLocation);
-    }
+        // don't restart timer, just display the differentials
+        this.trekInfo.setTrackingDiffDist(tObj.distDiff);
+        this.trekInfo.setTrackingDiffTime(tObj.timeDiff);
+        this.trekInfo.setTrackingMarkerLocation(tObj.markerLocation);
+      }      
+    }, 2000);
   }
 
   // start a timer and update a trackingMarker position from a list of points (path)
@@ -767,7 +772,8 @@ export class LoggingSvc {
   // compute the time and distance differential for the current Course Challenge
   // given are a trackingObject and a PointAtLimitInfo object for the current tracking marker location
   // Distance differential is distForTrek - distAtTrackingMarker
-  // Time differential is the time the tracking marker was/will be at the currentTrekDistance - currentTrekDuration
+  // Time differential is the time the tracking marker was/will be at 
+  // the currentTrekDistance - currentTrekDuration
   // Keep a copy of these values in the trackingObj to use in recovery scenario
   computeCourseTrackingInfo = (tObj: TrackingObject, ptInfo: PointAtLimitInfo ) => {
     let timeAtTrekDist : number;
@@ -779,7 +785,7 @@ export class LoggingSvc {
     tObj.distDiff = trekDistAtTime - ptInfo.dist;             // negative if trek is behind, positive if ahead
     this.trekInfo.setTrackingDiffDist(tObj.distDiff);
 
-    if (tObj.method === 'courseTime') {
+    if (tObj.method === 'courseTime' || tObj.method === 'bestTime' || tObj.method === 'lastTime') {
       // locate when the course was/will be at a distance equal to that of the trek
       timeAtTrekDist = this.getPointAtLimit(tObj.pointList, this.trekInfo.trekDist, 
                                                 tObj.distance, TREK_LIMIT_TYPE_DIST).time;

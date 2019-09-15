@@ -20,6 +20,7 @@ import RadioPicker from './RadioPickerComponent';
 import FadeInView from './FadeInComponent';
 import SlideDownView from './SlideDownComponent';
 import { SCROLL_DOWN_DURATION, FADE_IN_DURATION } from './App';
+import PageTitle from './PageTitleComponent';
 
 const goBack = NavigationActions.back() ;
 
@@ -291,7 +292,7 @@ class ExtraFilters extends Component<{
           />
           <RadioPicker pickerOpen={this.radioPickerOpen}/>
           <View style={[cardLayout, {paddingBottom: 0}]}>
-            <Text style={[pageTitle, {color: highTextColor}]}>Filter Settings</Text>
+            <PageTitle titleText="Filter Settings" style={{paddingLeft: 0}}/>
           </View>
           <ScrollView>
             {this.fS.filterMode !== FILTERMODE_DASHBOARD &&

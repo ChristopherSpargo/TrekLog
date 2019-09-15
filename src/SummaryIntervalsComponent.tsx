@@ -13,9 +13,8 @@ import HorizontalSlideView from './HorizontalSlideComponent';
 import SvgYAxis, { YAXIS_TYPE_MAP } from './SvgYAxisComponent';
 import SvgGrid from './SvgGridComponent';
 import SlideUpView from './SlideUpComponent';
-import { SummaryModel, ActivityStatType, STAT_CATS, ActivityStatsInterval } from './SummaryModel';
+import { SummaryModel, ActivityStatType, ActivityStatsInterval } from './SummaryModel';
 
-export const INTERVAL_CATS : DateInterval[] = ['daily', 'weekly', 'monthly']; 
 export const INTERVAL_LABELS = {
   daily: 'Day',
   weekly: 'Week',
@@ -34,8 +33,6 @@ function SummaryIntervals({
   const sumSvc: SummaryModel = useContext(SummarySvcContext);
 
   const [scrollToBar, setScrollToBar] = useState();
-  const [intervalIndex, setIntervalIndex] = useState(INTERVAL_CATS.indexOf(sumSvc.showIntervalType));
-  const [statIndex, setStatIndex] = useState(STAT_CATS.indexOf(sumSvc.showStatType));
 
   function setVisible() {
     sumSvc.setSummaryZValue(NUMBERS_BAR_Z_INDEX);
@@ -59,17 +56,11 @@ function SummaryIntervals({
     sumSvc.buildGraphData();
   }
 
-  // set the value of the statIndex property
-  function updateStatIndex(sType: ActivityStatType) {
-    setStatIndex(STAT_CATS.indexOf(sType));
-  }
-
   function updateShowStatType(sType: ActivityStatType) {
     sumSvc.setOpenItems(false);
     requestAnimationFrame(() => {
       if (sumSvc.showStatType !== sType) {
         sumSvc.setShowStatType(sType);
-        updateStatIndex(sType);
       } else {
         switch(sType){
           case 'dist':
@@ -88,20 +79,14 @@ function SummaryIntervals({
     })
   }
 
-  // set the value of the intervalIndex property
-  function updateIntervalIndex(iType: DateInterval) {
-    setIntervalIndex(INTERVAL_CATS.indexOf(iType));
-  }
-
   // set the showIntervalType property
   function updateShowIntervalType(iType: DateInterval) {
     sumSvc.setOpenItems(false);
     scrollBarGraph(0);
     requestAnimationFrame(() => {
       sumSvc.setShowIntervalType(iType);
-      updateIntervalIndex(iType);
-      sumSvc.setSelectedInterval(0);
       sumSvc.scanTreks();
+      sumSvc.findStartingInterval();
     })
   }
 
@@ -109,7 +94,6 @@ function SummaryIntervals({
   function getIntervalDisplayTotalTitle() {
     if ((tInfo.typeSelections & sumSvc.activeTypes) === 0) { return 'No Type Selected'; }
     if (sumSvc.totalCounts(tInfo.typeSelections)){
-      
       return INTERVAL_LABELS[sumSvc.showIntervalType] + ':';
     } else {
       return 'No Data for Selected Types';
@@ -231,7 +215,9 @@ function SummaryIntervals({
   const yAxisWidth = 60;
   const graphWidth = statAreaWidth - yAxisWidth - 10;
   const gBarWidth = 25; 
-  const statLabelWidth = (statAreaWidth - 20) / 4;
+  const showSteps = sumSvc.haveStepData();
+  const numStats = showSteps ? 4 : 3;
+  const statLabelWidth = (statAreaWidth - 20) / numStats;
   const intervalLabelWidth = (statAreaWidth - 20) / 3;
 
   const { rippleColor, trekLogBlue, highTextColor, secondaryColor, dividerColor, altCardBackground,
@@ -357,7 +343,7 @@ return useObserver(() => (
       </BorderlessButton>
     </View>
     <HorizontalSlideView 
-      endValue={(intervalIndex * (intervalLabelWidth+1)) + 14}
+      endValue={(sumSvc.intervalIndex * (intervalLabelWidth+1)) + 14}
       duration={500}>
       <View style={styles.intervalTypeUnderline}/>
     </HorizontalSlideView>                  
@@ -389,18 +375,20 @@ return useObserver(() => (
           <Text style={styles.statLineTitleText}>Calories</Text>
         </View>
       </BorderlessButton>
-      <BorderlessButton
-        style={{flex: 1}}
-        rippleColor={rippleColor}
-        onPress={() => updateShowStatType('steps')}
-      >
-        <View style={styles.statTitleItem}>
-          <Text style={styles.statLineTitleText}>Steps</Text>
-        </View>
-      </BorderlessButton>
+      {showSteps &&
+        <BorderlessButton
+          style={{flex: 1}}
+          rippleColor={rippleColor}
+          onPress={() => updateShowStatType('steps')}
+        >
+          <View style={styles.statTitleItem}>
+            <Text style={styles.statLineTitleText}>Steps</Text>
+          </View>
+        </BorderlessButton>
+      }
     </View>
     <HorizontalSlideView 
-      endValue={(statIndex * (statLabelWidth+1)) + 14}
+      endValue={(sumSvc.statIndex * (statLabelWidth + 1)) + 14}
       duration={500}>
       <View style={styles.statTypeUnderline}/>
     </HorizontalSlideView>                  
@@ -441,6 +429,7 @@ return useObserver(() => (
             labelAngle={287}
             scrollToBar={scrollToBar}
             gradientEnd={altCardBackground}
+            allowEmptyBars={sumSvc.allowEmptyIntervals}
           />
         </View>
       </View>

@@ -25,7 +25,8 @@ export interface GroupsObj {
   groups:     string[],
   lastGroup:  string,
   measurementSystem: MeasurementSystemType,
-  theme:      ThemeType
+  theme:      ThemeType,
+  imageStorageMode: string
 }
 
 export const NEW_GROUP = '#new#';
@@ -109,9 +110,19 @@ export class GroupSvc {
     this.groups.measurementSystem = system;
   }
 
-  // get the theme property of the GroupsObj
+  // get the measurementSystem property of the GroupsObj
   getMeasurementSystem = () => {
     return this.groups.measurementSystem;
+  }
+
+  // set the imageStorageMode property of the GroupsObj
+  setImageStorageMode = (mode: string) => {
+    this.groups.imageStorageMode = mode;
+  }
+
+  // get the imageStorageMode property of the GroupsObj
+  getImageStorageMode = () => {
+    return this.groups.imageStorageMode;
   }
 
   // read the settings file for the given group
@@ -155,6 +166,8 @@ export class GroupSvc {
     return this.groups ? this.groups.lastGroup : '';
   }
 
+  // open a RadioPicker with selections for each group.
+  // resolve with the name of the new group or reject if user cancels.
   getGroupSelection = (pickerOpenFn : Function, currGroup: string, heading: string, 
                        allowNew = false, nameTest: RegExp) => {
     let names = [];
@@ -180,6 +193,8 @@ export class GroupSvc {
     })
   }
 
+  // open a CheckboxPicker with selections for each group.
+  // resolve with an array of group names or reject if user cancels.
   getGroupSelections = (pickerOpenFn : Function, currGroups: string[], heading: string) => {
     let selNames = [...this.groups.groups];
     let selections = [];

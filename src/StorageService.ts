@@ -6,7 +6,7 @@ import { TREKLOG_SETTINGS_FILENAME, TREKLOG_FILE_FORMAT, TREKLOG_GOALS_FILENAME,
           TREKLOG_COURSES_FILENAME } from './App'
 import { GoalObj } from './GoalsService';
 import { SettingsObj, GroupsObj } from './GroupService';
-import { TrekObj, RestoreObject, CURR_DATA_VERSION, TrekImageSet } from './TrekInfoModel';
+import { TrekObj, RestoreObject, CURR_DATA_VERSION, TrekImageSet, IMAGE_STORE_FULL } from './TrekInfoModel';
 import { UtilsSvc } from './UtilsService';
 import { CourseList, Course } from './CourseService';
 interface TrekData {
@@ -85,13 +85,14 @@ export class StorageSvc {
 
   // write the given picture to the TrekLog Pictures directory
   // return the new uri
-  saveTrekLogPicture = (tempUri : string) : Promise<string> => {
+  saveTrekLogPicture = (tempUri : string, imageName: string) : Promise<string> => {
     let picDir = this.formatTrekLogPicturesPath();
 
     return new Promise<any>((resolve, reject) => {
       RNFetchBlob.fs.stat(tempUri)
       .then((stats) => {
-        let uri = picDir + '/' + stats.filename;
+        let extPos = stats.filename.search(/\./);
+        let uri = picDir + '/' + imageName + stats.filename.substr(extPos);
         RNFetchBlob.fs.cp(stats.path, uri)
         .then(() => resolve(uri))
         .catch((err) => reject(err))
@@ -166,7 +167,8 @@ export class StorageSvc {
               allDone.push(p1a);
               p1a.then(() =>{
                 allDone.push(this.storeGroupListFile({groups: [], lastGroup: '', 
-                        measurementSystem: 'US', theme: COLOR_THEME_DARK}))  // store empty GroupsObj
+                        measurementSystem: 'US', theme: COLOR_THEME_DARK,
+                        imageStorageMode: IMAGE_STORE_FULL}))  // store empty GroupsObj
               })
             }
           })

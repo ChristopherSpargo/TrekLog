@@ -28,6 +28,106 @@ import FadeInTemp from './FadeInTempComponent';
 
 export type mapDisplayModeType = "normal" | "noControls" | "noIntervals" | "noSpeeds";
 
+export const StdMapStyle =
+[
+  {
+    "featureType": "administrative.neighborhood",
+    "elementType": "labels.text.fill",
+    "stylers": [
+      {
+        "color": "#b4d27b"
+      }
+    ]
+  },
+  {
+    "featureType": "administrative.neighborhood",
+    "elementType": "labels.text.stroke",
+    "stylers": [
+      {
+        "color": "#666666"
+      }
+    ]
+  },
+  {
+    "featureType": "landscape",
+    "elementType": "geometry",
+    "stylers": [
+      {
+        "color": "#949494"
+      }
+    ]
+  },
+  {
+    "featureType": "landscape",
+    "elementType": "labels.text.stroke",
+    "stylers": [
+      {
+        "color": "#303030"
+      }
+    ]
+  },
+  {
+    "featureType": "poi",
+    "elementType": "labels.text.stroke",
+    "stylers": [
+      {
+        "color": "#eaeaea"
+      },
+      {
+        "weight": 1.5
+      }
+    ]
+  },
+  {
+    "featureType": "poi.business",
+    "elementType": "labels.text.stroke",
+    "stylers": [
+      {
+        "color": "#3a3a3a"
+      },
+      {
+        "weight": 2.5
+      }
+    ]
+  },
+  {
+    "featureType": "road",
+    "elementType": "labels.text.fill",
+    "stylers": [
+      {
+        "color": "#ffffff"
+      }
+    ]
+  },
+  {
+    "featureType": "road",
+    "elementType": "labels.text.stroke",
+    "stylers": [
+      {
+        "color": "#484848"
+      }
+    ]
+  },
+  {
+    "featureType": "road.arterial",
+    "elementType": "geometry.fill",
+    "stylers": [
+      {
+        "color": "#ffffff"
+      }
+    ]
+  },
+  {
+    "featureType": "road.local",
+    "elementType": "geometry.fill",
+    "stylers": [
+      {
+        "color": "#ffffff"
+      }
+    ]
+  }
+];
+
 // const TREK_ZOOM_CURRENT = 15;
 // const TREK_ZOOM_STATE   =  6;
 // const TREK_ZOOM_COUNTRY =  4;
@@ -91,105 +191,6 @@ class TrekDisplay extends Component<{
   currentImageSet : TrekImageSet;
   currentImageSetIndex : number;
   backgroundTimeoutID : number;
-  stdMapStyle =
-  [
-    {
-      "featureType": "administrative.neighborhood",
-      "elementType": "labels.text.fill",
-      "stylers": [
-        {
-          "color": "#b4d27b"
-        }
-      ]
-    },
-    {
-      "featureType": "administrative.neighborhood",
-      "elementType": "labels.text.stroke",
-      "stylers": [
-        {
-          "color": "#666666"
-        }
-      ]
-    },
-    {
-      "featureType": "landscape",
-      "elementType": "geometry",
-      "stylers": [
-        {
-          "color": "#949494"
-        }
-      ]
-    },
-    {
-      "featureType": "landscape",
-      "elementType": "labels.text.stroke",
-      "stylers": [
-        {
-          "color": "#303030"
-        }
-      ]
-    },
-    {
-      "featureType": "poi",
-      "elementType": "labels.text.stroke",
-      "stylers": [
-        {
-          "color": "#eaeaea"
-        },
-        {
-          "weight": 1.5
-        }
-      ]
-    },
-    {
-      "featureType": "poi.business",
-      "elementType": "labels.text.stroke",
-      "stylers": [
-        {
-          "color": "#3a3a3a"
-        },
-        {
-          "weight": 2.5
-        }
-      ]
-    },
-    {
-      "featureType": "road",
-      "elementType": "labels.text.fill",
-      "stylers": [
-        {
-          "color": "#ffffff"
-        }
-      ]
-    },
-    {
-      "featureType": "road",
-      "elementType": "labels.text.stroke",
-      "stylers": [
-        {
-          "color": "#484848"
-        }
-      ]
-    },
-    {
-      "featureType": "road.arterial",
-      "elementType": "geometry.fill",
-      "stylers": [
-        {
-          "color": "#ffffff"
-        }
-      ]
-    },
-    {
-      "featureType": "road.local",
-      "elementType": "geometry.fill",
-      "stylers": [
-        {
-          "color": "#ffffff"
-        }
-      ]
-    }
-  ];
 
   initRegionLatDelta = 0.090;     // amount of latitude to show on initial map render
   initRegionLngDelta = 0.072;     // amount of longitude to show on initial map render
@@ -293,8 +294,8 @@ class TrekDisplay extends Component<{
 
   // change the focus or zoom level on the map
   layoutMap = ( path: LatLng[]) => {
-    let bPadding = (this.props.intervalMarkers ? 50 : 250);
-    let topPadding = this.props.rateRangeObj ? 325 : 200;
+    let topPadding = 160;
+    let bPadding = (this.props.rateRangeObj || this.props.takeSnapshotFn) ? 175 : 40;
     switch(this.mode){
       case 'All':
         if (this.mapViewRef) { 
@@ -407,13 +408,14 @@ class TrekDisplay extends Component<{
   takeMapSnapshot () {
     const snapshot = this.mapViewRef.takeSnapshot({
       format: 'jpg',   // image formats: 'png', 'jpg' (default: 'png')
-      quality: .3,
+      quality: .1,
       result: 'file'   // result types: 'file', 'base64' (default: 'file')
     });
     snapshot.then((uri) => {
       this.props.takeSnapshotFn(uri);
     });
   }  
+  
   render () {
     const tInfo = this.tInfo;
     // alert(++this.renderCount)
@@ -455,7 +457,8 @@ class TrekDisplay extends Component<{
     const logOn = this.props.timerType === 'Log';
     const replayOn = (this.props.timerType === 'Play');
     const cmBackground = (logOn || replayOn) ? trekLogYellow : "red";
-    const okTxt = this.props.snapshotPrompt || 'CONTINUE';
+    const [okPrompt, okCourse] = this.props.snapshotPrompt ? this.props.snapshotPrompt.split('\n') 
+                                                           : ['',''];
     const canTxt = 'CANCEL';
     const footerHeight = CONTROLS_HEIGHT;
     // const badPoints = this.tInfo.badPointList && this.tInfo.badPointList.length > 0; // **Debug
@@ -630,7 +633,7 @@ class TrekDisplay extends Component<{
       },
       trackingStatus: {
         position: "absolute",
-        top: 0 + (logOn ? CONTROLS_HEIGHT - 10 : 0),
+        top: 0 + (logOn ? CONTROLS_HEIGHT : 0),
         flex: 1,
         marginLeft: logOn ? 0 : 56,
         // paddingVertical: 5,
@@ -686,8 +689,11 @@ class TrekDisplay extends Component<{
         fontSize: 13,
         fontFamily: fontBold,
         paddingHorizontal: 2,
-        backgroundColor: semitransWhite_8,
+        backgroundColor: 'white',
         borderRadius: 8,
+        borderWidth: 1,
+        borderStyle: "solid",
+        borderColor: 'black',
       },
       footer: {
         zIndex: 15,
@@ -840,9 +846,9 @@ class TrekDisplay extends Component<{
     // )}
 
     const  mapTypes : SpeedDialItem[] = 
-                        [ {icon: 'Orbit', label: 'Satellite', value: 'hybrid', lStyle: styles.sdLabelStyle},
-                          {icon: 'Landscape', label: 'Terrain', value: 'terrain', lStyle: styles.sdLabelStyle},
-                          {icon: 'Highway', label: 'Standard', value: 'standard', lStyle: styles.sdLabelStyle}];
+              [ {icon: 'Orbit', label: 'Satellite', value: 'hybrid', lStyle: styles.sdLabelStyle},
+                {icon: 'Landscape', label: 'Terrain', value: 'terrain', lStyle: styles.sdLabelStyle},
+                {icon: 'Highway', label: 'Standard', value: 'standard', lStyle: styles.sdLabelStyle}];
 
 
     return (
@@ -869,7 +875,7 @@ class TrekDisplay extends Component<{
                   longitudeDelta: this.currRegion.longitudeDelta
                 } : undefined}
               mapType={mType}
-              customMapStyle={this.stdMapStyle}
+              customMapStyle={StdMapStyle}
           >
             {(trackingMarker) &&
               <Marker
@@ -1028,7 +1034,7 @@ class TrekDisplay extends Component<{
         }
         {(showControls && numPts > 0) &&
           <SpeedDial
-            bottom={this.props.bottom + minSDOffset + 40}
+            bottom={this.props.bottom + minSDOffset + 45}
             // right={10}
             icon={triggerIcon}
             triggerValue={this.props.speedDialValue}
@@ -1052,14 +1058,13 @@ class TrekDisplay extends Component<{
         }
         {(showControls && numPts > 0) &&
           <SpeedDial
-            top={70 + HEADER_HEIGHT}
-            // right={10}
+            top={60 + HEADER_HEIGHT}
             items={mapTypes}
             icon="LayersOutline"
             menuColor="transparent"
             selectFn={this.props.changeMapFn}
             style={styles.speedDialTrigger}
-            itemIconsStyle={{backgroundColor: "black"}}
+            itemIconsStyle={{backgroundColor: 'white', borderColor: 'black'}}
             horizontal={true}
             iconSize="Large"
             itemSize="Big"
@@ -1128,10 +1133,11 @@ class TrekDisplay extends Component<{
                 style={{flex: 1}}
                 onPress={() => this.takeMapSnapshot()}>
                 <View style={[footerButton, { height: footerHeight }]}>
-                  <Text
-                    style={[footerButtonText, { color: primaryColor }]}
-                  >
-                    {okTxt}
+                  <Text style={[footerButtonText, { color: primaryColor }]}>
+                    {okPrompt}
+                  </Text>
+                  <Text style={[footerButtonText, { color: primaryColor }]}>
+                    {okCourse}
                   </Text>
                 </View>
               </RectButton>

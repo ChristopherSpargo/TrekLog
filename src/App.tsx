@@ -3,6 +3,7 @@ import { Platform, UIManager, View, StyleSheet, StatusBar } from 'react-native';
 import { Provider, observer } from 'mobx-react';
 import { configure } from "mobx";
 import { createStackNavigator } from 'react-navigation';
+
 import { TrekInfo } from './TrekInfoModel';
 import { UtilsSvc } from './UtilsService';
 import { ModalModel } from './ModalModel';
@@ -94,10 +95,13 @@ export const PAGE_TITLE_HEIGHT = 28;
 export const HEADER_ICON_SIZE = 24;
 export const BACK_BUTTON_SIZE = 40;
 export const HEADER_HEIGHT = 56;
+export const BIG_CONTROLS_HEIGHT = 100;
+export const BIG_NAV_ITEM_SIZE = BIG_CONTROLS_HEIGHT - 20;
 export const CONTROLS_HEIGHT = 60;
 export const SHORT_CONTROLS_HEIGHT = 60;
-export const NAV_ITEM_SIZE = CONTROLS_HEIGHT - 20;
-export const NAV_ICON_SIZE = 28;
+export const NAV_ITEM_SIZE = CONTROLS_HEIGHT - 10;
+export const NAV_ICON_SIZE = 34;
+export const BIG_NAV_ICON_SIZE = 56;
 export const FORMHEADER_HEIGHT = 40;
 export const FOOTER_HEIGHT = 50;
 export const FOOTER_BUTTON_HEIGHT = 50;
@@ -167,6 +171,7 @@ export const uiTheme = {
       headerBorderColor: semitransBlack_12,
       headerTextColor: "white",
       disabledHeaderTextColor: "rgba(255,255,255,.42)",
+      headerRippleColor:  "rgba(255,255,255,.4)",
       textOnPrimaryColor: "white",
       highlightedItemColor: "#eceff1",
       trekLogBlue: TL_BLUE,
@@ -225,7 +230,7 @@ export const uiTheme = {
       contrastingMask_7: semitransBlack_7,
       contrastingMask_9: semitransBlack_9,
       trackingColorPlus: "green",
-      trackingColorMinus: "red",
+      trackingColorMinus: "#ff3333",
       almostTransparent: "rgba(255,255,255,.01)",
       altCardBackground: "#f2f2f2",
       progressBackground: "rgba(0,0,0,.05)",
@@ -265,6 +270,7 @@ export const uiTheme = {
       headerBorderColor: "rgba(255,255,255,.20)",
       headerTextColor: "rgba(255,255,255,.70)",
       disabledHeaderTextColor: "rgba(255,255,255,.42)",
+      headerRippleColor:  "rgba(255,255,255,.4)",
       textOnPrimaryColor: "rgba(255,255,255,.80)",
       highlightedItemColor: "#595959",
       trekLogBlue: TL_BLUE,
@@ -323,7 +329,7 @@ export const uiTheme = {
       contrastingMask_7: semitransWhite_7,
       contrastingMask_9: semitransWhite_9,
       trackingColorPlus: "#00cc00",
-      trackingColorMinus: "red",
+      trackingColorMinus: "#ff3333",
       almostTransparent: "rgba(0,0,0,.01)",
       altCardBackground: "#262626",
       progressBackground: "rgba(255,255,255,.15)",
@@ -399,13 +405,17 @@ export const uiTheme = {
   navItemWithLabel: {
     height: NAV_ITEM_SIZE - 5,
     width: NAV_ITEM_SIZE - 5,
-    // borderWidth: 1,
     borderStyle: "solid",
     borderRadius: (NAV_ITEM_SIZE - 5) / 2,
-    // backgroundColor: "transparent",
+  },
+  bigNavItemWithLabel: {
+    height: BIG_NAV_ITEM_SIZE - 5,
+    width: BIG_NAV_ITEM_SIZE - 5,
+    borderStyle: "solid",
+    borderRadius: (BIG_NAV_ITEM_SIZE - 5) / 2,
   },
   navItemLabel: {
-    fontSize: 14,
+    fontSize: 16,
     fontFamily: fontFamilyLight,
     marginTop: -6,
   },
@@ -457,10 +467,11 @@ export const uiTheme = {
   footerButton: {
     flex: 1,
     height: FOOTER_BUTTON_HEIGHT,
-    flexDirection: "row",
+    // flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "transparent",
+    
   },
   footerButtonText: {
     color: primaryColor,
@@ -474,9 +485,10 @@ export const uiTheme = {
     height: 25,
   },
   pageTitle: {
-    fontSize: 22,
     height: PAGE_TITLE_HEIGHT,
-    fontFamily: fontFamilyLight,
+    paddingLeft: 10,
+    paddingRight: 10,
+    marginBottom: 10,
   },
   pickerTitle: {
     fontSize: 20,

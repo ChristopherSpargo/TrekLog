@@ -8,7 +8,7 @@ import TrekLogHeader from './TreklogHeaderComponent'
 import Conditions from './ConditionsComponent';
 import { TrekInfo } from "./TrekInfoModel";
 import NavMenu, { NavMenuItem } from './NavMenuComponent';
-import NavMenuTrigger from './NavMenuTriggerComponent'
+import PageTitle from './PageTitleComponent';
 
 const goBack = NavigationActions.back() ;
 
@@ -60,9 +60,9 @@ class ShowConditions extends Component<{
   }
   
   render() {
-    const { pageBackground, highTextColor
+    const { pageBackground
           } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
-    const { cardLayout, pageTitle 
+    const { cardLayout
           } = this.props.uiTheme;
     const styles = StyleSheet.create({
         container: { ... StyleSheet.absoluteFillObject, backgroundColor: pageBackground },
@@ -88,10 +88,10 @@ class ShowConditions extends Component<{
             icon="*"
             titleText="Conditions"
             backButtonFn={() =>  this.props.navigation.dispatch(goBack)}
+            openMenuFn={this.openMenu}
           />
           <View style={[cardLayout, {marginBottom: 0, paddingBottom: 15}]}>
-            <NavMenuTrigger openMenuFn={this.openMenu}/>
-            <Text style={[pageTitle, {color: highTextColor}]}>At Your Location</Text>
+            <PageTitle titleText="At Your Location" style={{paddingLeft: 0}}/>
           </View>
           <Conditions/>
         </View>
