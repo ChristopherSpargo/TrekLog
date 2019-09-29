@@ -66,6 +66,9 @@ function SummaryIntervals({
           case 'dist':
             switchMeasurementSystem();
             break;
+          case 'speed':
+            sumSvc.toggleAvgSpeedOrTimeDisplay();
+            break;
           case 'cals':
             sumSvc.toggleShowTotalCalories();
             break;
@@ -118,11 +121,13 @@ function SummaryIntervals({
         case 'dist':
           return formattedDist(tData.stat);
         case 'time':
-        return formattedTime(tData.stat);
+          return formattedTime(tData.stat);
+        case 'speed':
+          return formattedSpeed(tData.stat, tData.time)
         case 'cals':
-        return formattedCals(tData.stat, tData.time);
+          return formattedCals(tData.stat, tData.time);
         case 'steps':
-        return formattedSteps(tData.stat, tData.time);
+          return formattedSteps(tData.stat, tData.time);
         default:
           return "";
       }
@@ -141,11 +146,13 @@ function SummaryIntervals({
         case 'dist':
           return formattedDist(iData.stat);
         case 'time':
-        return formattedTime(iData.stat);
+          return formattedTime(iData.stat);
+        case 'speed':
+          return formattedSpeed(iData.stat, iData.time)
         case 'cals':
-        return formattedCals(iData.stat, iData.time);
+          return formattedCals(iData.stat, iData.time);
         case 'steps':
-        return formattedSteps(iData.stat, iData.time);
+          return formattedSteps(iData.stat, iData.time);
         default:
           return "";
       }
@@ -162,7 +169,11 @@ function SummaryIntervals({
     if(iData){
       TREK_TYPE_CHOICES.forEach((tType) => {    // for each trekType
         if (sels & TREK_SELECT_BITS[tType]) {   // if type is in selections
-          stat += iData.data[tType][sType];     // add to total
+          if (sType === 'speed'){
+            stat += iData.data[tType].dist;
+          } else {
+            stat += iData.data[tType][sType];     // add to total
+          }
           time += sType === 'steps' ? iData.data[tType].stepTime : iData.data[tType].time;
         }
       })
@@ -200,6 +211,21 @@ function SummaryIntervals({
     return c.toString() + (sumSvc.showTotalCalories ? "" : "/min");
   }
 
+  function formattedSpeed(dist: number, time: number) {
+    let val: number, prec: number;
+    let sys = tInfo.measurementSystem;
+
+    val = sumSvc.showAvgSpeed 
+            ? uSvc.computeRoundedAvgSpeed(sys, dist, time)
+            : (time / uSvc.convertDist(dist, tInfo.distUnits()));
+    prec = val < 10 ? 10 : 1;
+    let c = Math.round(val * prec) / prec;
+    c = isNaN(c) ? 0 : c;
+    return  (sumSvc.showAvgSpeed
+      ? (c.toString() + " " + tInfo.speedUnits()) 
+      : (uSvc.timeFromSeconds(c) + "/" + tInfo.distUnits()));
+  }
+
   function formattedSteps(steps: number, time: number) {
     if (sumSvc.showStepsPerMin) {
       let s = Math.round(steps / (time / 60));
@@ -216,11 +242,13 @@ function SummaryIntervals({
   const graphWidth = statAreaWidth - yAxisWidth - 10;
   const gBarWidth = 25; 
   const showSteps = sumSvc.haveStepData();
-  const numStats = showSteps ? 4 : 3;
+  const numStats = showSteps ? 5 : 4;
   const statLabelWidth = (statAreaWidth - 20) / numStats;
   const intervalLabelWidth = (statAreaWidth - 20) / 3;
+  const graphLabelType = (sumSvc.showStatType === 'speed' && !sumSvc.showAvgSpeed)
+                          ? YAXIS_TYPE_MAP['pace'] : YAXIS_TYPE_MAP[sumSvc.showStatType];
 
-  const { rippleColor, trekLogBlue, highTextColor, secondaryColor, dividerColor, altCardBackground,
+  const { rippleColor, trekLogBlue, highTextColor, secondaryColor, dividerColor,
           mediumTextColor
         } = uiTheme.palette[tInfo.colorTheme];
   const { fontRegular 
@@ -304,6 +332,20 @@ function SummaryIntervals({
     },
 })
 
+const IntervalButton = ({selectFn, value, label}) => {
+  return (  
+    <BorderlessButton
+      style={{flex: 1}}
+      rippleColor={rippleColor}
+      onPress={() => selectFn(value)}
+    >
+      <View style={styles.statTitleItem}>
+        <Text style={styles.statLineTitleText}>{label}</Text>
+      </View>
+    </BorderlessButton>
+  )
+}
+
 return useObserver(() => (
   <SlideUpView 
     bgColor="transparent"
@@ -314,33 +356,9 @@ return useObserver(() => (
     afterCloseFn={setNotVisible}
   >
     <View style={{...styles.statLine, ...styles.statLineTitle}}>
-      <BorderlessButton
-        style={{flex: 1}}
-        rippleColor={rippleColor}
-        onPress={() => updateShowIntervalType('daily')}
-      >
-        <View style={styles.statTitleItem}>
-          <Text style={styles.statLineTitleText}>Daily</Text>
-        </View>
-      </BorderlessButton>
-      <BorderlessButton
-        style={{flex: 1}}
-        rippleColor={rippleColor}
-        onPress={() => updateShowIntervalType('weekly')}
-      >
-        <View style={styles.statTitleItem}>
-          <Text style={styles.statLineTitleText}>Weekly</Text>
-        </View>
-      </BorderlessButton>
-      <BorderlessButton
-        style={{flex: 1}}
-        rippleColor={rippleColor}
-        onPress={() => updateShowIntervalType('monthly')}
-      >
-        <View style={styles.statTitleItem}>
-          <Text style={styles.statLineTitleText}>Monthly</Text>
-        </View>
-      </BorderlessButton>
+      <IntervalButton selectFn={updateShowIntervalType} value='daily' label='Daily'/>
+      <IntervalButton selectFn={updateShowIntervalType} value='weekly' label='Weekly'/>
+      <IntervalButton selectFn={updateShowIntervalType} value='monthly' label='Monthly'/>
     </View>
     <HorizontalSlideView 
       endValue={(sumSvc.intervalIndex * (intervalLabelWidth+1)) + 14}
@@ -348,43 +366,13 @@ return useObserver(() => (
       <View style={styles.intervalTypeUnderline}/>
     </HorizontalSlideView>                  
     <View style={{...styles.statLine, ...styles.statLineTitle}}>
-      <BorderlessButton
-        style={{flex: 1}}
-        rippleColor={rippleColor}
-        onPress={() => updateShowStatType('time')}
-      >
-        <View style={styles.statTitleItem}>
-          <Text style={styles.statLineTitleText}>Duration</Text>
-        </View>
-      </BorderlessButton>
-      <BorderlessButton
-        style={{flex: 1}}
-        rippleColor={rippleColor}
-        onPress={() => updateShowStatType('dist')}
-      >
-        <View style={styles.statTitleItem}>
-          <Text style={styles.statLineTitleText}>Distance</Text>
-        </View>
-      </BorderlessButton>
-      <BorderlessButton
-        style={{flex: 1}}
-        rippleColor={rippleColor}
-        onPress={() => updateShowStatType('cals')}
-      >
-        <View style={styles.statTitleItem}>
-          <Text style={styles.statLineTitleText}>Calories</Text>
-        </View>
-      </BorderlessButton>
+      <IntervalButton selectFn={updateShowStatType} value='time' label='Time'/>
+      <IntervalButton selectFn={updateShowStatType} value='dist' label='Dist'/>
+      <IntervalButton selectFn={updateShowStatType} value='speed' label='Speed'/>
+      <IntervalButton selectFn={updateShowStatType} value='cals' label='Cals'/>
+
       {showSteps &&
-        <BorderlessButton
-          style={{flex: 1}}
-          rippleColor={rippleColor}
-          onPress={() => updateShowStatType('steps')}
-        >
-          <View style={styles.statTitleItem}>
-            <Text style={styles.statLineTitleText}>Steps</Text>
-          </View>
-        </BorderlessButton>
+        <IntervalButton selectFn={updateShowStatType} value='steps' label='Steps'/>
       }
     </View>
     <HorizontalSlideView 
@@ -404,7 +392,7 @@ return useObserver(() => (
           majorTics={5}
           title={sumSvc.barGraphData[sumSvc.showStatType].title}
           dataRange={sumSvc.barGraphData[sumSvc.showStatType].range}
-          dataType={YAXIS_TYPE_MAP[sumSvc.showStatType]}
+          dataType={graphLabelType}
         />
         <View style={styles.graph}>
           <SvgGrid
@@ -428,7 +416,7 @@ return useObserver(() => (
             minBarHeight={10}
             labelAngle={287}
             scrollToBar={scrollToBar}
-            gradientEnd={altCardBackground}
+            // gradientEnd={altCardBackground}
             allowEmptyBars={sumSvc.allowEmptyIntervals}
           />
         </View>

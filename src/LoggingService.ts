@@ -310,6 +310,8 @@ export class LoggingSvc {
               .then(() => {
                 this.startTrackingMarker(this.trekInfo.trackingObj);
                 this.trekInfo.trackingCourse = undefined;
+                this.setLayoutOpts('All');
+                this.trekInfo.setSpeedDialZoomedIn(false);
               })      
               .catch((err) => alert(err))          
             }
@@ -392,15 +394,11 @@ export class LoggingSvc {
 
   // Compute the total distance of the trek.
   totalDist = () => {
+    let numPts = this.trekInfo.trekPointCount;
     this.clearDist();
-    if (this.trekInfo.trekPointCount > 1) {
-      this.updateDist(
-        this.segmentDist(
-          this.trekInfo.pointList,
-          0,
-          this.trekInfo.trekPointCount - 1
-        )
-      );
+    if (numPts > 0) {
+      this.utilsSvc.setPointDistances(this.trekInfo.pointList);
+      this.updateDist(this.trekInfo.pointList[numPts - 1].d);
     }
   };
 
@@ -415,9 +413,10 @@ export class LoggingSvc {
   };
 
   // Add the given value to the trek distance.
-  // Change the display units from meters or feet to kilometers or miles if the distance gets large
+  // Set the distance property of the ending point in the trek's pointList
   updateDist = (dist: number) => {
     this.setTrekDist(this.trekInfo.trekDist + dist);
+    this.trekInfo.pointList[this.trekInfo.pointList.length - 1].d = this.trekInfo.trekDist;
   };
 
   // set the value of the trekDist property
@@ -636,17 +635,23 @@ export class LoggingSvc {
     const nPts = points.length;
     let t : number, d : number, part : number, newP : LaLo;
     let path : TrekPoint[] = [];
+    let lastPt : TrekPoint;
     
     if(limit > max) { limit = max; }
     if (points.length > 0) {
       if(getPath) { path.push(points[0]); }
       for(let i=1; i<nPts; i++){
-        t = points[i].t - points[i-1].t;            // duration of next segment
-        d = this.utilsSvc.calcDistLaLo(points[i-1].l, points[i].l);  // distance of next segment
-        val = timeLimit ? t : d;
-        if (val && (accum + val >= limit)) {                  // will this point complete the limit?
+        val = timeLimit ? points[i].t : points[i].d;
+        if (val >= limit) {                  // will this point complete the limit?
+          dAccum = points[i-1].d;
+          tAccum = points[i-1].t;
+          accum = timeLimit ?  tAccum : dAccum;
+          t = points[i].t - tAccum;            // duration of this segment
+          d = points[i].d - dAccum;            // distance of this segment
+          val = timeLimit ? t : d;
           part = (limit - accum) / val;              // what % of the value for this segment do we need?
-          let newPTime = Math.round(t * part + points[i - 1].t);
+          let newPTime = Math.round(t * part + tAccum);
+          let newPDist = this.utilsSvc.fourSigDigits(d * part + dAccum);
 
           // now get a point that is 'part' % into the distance/time between these 2 points
           newP = this.utilsSvc.pointWithinSegment(points[i-1].l, points[i].l, part);
@@ -655,7 +660,7 @@ export class LoggingSvc {
             alert('bad data ' + val + ' | ' + newP.a )
             return undefined;
           }
-          let lastPt = {l: newP, t: newPTime, s: points[i-1].s};
+          lastPt = {l: newP, t: newPTime, s: points[i-1].s, d: newPDist};
           if(getPath) { path.push(lastPt); }
           dAccum += part * d;
           tAccum += part * t;
@@ -663,20 +668,13 @@ export class LoggingSvc {
         }
         else {
           if(getPath) { path.push(points[i]); }
-          dAccum += d;
-          tAccum += t;
-          accum += val;            // increase accumulator
         }
       }
-      return { pt: points[nPts-1], dist: dAccum, time: tAccum, path: getPath ? path : undefined};
+      let pt = points[nPts-1];
+      return { pt: pt, dist: pt.d, time: pt.t, path: getPath ? path : undefined};
     }
     alert('no points' )
     return undefined;
-  }
-
-  // return a PointAtLimitInfo object with the path property containing a LatLng[] to the point
-  getPathAtLimit = (path: TrekPoint[], limit: number, max: number, type: string) : PointAtLimitInfo => {
-    return this.getPointAtLimit(path, limit, max, type, true)
   }
 
   // setup the trackingObj from the given trek, trackingMethod and trackingValue
@@ -690,6 +688,7 @@ export class LoggingSvc {
       this.courseSvc.getTrackingPath(course, trackingMethod)
       .then((result) => {
         pList = result.list;
+        // this.utilsSvc.setPointDistances(pList);
         let params = this.courseSvc.getTrackingParams(course, trackingMethod, trackingValue, result.trek);
 
         this.trekInfo.trackingObj = {
@@ -741,14 +740,16 @@ export class LoggingSvc {
   // start a timer and update a trackingMarker position from a list of points (path)
   startTrackingMarker = (tObj: TrackingObject, start?: number, startValue?: number) => {
     let ptInfo : PointAtLimitInfo;
+    let elapsedTics: number;
 
     tObj.startTime = start || new Date().getTime();
     tObj.markerValue = startValue || tObj.initialValue;
+    elapsedTics = (new Date().getTime() - tObj.startTime) / tObj.timerInterval;
     ptInfo = this.getPointAtLimit(tObj.pointList, tObj.markerValue, tObj.maxValue, tObj.type);
 
     this.trackingMarkerTimerId = window.setInterval(() => {
       if (ptInfo !== undefined){
-        this.computeCourseTrackingInfo(tObj, ptInfo);
+        this.computeCourseTrackingInfo(tObj, ptInfo, elapsedTics);
 
         // if final tracking marker position has not been displayed, prepare the new markerValue
         if(tObj.markerValue <= tObj.maxValue){
@@ -756,7 +757,7 @@ export class LoggingSvc {
           this.trekInfo.setTrackingMarkerLocation(ptInfo.pt);
 
           // Since this kind of timer doesn't run in the background, compute tic count using getTime
-          let elapsedTics = (new Date().getTime() - tObj.startTime) / tObj.timerInterval;
+          elapsedTics = (new Date().getTime() - tObj.startTime) / tObj.timerInterval;
           tObj.markerValue = tObj.initialValue + (elapsedTics * tObj.incrementValue);
           ptInfo = this.getPointAtLimit(tObj.pointList, tObj.markerValue, tObj.maxValue, tObj.type);
         }
@@ -775,15 +776,17 @@ export class LoggingSvc {
   // Time differential is the time the tracking marker was/will be at 
   // the currentTrekDistance - currentTrekDuration
   // Keep a copy of these values in the trackingObj to use in recovery scenario
-  computeCourseTrackingInfo = (tObj: TrackingObject, ptInfo: PointAtLimitInfo ) => {
+  computeCourseTrackingInfo = (tObj: TrackingObject, ptInfo: PointAtLimitInfo, tics: number ) => {
     let timeAtTrekDist : number;
 
     // the following will stop changing the dist difference if the course is finishes first
     // since ptInfo will stop changing
-    let trekDistAtTime = this.getPointAtLimit(this.trekInfo.pointList, ptInfo.time, 
-                                                this.trekInfo.trekDist, TREK_LIMIT_TYPE_TIME).dist;
-    tObj.distDiff = trekDistAtTime - ptInfo.dist;             // negative if trek is behind, positive if ahead
-    this.trekInfo.setTrackingDiffDist(tObj.distDiff);
+    if ((Math.trunc(tics) % 3) === 0){
+      let trekDistAtTime = this.getPointAtLimit(this.trekInfo.pointList, ptInfo.time, 
+                                                  this.trekInfo.trekDist, TREK_LIMIT_TYPE_TIME).dist;
+      tObj.distDiff = trekDistAtTime - ptInfo.dist;             // negative if trek is behind, positive if ahead
+      this.trekInfo.setTrackingDiffDist(tObj.distDiff);
+    }
 
     if (tObj.method === 'courseTime' || tObj.method === 'bestTime' || tObj.method === 'lastTime') {
       // locate when the course was/will be at a distance equal to that of the trek

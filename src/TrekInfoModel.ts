@@ -14,7 +14,7 @@ import { CourseTrackingMethod } from './TrackingMethodComponent';
 
 // Class containing information about and service functions for a Trek
 
-export const CURR_DATA_VERSION = '5.3';   
+export const CURR_DATA_VERSION = '5.4';   
   // version 2 added weather conditions data
   // version 3 added hiking data (packWeight)
   // version 4 converted to storing with smaller key names
@@ -25,6 +25,7 @@ export const CURR_DATA_VERSION = '5.3';
   // version 5.1 start storing images in Pictures/TrekLog directory
   // version 5.2 truncate speed values to 4 significant digits
   // version 5.3 set start point time to 0 and duration to end point time
+  // version 5.4 store cumulative distance with each point in trek pointList
 
 export type MapType = "none" | "standard" | "satellite" | "hybrid" | "terrain" | "mutedStandard";
 
@@ -74,6 +75,7 @@ export interface TrekPoint {
   l: LaLo,        // location
   t: number,      // time (seconds) point recieved
   s: number,      // speed reported at pt
+  d ?: number,    // distance to point along path
 }
 
 export type ElevationData = number;
@@ -103,10 +105,13 @@ export enum TrekImageOrientationType { IMAGE_ORIENTATION_PORTRATE , IMAGE_ORIENT
 
 export const IMAGE_STORE_FULL = "Full";
 export const IMAGE_STORE_COMPRESSED = "Compressed";
+export const IMAGE_COMPRESSION_QUALITY = 30;
 
 export interface TrekImage {
   uri:          string,
   orientation:  TrekImageOrientationType,
+  width?:       number,
+  height?:      number,
   type:         TrekImageType, 
   time ?:       number,
   label ?:      string,
@@ -210,7 +215,8 @@ export interface RestoreObject {
   timerOn ?:            boolean,
   trekSaved ?:          boolean,
   typeSelections ?:     number,
-  showSpeedOrTime ?:    string,
+  showAvgSpeed ?:       boolean,
+  showSpeedNow ?:       boolean,
   defaultMapType ?:     MapType,
   currentMapType ?:     MapType,
   saveDialogOpen ?:     boolean,
@@ -259,6 +265,9 @@ export const STEP_NAMES = {Walk: 'Step', Run: 'Stride', Bike: 'Step',
                            Hike: 'Step', Trek: 'Step', Board: 'Step', Drive: 'Step'};
 export const PLURAL_STEP_NAMES = {Walk: 'Steps', Run: 'Strides', Bike: 'Steps', 
                                   Hike: 'Steps', Trek: 'Steps', Board: 'Steps', Drive: 'Steps'};
+
+export type SortByTypes = "Dist" | "Time" | "Date" | "Speed" | "Steps" | "Cals";
+export type ShowTypes = "Dist" | "Time" | "Steps" | "Speed" | "Cals" | "Date";
 
 export const SWITCH_SPEED_AND_TIME = {speed: 'time', time: 'speed'};
 
@@ -343,16 +352,17 @@ export class TrekInfo {
   @observable distLimit;
   @observable timeframe;                          // time frame used to select summaries and reviews
   @observable trekCount;
-  @observable averageSpeed;
-  @observable timePerDist;
-  @observable speedNow ;
+  @observable averageSpeed: string;
+  @observable timePerDist: string;
+  @observable speedNow: string;
+  @observable showSpeedNow: boolean;
   @observable currentDist;
   @observable currentCalories;
   @observable currentNetCalories;
-  @observable showSpeedOrTime;                    // Flag to switch between showing Dist/Time and Time/Dist
+  @observable showAvgSpeed;                    // Flag to switch between showing Dist/Time and Time/Dist
   @observable showStepsPerMin;                    // Flag to switch between showing Total Steps and Steps/Min
   @observable showTotalCalories;                  // Flag to switch between showing Calories and Calories/Min
-  @observable speedDialZoom;
+  @observable speedDialZoomedIn: boolean;
   @observable trekImageCount;                     // Number of images/videos in this trek 
   @observable showMapInLog   : boolean;
   @observable pendingReview : boolean;
@@ -441,7 +451,8 @@ export class TrekInfo {
     this.currentDist = 'N/A';
     this.currentCalories = 'N/A';
     this.currentNetCalories = 'N/A';
-    this.showSpeedOrTime = 'speed';
+    this.showSpeedNow = true;
+    this.showAvgSpeed = true;
     this.showStepsPerMin = false;
     this.showTotalCalories = true;
     this.layoutOpts = 'Current';
@@ -455,7 +466,7 @@ export class TrekInfo {
     this.distLimit = 0;
     this.trekImageCount = 0;
     this.intervals = undefined;
-    this.speedDialZoom = true;
+    this.speedDialZoomedIn = true;
     this.showMapInLog = false;
     this.pendingReview = false;
     this.setColorTheme(COLOR_THEME_DARK);
@@ -694,7 +705,8 @@ readAllTreks = (groups: string[]) => {
       timerOn:            this.timerOn,
       trekSaved:          this.trekSaved,
       typeSelections:     this.typeSelections,
-      showSpeedOrTime:    this.showSpeedOrTime,
+      showAvgSpeed:       this.showAvgSpeed,
+      showSpeedNow:       this.showSpeedNow,
       defaultMapType:     this.defaultMapType,
       currentMapType:     this.currentMapType,
       saveDialogOpen:     this.saveDialogOpen,
@@ -748,7 +760,8 @@ readAllTreks = (groups: string[]) => {
           this.setTimerOn(resObj.timerOn);
           this.updateTrekSaved(resObj.trekSaved);
           this.setTypeSelections(resObj.typeSelections);
-          this.updateShowSpeedOrTime(resObj.showSpeedOrTime);
+          this.updateShowAvgSpeed(resObj.showAvgSpeed);
+          this.updateShowSpeedNow(resObj.showSpeedNow);
           this.defaultMapType = resObj.defaultMapType;
           this.setCurrentMapType(resObj.currentMapType);
           this.currentGroupSettings.weight = this.weight;            // from setTrekProperties
@@ -1172,10 +1185,10 @@ readAllTreks = (groups: string[]) => {
     this.hills = hills;
   }
 
-  // set the value of the speedDialZoom property
+  // set the value of the speedDialZoomedIn property
   @action
-  setSpeedDialZoom = (status: boolean) => {
-    this.speedDialZoom = status;
+  setSpeedDialZoomedIn = (status: boolean) => {
+    this.speedDialZoomedIn = status;
   }
   
   
@@ -1203,7 +1216,7 @@ readAllTreks = (groups: string[]) => {
   // add the given uri to the trek and associate it with the given location
   // associate image with last image if user hasn't moved more than 20 meters
   @action
-  addTrekImage = (uri: string, orient: number, type: number, loc: LaLo, time: number) => {
+  addTrekImage = (uri: string, data: any, type: number, loc: LaLo, time: number) => {
     if(this.trekImages === undefined) { this.trekImages = [{loc: loc, images: []}]; }
     let n = this.trekImages.length;
     let d = this.utilsSvc.calcDist(this.trekImages[n-1].loc.a, this.trekImages[n-1].loc.o, loc.a, loc.o);
@@ -1211,7 +1224,8 @@ readAllTreks = (groups: string[]) => {
       this.trekImages.push({loc: loc, images: []});  // too far from last image, create new set
       n++;
     }
-    this.trekImages[n-1].images.push({uri: uri, orientation: orient, type: type, time: time});
+    this.trekImages[n-1].images.push({uri: uri, orientation: data.deviceOrientation, 
+                    width: data.width, height: data.height, type: type, time: time});
     this.setTrekImageCount(this.getTrekImageCount());
   }
 
@@ -1278,7 +1292,6 @@ readAllTreks = (groups: string[]) => {
     let imageType = IMAGE_TYPE_INFO[image.type].name;
     let title = imageType;
     if (showUri ) {
-      return image.uri;
       title = image.uri + '\n' + imageType;
     }
     if (image.time){
@@ -1369,7 +1382,7 @@ readAllTreks = (groups: string[]) => {
   // compute the current speed and uptate the currentSpeed property
   @action
   updateSpeedNow = () => {
-    this.speedNow = this.formattedCurrentSpeed();
+    this.speedNow = this.formattedCurrentSpeed() as string;
   }
 
   // format the avgerageSpeed and timePerDist properties
@@ -1498,8 +1511,14 @@ readAllTreks = (groups: string[]) => {
 
   // Indicate whether Avg Speed or Time/Dist should show in the status
   @action
-  updateShowSpeedOrTime = (mode: string) => {
-    this.showSpeedOrTime = mode;
+  updateShowAvgSpeed = (status: boolean) => {
+    this.showAvgSpeed = status;
+  }
+
+  // Indicate whether Avg Speed or Speed Now should show in the status
+  @action
+  updateShowSpeedNow = (status: boolean) => {
+    this.showSpeedNow = status;
   }
 
   // Indicate whether Steps or Steps/Min should show in the status
@@ -1638,8 +1657,6 @@ readAllTreks = (groups: string[]) => {
 
   formattedElevationGainPct = () => {
     let egPct = this.trekDist === 0 ? 0 : (this.elevationGain / this.trekDist);
-
-
     return Math.round((egPct) * 100).toString() + ' %';
   }
 

@@ -7,7 +7,6 @@ import { UiThemeContext, TrekInfoContext, UtilsSvcContext } from "./App";
 import {
   TrekInfo,
   STEPS_APPLY,
-  SWITCH_SPEED_AND_TIME,
   DIST_UNIT_CHOICES,
   PLURAL_STEP_NAMES
 } from "./TrekInfoModel";
@@ -58,9 +57,10 @@ function TrekStats({
   const [intervalElevDisplay, setIntervalElevDisplay] = useState("Elevation");
 
   function formattedCurrentSpeed() {
-    let sp = tInfo.formattedCurrentSpeed() as string;
+    let sp = tInfo.showSpeedNow ? tInfo.speedNow : tInfo.averageSpeed;
     let i = sp.indexOf(" ");
-    return { value: sp.substr(0, i), units: sp.substr(i), label: "Speed Now" };
+    return { value: sp.substr(0, i), units: sp.substr(i), 
+             label: tInfo.showSpeedNow ? "Speed Now" : "Avg Speed" };
   }
 
   function formattedSteps() {
@@ -155,7 +155,7 @@ function TrekStats({
   // return average speed or pace of the trek (or interval if specified)
   function displaySpeedOrPace() {
     let ms = tInfo.measurementSystem;
-    let showSpeed = tInfo.showSpeedOrTime === "speed";
+    let showSpeed = tInfo.showAvgSpeed;
     let sp: string;
     let sepStr = showSpeed ? " " : "/";
     let skip = showSpeed ? 1 : 0;
@@ -269,7 +269,12 @@ function TrekStats({
 
   // toggle between displaying time/distance and distance/time
   function toggleAvgSpeedorTimeDisplay() {
-    tInfo.updateShowSpeedOrTime(SWITCH_SPEED_AND_TIME[tInfo.showSpeedOrTime]);
+    tInfo.updateShowAvgSpeed(!tInfo.showAvgSpeed);
+  }
+
+  // toggle between displaying current speed and average speed
+  function toggleShowSpeedNowDisplay() {
+    tInfo.updateShowSpeedNow(!tInfo.showSpeedNow);
   }
 
   // toggle between displaying total steps and steps/min
@@ -302,7 +307,7 @@ function TrekStats({
   const statValueFontSize = small ? 26 : 54;
   const statUnitsFontSize = small ? 20 : 33;
   const statUnitsMargin = small ? 0 : 8;
-  const calsMarginTop = small ? 10 : 0;
+  const calsMarginTop = small ? 10 : -10;
   const selectColor = bgImage ? selectOnFilm : selectOnTheme;
   const switchSys = sysChangeFn || tInfo.switchMeasurementSystem;
   const haveElevs = tInfo.hasElevations();
@@ -336,7 +341,7 @@ function TrekStats({
       alignItems: "flex-end",
       borderBottomWidth: 2,
       borderStyle: "solid",
-      borderColor: disabledTextColor
+      borderColor: disabledTextColor,
     },
     statValueText: {
       color: highTextColor,
@@ -351,6 +356,7 @@ function TrekStats({
     },
     bigStats: {
       alignItems: "center",
+      overflow: "hidden",
       justifyContent: "center"
     },
     bigStatPair: {
@@ -415,7 +421,12 @@ function TrekStats({
           item={formattedDist()}
           switchFn={switchSys}
         />
-        {logging && <StatItem item={formattedCurrentSpeed()} />}
+        {logging && 
+          <StatItem 
+            item={formattedCurrentSpeed()} 
+            switchFn={toggleShowSpeedNowDisplay}
+          />
+        }
         {!logging && (
           <StatItem
             item={displaySpeedOrPace()}

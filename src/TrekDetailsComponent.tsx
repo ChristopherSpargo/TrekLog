@@ -2,9 +2,9 @@ import React, { Component } from 'react';
 import { View, Text, StyleSheet, Image, Dimensions, FlatList } from 'react-native';
 import { RectButton } from 'react-native-gesture-handler'
 import { observer, inject } from 'mobx-react';
-import { action, observable } from 'mobx';
+import { action } from 'mobx';
 
-import { TrekInfo, SWITCH_SPEED_AND_TIME, PLURAL_STEP_NAMES, STEP_NAMES, SPEED_UNIT_CHOICES,
+import { TrekInfo, PLURAL_STEP_NAMES, STEP_NAMES, SPEED_UNIT_CHOICES,
          WEIGHT_UNIT_CHOICES, TREK_TYPE_HIKE, STEPS_APPLY} from './TrekInfoModel';
 import { UtilsSvc, LB_PER_KG, TERRAIN_DESCRIPTIONS } from './UtilsService';
 import { APP_ICONS} from './SvgImages';
@@ -24,6 +24,7 @@ export class TrekDetails extends Component<{
   sortByDate?: boolean,         // true if sort by date in effect
   selectable ?: boolean,        // true if "show" selections are allowed/processed
   selectFn ?: Function,         // function to call when switch 'show' selections are allowed
+  toggleShowValueFn ?: Function,// function to call when toggling show value for Steps, Speed or Calories
   switchSysFn ?: Function,      // call if want to switch measurement systems
   showImagesFn ?: Function,     // function to call if user taps an image
   showGroup ?: boolean,         // show group property if true
@@ -37,9 +38,6 @@ export class TrekDetails extends Component<{
   trekInfo ?: TrekInfo         // object with all non-gps information about the Trek
 }, {} > {
 
-  @observable showSpeedOrTime: string;
-  @observable showStepsPerMin: boolean;
-  @observable showTotalCalories: boolean;
 
   tInfo = this.props.trekInfo;
   fS = this.props.filterSvc;
@@ -62,13 +60,13 @@ export class TrekDetails extends Component<{
   // initialize all the observable properties in an action for mobx strict mode
   @action
   initializeObservables = () => {
-   this.showSpeedOrTime = 'speed';
-   this.showStepsPerMin = false;
-   this.showTotalCalories = true;
+   this.fS.setShowAvgSpeed(true);
+   this.fS.setShowStepsPerMin(false);
+   this.fS.setShowTotalCalories(true);
   }
 
   formattedSpeed = () => {
-    if (this.showSpeedOrTime === 'speed') {
+    if (this.fS.showAvgSpeed) {
       return this.tInfo.averageSpeed;
     }
     return this.tInfo.timePerDist;
@@ -135,24 +133,6 @@ export class TrekDetails extends Component<{
     return showTotal ?  this.tInfo.currentCalories : this.tInfo.currentNetCalories + '/min';
   }
 
-  // toggle between displaying time/distance and distance/time
-  @action
-  toggleAvgSpeedorTimeDisplay = () => {
-    this.showSpeedOrTime = SWITCH_SPEED_AND_TIME[this.showSpeedOrTime];
-  }
-
-  // toggle between displaying total steps and steps/min
-  @action
-  toggleShowStepsPerMin = () => {
-    this.showStepsPerMin = !this.showStepsPerMin;
-  }
-
-  // toggle between displaying total calories and calories/min
-  @action
-  toggleShowTotalCalories = () => {
-    this.showTotalCalories = !this.showTotalCalories;
-  }
-
   callEditTrekLabel = (field: string) => {
     this.props.loggingSvc.editTrekLabel(false, field)
     .then(() => {})
@@ -171,13 +151,13 @@ export class TrekDetails extends Component<{
         if (this.props.switchSysFn) { this.props.switchSysFn(); }
         break;
       case 'Speed':
-        this.toggleAvgSpeedorTimeDisplay();
+        this.props.toggleShowValueFn('Speed');
         break;
       case 'Steps':
-        this.toggleShowStepsPerMin();
+        this.props.toggleShowValueFn('Steps');
         break;
       case 'Cals':
-        this.toggleShowTotalCalories();
+        this.props.toggleShowValueFn('Cals');
         break;
       case 'Course':
         this.props.showCourseEffortFn();
@@ -202,7 +182,7 @@ export class TrekDetails extends Component<{
     const uSvc = this.props.utilsSvc;
     const selectable = this.props.selectable;
     const sortVal = selectable === true ? this.props.sortBy : '';
-    const showSpeed = this.showSpeedOrTime === 'speed';
+    const showSpeed = this.fS.showAvgSpeed;
     const hasLabel = tInfo.trekHasLabel();
     const hasNotes = tInfo.trekHasNotes();
     const hasImages = tInfo.haveTrekImages();
@@ -213,9 +193,9 @@ export class TrekDetails extends Component<{
     const trekImageWidth = trekImageHeight * .75;
     const sortIconSize = 20;
     const speedLabel = showSpeed ? 'Average Speed' : 'Average Pace';
-    const stepsLabel = (this.showStepsPerMin) ? (STEP_NAMES[tInfo.type] + ' Rate')
+    const stepsLabel = (this.fS.showStepsPerMin) ? (STEP_NAMES[tInfo.type] + ' Rate')
                                               : PLURAL_STEP_NAMES[tInfo.type];
-    const calsLabel  = (this.showTotalCalories) ? 'Calories' : 'Calorie Rate';
+    const calsLabel  = (this.fS.showTotalCalories) ? 'Calories' : 'Calorie Rate';
     const carIconSize = 14;
 
     let imageData = [];
@@ -574,7 +554,7 @@ export class TrekDetails extends Component<{
               sortType='Cals'
               icon="Fire"
               label={calsLabel}
-              valueFn={() => this.formattedCalories(this.showTotalCalories)}
+              valueFn={() => this.formattedCalories(this.fS.showTotalCalories)}
               selValue={true}
             />
             {STEPS_APPLY[tInfo.type] && 
@@ -584,7 +564,7 @@ export class TrekDetails extends Component<{
                 sortType='Steps'
                 icon={tInfo.type}
                 label={stepsLabel}
-                valueFn={() => tInfo.formattedSteps(this.showStepsPerMin)}
+                valueFn={() => tInfo.formattedSteps(this.fS.showStepsPerMin)}
                 selValue={true}
               />
             }

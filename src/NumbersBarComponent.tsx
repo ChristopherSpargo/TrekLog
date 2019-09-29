@@ -87,7 +87,7 @@ class NumbersBar extends Component<
       ? tInfo.type + " in progress"
       : "No Label";
     const noLabel = labelText === "No Label";
-    const nHt = small ? 280 : (height - CONTROLS_HEIGHT - HEADER_HEIGHT);
+    const nHt = small ? 300 : (height - CONTROLS_HEIGHT - HEADER_HEIGHT);
     const statsAreaHt = nHt;
     const areaHeight = statsAreaHt;
     const typeIconSize = 20;

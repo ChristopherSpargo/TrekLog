@@ -2,7 +2,7 @@ import React, { useContext } from "react";
 import { View, StyleSheet, Text, Dimensions } from "react-native";
 import { RectButton } from "react-native-gesture-handler";
 
-import { UiThemeContext, TrekInfoContext, HEADER_HEIGHT } from "./App";
+import { UiThemeContext, TrekInfoContext } from "./App";
 import SvgIcon from "./SvgIconComponent";
 import { APP_ICONS } from "./SvgImages";
 import { TrekInfo } from './TrekInfoModel';
@@ -11,6 +11,11 @@ import { TrekInfo } from './TrekInfoModel';
 // this component provides a title for a page 
 // and optionally a group identifier that can act as a selector
 function PageTitle({
+  icon = undefined,     // icon to display before title text
+  iconColor = undefined,// color for icon
+  iconFn = undefined,   // function to execute on press of the icon
+  iconFnArg = undefined, // argument to pass to iconFn
+  iconFnDisabled = undefined,  // do not respond to icon if this is true
   titleText,            // text to display for title
   style=undefined,      // styling to add to default styling
   groupName=undefined,  // group name to show on right
@@ -20,17 +25,22 @@ function PageTitle({
   const trekInfo: TrekInfo = useContext(TrekInfoContext);
   const { width } = Dimensions.get('window');
 
-  const { disabledTextColor, highTextColor, rippleColor, secondaryColor
-        } = uiTheme.palette[trekInfo.colorTheme];
-  const { fontRegular, pageTitle } = uiTheme; 
-  const groupTextColor = setGroupFn !== undefined ? highTextColor : disabledTextColor;
-  const groupIconColor = setGroupFn !== undefined ? secondaryColor : disabledTextColor
-
   function callSetGroupFn() {
       setGroupFn();
   }
 
+  function callIconFn() {
+    iconFn(iconFnArg);
+}
+
+const { disabledTextColor, highTextColor, rippleColor, secondaryColor
+        } = uiTheme.palette[trekInfo.colorTheme];
+  const { fontRegular, pageTitle } = uiTheme; 
+  const groupTextColor = setGroupFn !== undefined ? highTextColor : disabledTextColor;
+  const canPressIcon = iconFn && !iconFnDisabled;
+
   const groupIconSize = 20;
+  const titleIconSize = 24;
   const haveGroupFn = setGroupFn !== undefined;
   const styles = StyleSheet.create({
     titleArea: {
@@ -41,6 +51,19 @@ function PageTitle({
       justifyContent: "space-between",
       width: width,
       ...style
+    },
+    iconAndTitle: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+    titleIcon: {
+      width: titleIconSize,
+      height: titleIconSize,
+      marginLeft: 6,
+      marginRight: 6,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "transparent",
     },
     titleText: {
       fontSize: 22,
@@ -67,27 +90,57 @@ function PageTitle({
 
   return  (
     <View style={styles.titleArea}>
-      <Text style={styles.titleText}>{titleText}</Text>
-          {groupName && (
-            <RectButton
-              rippleColor={rippleColor}
-              //if setGroupFn is undefined, disable this button
-              onPress={haveGroupFn ? () => callSetGroupFn() : undefined}
-            >
-              <View style={styles.groupArea}>
-                <SvgIcon
-                  style={styles.groupIcon}
-                  size={groupIconSize}
-                  paths={APP_ICONS.FolderOpenOutline}
-                  fill={groupIconColor}
-                />
-                <Text style={styles.groupText}>{groupName}</Text>
-              </View>
-            </RectButton>
-          )}
+      {icon && !canPressIcon &&
+        <View style={styles.iconAndTitle}>
+          <SvgIcon
+            style={styles.titleIcon}
+            size={titleIconSize}
+            paths={APP_ICONS[icon]}
+            fill={iconColor}
+          />
+          <Text style={[styles.titleText, {color: disabledTextColor}]}>{titleText}</Text>
+        </View>
+      }
+      {icon && canPressIcon &&
+        <RectButton
+          rippleColor={rippleColor}
+          //if setGroupFn is undefined, disable this button
+          onPress={callIconFn}
+        >
+          <View style={styles.iconAndTitle}>
+            <SvgIcon
+              style={styles.titleIcon}
+              size={titleIconSize}
+              paths={APP_ICONS[icon]}
+              fill={iconColor}
+            />
+            <Text style={styles.titleText}>{titleText}</Text>
+          </View>
+        </RectButton>
+      }
+      {!icon && titleText &&
+        <Text style={styles.titleText}>{titleText}</Text>
+      }
+      {groupName && (
+        <RectButton
+          rippleColor={rippleColor}
+          //if setGroupFn is undefined, disable this button
+          onPress={haveGroupFn ? () => callSetGroupFn() : undefined}
+        >
+          <View style={styles.groupArea}>
+            <SvgIcon
+              style={styles.groupIcon}
+              size={groupIconSize}
+              paths={APP_ICONS.FolderOpenOutline}
+              fill={secondaryColor}
+            />
+            <Text style={styles.groupText}>{groupName}</Text>
+          </View>
+        </RectButton>
+      )}
     </View>
   )
 }
-export default PageTitle;
+export default React.memo(PageTitle);
 
 

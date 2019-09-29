@@ -107,6 +107,7 @@ export const FOOTER_HEIGHT = 50;
 export const FOOTER_BUTTON_HEIGHT = 50;
 export const MENUTRIGGER_SIZE = 24;
 export const MENUTRIGGER_AREA = 30;
+export const TRACKING_STATUS_BAR_HEIGHT = 85;
 
 export const TREKLOG_GROUPS_DIRECTORY = 'Groups';
 export const TREKLOG_GROUPS_FILENAME = 'Groups.txt';
@@ -213,11 +214,16 @@ export const uiTheme = {
       infoConfirmTextColor: "white",
       warningConfirmColor: TL_YELLOW, //"#fae89e",
       warningConfirmTextColor: "rgba(0,0,0,.87)",
-      itemNotSelected: '#dfaaee',
-      gradientEndColor: "#f2f2f2",
-      itemSelectedColor: '#c4e3ed',
-      itemMeetsGoal: '#1aff66',
+      itemNotSelected: '#d795ea',
+      gradientEndColor: '#efd4f7',//"#f2f2f2",
+      itemSelectedColor: '#b1dae7',
+      gradientEndSelected: '#d8ecf3',
+      itemMeetsGoal: '#00ff55',
+      itemMeetsGoalEnd: '#66ff99',
+      itemMeetsGoalText: 'black',
       itemMissesGoal: '#ff1a1a',
+      itemMissesGoalEnd: '#ff6666',
+      itemMissesGoalText: 'white',
       statsBackgroundColor: semitransWhite_9,
       matchingMask_3: semitransWhite_3,
       matchingMask_5: semitransWhite_5,
@@ -312,11 +318,16 @@ export const uiTheme = {
       infoConfirmTextColor: "white",
       warningConfirmColor: TL_YELLOW, //"#fae89e",
       warningConfirmTextColor: "rgba(0,0,0,.87)",
-      itemNotSelected: '#dfaaee',
-      gradientEndColor: "#333333",
-      itemSelectedColor: '#c4e3ed',
-      itemMeetsGoal: '#1aff66',
+      itemNotSelected: '#d795ea',
+      gradientEndColor: "#efd4f7",
+      itemSelectedColor: '#b1dae7',
+      gradientEndSelected: '#d8ecf3',
+      itemMeetsGoal: '#00ff55',
+      itemMeetsGoalEnd: '#66ff99',
+      itemMeetsGoalText: 'black',
       itemMissesGoal: '#ff1a1a',
+      itemMissesGoalEnd: '#ff6666',
+      itemMissesGoalText: 'white',
       statsBackgroundColor: semitransBlack_8,
       matchingMask_3: semitransBlack_3,
       matchingMask_5: semitransBlack_5,

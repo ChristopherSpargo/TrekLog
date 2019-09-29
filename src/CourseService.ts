@@ -9,7 +9,7 @@ import { UtilsSvc } from './UtilsService';
 import { StorageSvc } from './StorageService';
 import { ModalModel, CONFIRM_WARNING } from './ModalModel';
 import { TREKLOG_FILENAME_REGEX, BLACKISH, 
-        //  TREKLOG_COURSES_FILENAME 
+         TREKLOG_COURSES_FILENAME 
        } from './App';
 import { IntervalSvc } from './IntervalSvc';
 import { LatLng } from 'react-native-maps';
@@ -49,7 +49,8 @@ export interface CourseListItem {
   courseImageUri?:  string,           // image of the defining course map
   definingEffort:   CourseEffort,     // trek used to define this course
   lastEffort:       CourseEffort,     // last trek time of this course
-  bestEffort:       CourseEffort      // best trek time of this course
+  bestEffort:       CourseEffort,     // best trek time of this course
+  effortCount:      number,           // current number of efforts associated with this course
 }
 
 export interface CourseList {
@@ -109,59 +110,51 @@ export class CourseSvc {
   }
 
   // create the courseListFile by reading all entries in the Courses directory
-  // private createCourseListFile = () : Promise<any> => {
-  //   let allDone : Promise<any>[] = [];
-  //   let newListItem : CourseListItem;
+  private createCourseListFile = () : Promise<any> => {
+    let allDone : Promise<any>[] = [];
+    let newListItem : CourseListItem;
 
-  //   return new Promise((resolve, reject) => {
-  //     this.storageSvc.readCoursesDirectory()      // read directory for the courses
-  //     .then((cDir) => {  
-  //       this.courseList = [];
-  //       for(let i=0; i<cDir.length; i++){
-  //         if(cDir[i].filename !== TREKLOG_COURSES_FILENAME){
-  //           let p = this.storageSvc.fetchDataItem(cDir[i].path)
-  //           allDone.push(p);
-  //           p.then((file) => {
-  //             let course : Course = JSON.parse(file);
-  //             course.definingEffort.subject.targetDate = course.definingEffort.subject.date;
-  //             course.definingEffort.subject.targetGroup = course.definingEffort.subject.group;
-  //             course.bestEffort.subject.targetDate = course.definingEffort.subject.date;
-  //             course.bestEffort.subject.targetGroup = course.definingEffort.subject.group;
-  //             course.lastEffort.subject.targetDate = course.definingEffort.subject.date;
-  //             course.lastEffort.subject.targetGroup = course.definingEffort.subject.group;
-  //             for(let i=0; i<course.efforts.length; i++){
-  //               course.efforts[i].subject.targetDate = course.definingEffort.subject.date;
-  //               course.efforts[i].subject.targetGroup = course.definingEffort.subject.group;
-  //             }
-  //             allDone.push(this.storageSvc.storeCourseFile(course));    // write updated course file
-  //             newListItem = {
-  //               name: course.name,
-  //               createDate: course.createDate,
-  //               courseImageUri: course.courseImageUri,
-  //               definingEffort : course.definingEffort,
-  //               bestEffort:  course.bestEffort,
-  //               lastEffort: course.lastEffort,
-  //             }
-  //             this.courseList.push(newListItem);
-  //           })
-  //         }
-  //       }
-  //       Promise.all(allDone)
-  //       .then(() => {
-  //           this.saveCourseList()
-  //           .then(() => resolve(RESP_OK))
-  //           .catch((err) => reject(err))         
-  //       })
-  //         .catch((err) => reject(err))
-  //       })
-  //     .catch(() => {
-  //       reject('ERROR: READING_COURSES_DIRECTORY');
-  //     })
-  //   })
-  // }
+    return new Promise((resolve, reject) => {
+      this.storageSvc.readCoursesDirectory()      // read directory for the courses
+      .then((cDir) => {  
+        this.courseList = [];
+        for(let i=0; i<cDir.length; i++){
+          if(cDir[i].filename !== TREKLOG_COURSES_FILENAME){
+            let p = this.storageSvc.fetchDataItem(cDir[i].path)
+            allDone.push(p);
+            p.then((file) => {
+              let course : Course = JSON.parse(file);
+              // update pointList for defining effort to contain distance data
+              this.utilsSvc.setPointDistances(course.definingEffort.subject.points)
+              allDone.push(this.storageSvc.storeCourseFile(course));    // write updated course file
+              newListItem = {
+                name: course.name,
+                createDate: course.createDate,
+                courseImageUri: course.courseImageUri,
+                definingEffort : course.definingEffort,
+                bestEffort:  course.bestEffort,
+                lastEffort: course.lastEffort,
+                effortCount: course.efforts.length,
+              }
+              this.courseList.push(newListItem);
+            })
+          }
+        }
+        Promise.all(allDone)
+        .then(() => {
+            this.saveCourseList()
+            .then(() => resolve(RESP_OK))
+            .catch((err) => reject(err))         
+        })
+          .catch((err) => reject(err))
+        })
+      .catch(() => {
+        reject('ERROR: READING_COURSES_DIRECTORY');
+      })
+    })
+  }
 
   // return true if courseList is non-empty
-  
   haveCourses = () => {
     return this.courseList && this.courseList.length > 0;
   }
@@ -198,6 +191,7 @@ export class CourseSvc {
     })
   }
 
+  // create a new CourseEffort object from the given information
   getNewEffort = (trek: TrekObj, method: CourseTrackingMethod, 
                                  course: Course, goalVal: number) : CourseEffort => {
     let effort : CourseEffort = {
@@ -293,7 +287,7 @@ export class CourseSvc {
   // return an array of CourseListItems for courses that start near the given location
   // if a TrekObj is given, fully compare trek to course
   nearbyCourses = (loc: LatLng, trek?: TrekObj) => {
-    let result = {best: -1, list: []};
+    let result = {best: '', list: []};
     // let temp = [];       // Debug
     let p;
     let best = trek ? 0 : 100;
@@ -304,17 +298,18 @@ export class CourseSvc {
         p = this.compareTrekWithCourse(trek, course)
         if (p >= MIN_PATH_MATCH_PERCENT) {
           result.list.push(course);
-          if(p > best) { result.best = result.list.length - 1; }
+          if(p > best) { result.best = course.name; }
         }
         // temp.push({name: course.name, pct: p})
       } else {       
         p = this.checkStartPosition(loc, course.definingEffort.subject.points);
         if (p < MAX_DIST_FROM_START){
           result.list.push(course);        
-          if(p < best) { result.best = result.list.length - 1; }
+          // if(p < best) { result.best = course.name; }
         }
       }
     }
+    // alert(JSON.stringify(temp,null,2))
     return result;
   }
 
@@ -322,7 +317,7 @@ export class CourseSvc {
   findNearbyCourses = (trek?: TrekObj, allCourses = false) => {
     return new Promise<any>((resolve) => {
       if (allCourses) {
-        resolve({best: -1, list: this.courseList});
+        resolve({best: "", list: this.courseList});
       } else {
         if (trek){
           resolve(this.nearbyCourses(undefined, trek));
@@ -352,6 +347,9 @@ export class CourseSvc {
       this.findNearbyCourses(trek, allCourses)
       .then((result) => {
         let list : CourseListItem[] = result.list;
+        list.sort((a,b) => {
+          return parseInt(b.lastEffort.subject.date) - parseInt(a.lastEffort.subject.date);
+        })
         if(list.length !== 0 || trek){
           if (trek) {
             names.push("New");
@@ -366,8 +364,14 @@ export class CourseSvc {
           if (selNames.length === 0){
             reject(MSG_NO_LIST);
           } else {
-            if (result.best !== -1) { 
-              sel = list[result.best].name;
+            if (result.best !== "") { 
+              sel = result.best;
+            } else {
+              if (list.length === 0){
+                sel = NEW_COURSE;
+              } else {
+                sel = list[0].name;
+              }
             }
             if (this.courseNames.length === 1 && trek && trek.course === sel) {
               reject(RESP_HAS_LINK); 
@@ -423,6 +427,7 @@ export class CourseSvc {
               definingEffort : newCourse.definingEffort,
               bestEffort: newEffort,
               lastEffort: newEffort,
+              effortCount: newCourse.efforts.length,
             }
             this.updateCourseList(newListItem)
             .then(() => resolve(RESP_OK))
@@ -561,6 +566,7 @@ export class CourseSvc {
                   definingEffort: {...course.definingEffort},
                   bestEffort: {...course.bestEffort},
                   lastEffort: {...course.lastEffort},
+                  effortCount: course.efforts.length,
                 }
                 this.updateCourseList(newListItem)
                 .then(() => resolve({resp: status, info: info}))
@@ -637,6 +643,7 @@ export class CourseSvc {
               definingEffort: {...course.definingEffort},
               bestEffort: {...course.bestEffort},
               lastEffort: {...course.lastEffort},
+              effortCount: course.efforts.length,
             }
             this.updateCourseList(newListItem)
             .then(() => resolve(RESP_OK))
@@ -812,6 +819,7 @@ export class CourseSvc {
             definingEffort: {...course.definingEffort},
             bestEffort: {...course.bestEffort},
             lastEffort: {...course.lastEffort},
+            effortCount: course.efforts.length,
           }
           this.updateCourseList(newListItem)
           .then(() => {
@@ -970,6 +978,7 @@ export class CourseSvc {
       this.getTrackingPath(course, this.trekInfo.trackingMethod, effort, targetTrek)
       .then((result) => {
         pList = result.list;
+        // this.utilsSvc.setPointDistances(pList);
         let params = this.getTrackingParams(course, 
           this.trekInfo.trackingMethod, this.trekInfo.trackingValue, result.trek);
         
@@ -1016,18 +1025,18 @@ export class CourseSvc {
 
   // format a string to use as the header for the tracking stats display
   formatTrackingHeader = (method: CourseTrackingMethod, goalValue: number) => {
-    let header = '.v ';
+    let header = '.vs ';
     let metersPerHour : number;
 
     switch(method){
       case 'bestTime':
-        header = '.v Best';
+        header = '.vs Best';
         break;
       case 'lastTime':
-        header = '.v Last';
+        header = '.vs Last';
         break;
       case 'otherEffort':
-        header = '.v Other';
+        header = '.vs Other';
         break;
       case 'timeLimit':
         header += this.utilsSvc.timeFromSeconds(goalValue);
@@ -1041,7 +1050,7 @@ export class CourseSvc {
         header += this.utilsSvc.formatAvgSpeed(this.trekInfo.measurementSystem, metersPerHour, 3600);
         break;
       case 'courseTime':
-        header = '.v Course';
+        header = '.vs Course';
         break;
       defalut: 
         header = method;

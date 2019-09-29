@@ -9,7 +9,8 @@ import { ProgressCircle } from 'react-native-svg-charts';
 import { HEADER_HEIGHT, INVISIBLE_Z_INDEX,
          PAGE_TITLE_HEIGHT, PROGRESS_COLORS } from './App';
 import { GoalsSvc } from './GoalsService';
-import { TrekInfo, TrekObj } from './TrekInfoModel';
+import { TrekInfo, TrekObj, RESP_CANCEL, MSG_HAS_LINK, RESP_OK, MSG_LINK_ADDED,
+  MSG_NO_LIST, MSG_NEW_COURSE_RECORD, MSG_NEW_COURSE } from './TrekInfoModel';
 import { UtilsSvc, M_PER_MILE } from './UtilsService';
 import { GoalDisplayObj, GoalObj, PROGRESS_RANGES } from './GoalsService';
 import { DIT_GOAL_CAT, CA_GOAL_CAT } from './GoalsService';
@@ -23,15 +24,20 @@ import SvgGrid from './SvgGridComponent';
 import NavMenu, { NavMenuItem } from './NavMenuComponent';
 import PageTitle from './PageTitleComponent';
 import { CourseSvc } from './CourseService';
+import { ToastModel } from './ToastModel';
+import RadioPicker from "./RadioPickerComponent";
+import { FilterSvc } from './FilterService';
 
 const goBack = NavigationActions.back() ;
 
-@inject('trekInfo', 'utilsSvc', 'uiTheme', 'goalsSvc', 'courseSvc')
+@inject('trekInfo', 'utilsSvc', 'uiTheme', 'goalsSvc', 'courseSvc', 'toastSvc', 'filterSvc')
 @observer
 class GoalDetails extends Component<{ 
   goalsSvc ?: GoalsSvc,
   courseSvc ?: CourseSvc,
   utilsSvc ?: UtilsSvc,
+  toastSvc ?: ToastModel,
+  filterSvc ?: FilterSvc,
   uiTheme ?: any,
   navigation ?: any,
   trekInfo ?: TrekInfo         // object with all non-gps information about the Trek
@@ -40,6 +46,7 @@ class GoalDetails extends Component<{
   cS = this.props.courseSvc;
   tInfo = this.props.trekInfo;
   gS = this.props.goalsSvc;
+  fS = this.props.filterSvc;
   uSvc = this.props.utilsSvc;
   activeNav : string = '';
   detailObj : GoalDisplayObj;
@@ -58,6 +65,7 @@ class GoalDetails extends Component<{
   @observable showStepsPerMin: boolean;
   @observable showTotalCalories: boolean;
   @observable openNavMenu : boolean;
+  @observable coursePickerOpen;
 
 
   _didFocusSubscription;
@@ -131,6 +139,7 @@ class GoalDetails extends Component<{
     this.showStepsPerMin = false;
     this.showTotalCalories = true;
     this.setOpenNavMenu(false);
+    this.setCoursePickerOpen(false);
    }
 
   // set observable that will cause the Interval barGraph to scroll to a given bar
@@ -331,6 +340,13 @@ class GoalDetails extends Component<{
 
   }
 
+  // switch measurements system then update the bar graph
+  switchMeasurementSystem = () => {
+    this.tInfo.switchMeasurementSystem();
+    this.gS.buildGraphData(this.detailObj, this.selectedIntervalIndex, this.displayChoice);
+    this.forceUpdate();
+  };
+
   // Display the map for the Trek at the given index in the items list of the given display object
   showTrekMap = () => {
     this.tInfo.setShowMapControls(false);
@@ -340,6 +356,7 @@ class GoalDetails extends Component<{
                         '  ' + this.tInfo.startTime,
                   changeTrekFn: this.changeTrek,
                   checkTrekChangeFn: this.checkTrekChange,
+                  switchSysFn: this.switchMeasurementSystem,
                 }, key: 'Key-SelectedTrek'});
     })
   }
@@ -495,6 +512,9 @@ class GoalDetails extends Component<{
             });
         this.props.navigation.dispatch(resetAction);          
         break;
+      case 'Course':
+        this.addCourseOrEffort();
+        break;
       default:
     }
   }
@@ -531,6 +551,77 @@ class GoalDetails extends Component<{
     this.props.navigation.navigate('Images', {cmd: 'show', setIndex: set, imageIndex: image, title: title});
   }
 
+  // toggle the selected flag
+  toggleShowValue = (type: string) => {
+    this.fS.toggleShowValue(type);
+    // if(type === this.fS.show){
+    //   if(this.fS.show === 'Speed'){
+    //     this.fS.toggleSortDirection();
+    //   }
+    //   this.fS.sortAndBuild();
+    // }
+  }
+
+  // set the open status of the coursePickerOpen component
+  @action
+  setCoursePickerOpen = (status: boolean) => {
+    this.coursePickerOpen = status;
+  };
+
+  // make this trek an effort of some course or use it to create a new course
+  addCourseOrEffort = () => {
+    let trek = this.tInfo.getSaveObj();
+    if(!trek.course || !this.cS.isCourse(trek.course)) {
+      this.cS.newCourseOrEffort(trek, this.setCoursePickerOpen)
+      .then((sel) => {
+        switch(sel.resp){
+          case RESP_CANCEL:
+            break;
+            case MSG_NO_LIST:
+              this.props.toastSvc.toastOpen({
+                tType: "Error",
+                content: 'No matching courses found.',
+              });
+              break;
+          case MSG_NEW_COURSE_RECORD:
+              this.cS.celebrateNewCourseRecord(sel.resp, sel.name, sel.info);
+              break;
+          case RESP_OK:
+            this.props.toastSvc.toastOpen({
+              tType: "Success",
+              content: MSG_LINK_ADDED + trek.type + " linked with course\n" + sel.name,
+            });
+            break;
+          case MSG_NEW_COURSE:
+            this.props.navigation.navigate("SelectedTrek", {
+              title:
+                this.props.utilsSvc.formattedLocaleDateAbbrDay(trek.date) +
+                "  " +
+                trek.startTime,
+              icon: this.tInfo.type,
+              mapDisplayMode: 'noSpeeds, noIntervals',
+              takeSnapshotMode: 'New',
+              takeSnapshotName: sel.name,
+              takeSnapshotPrompt: "CREATE COURSE\n" + sel.name
+            });
+            break;
+          default:
+        }
+      })
+      .catch((err) => {
+        this.props.toastSvc.toastOpen({
+          tType: "Error",
+          content: err,
+        });
+      })
+    } else {
+      this.props.toastSvc.toastOpen({
+        tType: "Info",
+        content: MSG_HAS_LINK + 'This ' + trek.type + ' is already\nlinked to ' + trek.course,
+      });
+    }
+  }
+
   render() {
     const {height, width} = Dimensions.get('window');
     this.detailObj = this.props.navigation.getParam('detailObj');
@@ -538,8 +629,7 @@ class GoalDetails extends Component<{
     const { mediumTextColor, pageBackground, dividerColor, highTextColor,
             itemMeetsGoal, itemMissesGoal, listIconColor, progressBackground
           } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
-    const { cardLayout,
-            pageTitle, fontRegular, fontBold, fontLightItalic
+    const { cardLayout, fontRegular, fontBold, fontLightItalic
           } = this.props.uiTheme;
     const dObj = this.detailObj;
     const validDisplayObj = dObj !== undefined && dObj.items.length > 0;
@@ -566,7 +656,9 @@ class GoalDetails extends Component<{
     const progPct = Math.round(prog * 100);
     const ind = this.uSvc.findRangeIndex(progPct, PROGRESS_RANGES);
     const pColor = PROGRESS_COLORS[ind];
-    const showType = (dObj.goal.category === DIT_GOAL_CAT) ? "Time" : "Dist";
+    const showType = (dObj.goal.category === DIT_GOAL_CAT) ? "Time" : 
+                      ((dObj.goal.metricUnits === "course" && !this.gS.intervalGraph) ? "Time" : "Dist");
+    const hasNoCourse = !this.tInfo.course || !this.cS.isCourse(this.tInfo.course);
     let navMenuItems : NavMenuItem[] = 
     [ 
         {icon: 'ArrowBack', label: 'Go Back', value: 'GoBack'},
@@ -579,9 +671,12 @@ class GoalDetails extends Component<{
       navMenuItems.unshift(
         {label: 'Detail Options', 
          submenu: [
-          {icon: 'Map', label: 'View Map', value: 'Map'},
+          {icon: 'Map', label: 'View Map', value: 'Map'}
         ]}
-      )
+      );
+      if(hasNoCourse){ 
+        navMenuItems[0].submenu.push({icon: 'Course', label: 'Link to Course', value: 'Course'});
+      }
     } 
 
     const styles=StyleSheet.create({
@@ -717,6 +812,7 @@ class GoalDetails extends Component<{
               backButtonFn={this.checkBackButton}
               openMenuFn={this.openMenu} 
             />        
+            <RadioPicker pickerOpen={this.coursePickerOpen} />
             <View style={styles.listArea}>
               <PageTitle titleText={pTitle}/>
               {(validDisplayObj) && 
@@ -864,6 +960,7 @@ class GoalDetails extends Component<{
                         <TrekDetails
                           showImagesFn={this.showTrekImage}
                           showCourseEffortFn={this.showCourseEffort}
+                          toggleShowValueFn={this.toggleShowValue}
                         />
                       }
                     </View>

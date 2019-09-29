@@ -59,7 +59,7 @@ class SelectedTrek extends Component<{
   @observable intervalsActive;
   @observable graphOpen;
   @observable scrollToBar;
-  @observable speedDialZoom;
+  @observable speedDialZoomedIn;
   @observable keyboardOpen;
   @observable openItems;
 
@@ -120,7 +120,7 @@ class SelectedTrek extends Component<{
     this.intervalFormOpen = false;
     this.intervalsActive = false;
     this.graphOpen = false; 
-    this.speedDialZoom = false;
+    this.speedDialZoomedIn = false;
     this.keyboardOpen = false;
     this.setOpenItems(false);
     this.setRateRangeObj(undefined)
@@ -450,7 +450,7 @@ class SelectedTrek extends Component<{
           if (!editAbort) {
             this.iSvc.getIntervalData(this.iSvc.intervalDist, this.tInfo.pointList);
             this.iSvc.buildGraphData(this.iSvc.intervalData)
-            this.setSpeedDialZoom(false);
+            this.setSpeedDialZoomedIn(false);
             this.setSelectedIntervalIndex(0)
             this.setGraphOpen(true);
             this.iSvc.setIntervalChange(change);
@@ -471,7 +471,7 @@ class SelectedTrek extends Component<{
   cancelIntervalsActive = () => {
     if(this.intervalsActive){
       this.setLayoutOpts("All");
-      this.setSpeedDialZoom(false);
+      this.setSpeedDialZoomedIn(false);
       this.setGraphOpen(false);
       this.setOpenItems(false)
     }
@@ -507,22 +507,22 @@ class SelectedTrek extends Component<{
     this.selectedIntervalIndex = val;
   }
 
-  // set the value of the speedDialZoom property
+  // set the value of the speedDialZoomedIn property
   @action
-  setSpeedDialZoom = (status: boolean) => {
-    this.speedDialZoom = status;
+  setSpeedDialZoomedIn = (status: boolean) => {
+    this.speedDialZoomedIn = status;
   }
   
-  // toggle the value of the speedDialZoom property
+  // toggle the value of the speedDialZoomedIn property
   toggleSpeedDialZoom = (val: string, toggle = true) => {
-    if (toggle) { this.setSpeedDialZoom(!this.speedDialZoom); }
+    if (toggle) { this.setSpeedDialZoomedIn(!this.speedDialZoomedIn); }
     this.setLayoutOpts(val);
   }
 
   // show the images for the selected image marker
   showCurrentImageSet = (index: number) => {
     let title = this.tInfo.formatImageTitle(index, 0);
-    this.props.navigation.navigate('Images', {cmd: 'show', setIndex: index, title: title});
+    this.props.navigation.navigate('Images', {cmd: 'show', setIndex: index, imageIndex: 0, title: title});
   }
 
   // create a LatLng[] for the tracking course path
@@ -566,17 +566,9 @@ class SelectedTrek extends Component<{
             if (ss.coursePos < ss.coursePosMax){
               let timeAtDistCourse;
 
-              // if(replayOn){
-                // replay is running
                 timeAtDistCourse = this.lSvc.getPointAtLimit(ss.coursePath, 
                                                               trekPtInfo.dist, ss.courseDist, 'Dist').time;
                 this.setTrackingStatsTime(timeAtDistCourse - Math.min(ss.trekPos, ss.trekPosMax));
-              // } else {
-              //   // replay not yet started
-              //   timeAtDistCourse = this.lSvc.getPointAtLimit(ss.coursePath, 
-              //                                                 coursePtInfo.dist, ss.courseDist, 'Dist').time;
-              //   this.setTrackingStatsTime(ss.coursePosMax - timeAtDistCourse);
-              // }
             } else {        
               // but, course has finished. (course dist shorter than trek)
               // show positions when course finished if replay not running, otherwise let trek play out
@@ -588,17 +580,9 @@ class SelectedTrek extends Component<{
             if (ss.trekPos < ss.trekPosMax){
               let timeAtDistTrek;
 
-              // if(replayOn){
-                // replay is running
                 timeAtDistTrek = this.lSvc.getPointAtLimit(ss.trekPath, 
                                                             coursePtInfo.dist, ss.trekDist, 'Dist').time;
                 this.setTrackingStatsTime(Math.min(ss.coursePos, ss.coursePosMax) - timeAtDistTrek);
-              // } else {
-              //   // replay not yet started
-              //   timeAtDistTrek = this.lSvc.getPointAtLimit(ss.trekPath, 
-              //                                               trekPtInfo.dist, ss.trekDist, 'Dist').time;
-              //   this.setTrackingStatsTime(timeAtDistTrek - ss.trekPosMax);
-              // }
             } else {        
               // but, trek has finished. (trek dist shorter than course)
               // show positions when trek finished if replay not running, otherwise let course play out
@@ -840,7 +824,7 @@ class SelectedTrek extends Component<{
               this.props.navigation.setParams({ title: title, icon: this.tInfo.type });
               this.tInfo.setWaitingForSomething();
               // set to show full path on map
-              this.setSpeedDialZoom(false);
+              this.setSpeedDialZoomedIn(false);
               this.setRateRangeObj(this.currRangeData);
               this.setLayoutOpts("NewAll");    
             }
@@ -912,17 +896,17 @@ class SelectedTrek extends Component<{
     const { fontRegular, fontLight
           } = this.props.uiTheme;
     const { highTextColor, highlightColor, lowTextColor, matchingMask_7, textOnTheme,
-            pageBackground, dividerColor,
+            pageBackground, dividerColor, matchingMask_8,
             trackingStatsBackgroundHeader } = this.props.uiTheme.palette[this.tInfo.colorTheme];
     const displayInts = !this.mapDisplayMode.includes('noIntervals');
     const ints = (displayInts && this.intervalsActive ) ? this.iSvc.intervalDist : undefined;
     const iMarkers = ints ? this.iSvc.intervalData.markers : undefined;
     const changeZFn = iMarkers ? this.toggleSpeedDialZoom : this.toggleSpeedDialZoom;
-    const sdIcon = iMarkers ? (this.speedDialZoom ? "ZoomOut" : "ZoomIn") 
-                            : (this.speedDialZoom ? "ZoomOutMap" : "Location");
-    const sdValue = iMarkers ? (this.speedDialZoom ? "All" : "Interval")
-                             : (this.speedDialZoom ? "All" : "Current");
-    const interval = ((iMarkers !== undefined) && this.speedDialZoom) ? this.selectedIntervalIndex : undefined;
+    const sdIcon = iMarkers ? (this.speedDialZoomedIn ? "ZoomOut" : "ZoomIn") 
+                            : (this.speedDialZoomedIn ? "ZoomOutMap" : "Location");
+    const sdValue = iMarkers ? (this.speedDialZoomedIn ? "All" : "Interval")
+                             : (this.speedDialZoomedIn ? "All" : "Current");
+    const interval = ((iMarkers !== undefined) && this.speedDialZoomedIn) ? this.selectedIntervalIndex : undefined;
     const showButtonHeight = 20;
     const caHt = SHORT_CONTROLS_HEIGHT;
     const graphAndControlsHt = INTERVAL_AREA_HEIGHT;
@@ -1083,7 +1067,8 @@ class SelectedTrek extends Component<{
           {(showControls || tracking) &&
             <TrekLogHeader titleText={this.props.navigation.getParam('title', '')}
                            icon={this.props.navigation.getParam('icon', '')}
-                           backgroundColor={tracking ? trackingStatsBackgroundHeader : matchingMask_7}
+                           iconColor={this.props.navigation.getParam('iconColor')}
+                           backgroundColor={tracking ? trackingStatsBackgroundHeader : matchingMask_8}
                            textColor={textOnTheme}
                            position="absolute"
                            backButtonFn={() => this.props.navigation.dispatch(goBack)}

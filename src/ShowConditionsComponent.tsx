@@ -1,6 +1,6 @@
 import React, { Component } from 'react';
 import { NavigationActions, StackActions } from 'react-navigation';
-import { View, StyleSheet, Text } from 'react-native'
+import { View, StyleSheet } from 'react-native'
 import { observable, action } from "mobx";
 import { observer, inject } from "mobx-react";
 

@@ -275,11 +275,11 @@ class Goals extends Component<{
   }
   render() {
 
-    const { mediumTextColor, disabledTextColor, dividerColor, highlightedItemColor, disabledHeaderTextColor,
+    const { mediumTextColor, disabledTextColor, dividerColor, highlightedItemColor,
             pageBackground, highTextColor, secondaryColor, rippleColor, textOnSecondaryColor, progressBackground,
             cardItemTitleColor, altCardBackground
           } = this.props.uiTheme.palette[this.tI.colorTheme];
-    const { cardLayout, pageTitle, fontRegular, fontLight } = this.props.uiTheme;
+    const { cardLayout, fontRegular, fontLight } = this.props.uiTheme;
     const displayList = this.gS.displayList && this.gS.displayList.length > 0;
     const iconSize = 40;
     const progressCircleSize = 40;

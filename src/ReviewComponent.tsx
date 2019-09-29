@@ -6,12 +6,13 @@ import { observer, inject } from "mobx-react";
 import { action, observable } from "mobx";
 import { NavigationActions, StackActions } from "react-navigation";
 
-import { FilterSvc } from "./FilterService";
+import { FilterSvc, SORTDIRECTION_ASCEND } from "./FilterService";
 import { TrekInfo, TrekObj, RESP_CANCEL, MSG_HAS_LINK, RESP_OK, MSG_LINK_ADDED,
+          SortByTypes,
           MSG_NO_LIST, MSG_NEW_COURSE_RECORD, MSG_NEW_COURSE } from "./TrekInfoModel";
 import { UtilsSvc } from "./UtilsService";
 import { ModalModel } from "./ModalModel";
-import { HEADER_HEIGHT, PAGE_TITLE_HEIGHT } from "./App";
+import { HEADER_HEIGHT, PAGE_TITLE_HEIGHT, TREK_TYPE_COLORS_OBJ } from "./App";
 import { ToastModel } from "./ToastModel";
 import SvgButton from "./SvgButtonComponent";
 import Waiting from "./WaitingComponent";
@@ -30,8 +31,6 @@ import SvgGrid from './SvgGridComponent';
 import NavMenu from './NavMenuComponent';
 import PageTitle from './PageTitleComponent';
 
-export type SortByTypes = "Dist" | "Time" | "Date" | "Speed" | "Steps" | "Cals";
-export type ShowTypes = "Dist" | "Time" | "Steps" | "Speed" | "Cals" | "Date";
 
 const goBack = NavigationActions.back();
 
@@ -167,34 +166,14 @@ class ReviewTreks extends Component<
   showTrekMap = (indx: number) => {
     if (this.fS.filteredTreks.length) {
       let trek = this.tInfo.allTreks[this.fS.filteredTreks[indx]];
-      // this.tInfo.setTrekProperties(trek);
-      // let list = this.tInfo.pointList;
-      // this.tInfo.badPointList = [];
-      // let newList : TrekPoint[];            // **Debug
-      // newList = [];
-      // bads = 0;
-      // for (let i=1; i<list.length; i++) {
-      //   if (this.props.utilsSvc.computeImpliedSpeed(list[i-1], list[i]) < list[i].s * 5) {
-      //     // this.tInfo.badPointList.push({p1: list[i-1], p2: list[i]});
-      //     newList.push(list[i])
-      //   } else {
-      //     bads++;
-      //   }
-      // }
-      // list = newList;
-      // for (let i=1; i<list.length; i++) {
-      //   if (this.props.utilsSvc.computeImpliedSpeed(list[i-1], list[i]) > list[i].s * 5) {
-      //     this.tInfo.badPointList.push(i);
-      //   }
-      // }
-      // this.tInfo.pointList = newList;
-      this.tInfo.setShowMapControls(false);
+      this.tInfo.setShowMapControls(true);
       this.props.courseSvc.clearTrackingSnapshot();
       this.props.navigation.navigate({ 
           routeName: "SelectedTrek", 
           params: {
             title: this.props.utilsSvc.formattedLocaleDateAbbrDay(trek.date) + "  " + trek.startTime,
             icon: this.tInfo.type,
+            iconColor: TREK_TYPE_COLORS_OBJ[this.tInfo.type],
             switchSysFn: this.switchMeasurementSystem,
             changeTrekFn: this.changeTrek,
             checkTrekChangeFn: this.checkTrekChange,
@@ -229,7 +208,6 @@ class ReviewTreks extends Component<
         resolve("");
       }
       trek = this.tInfo.allTreks[this.fS.filteredTreks[indx]];
-      this.tInfo.setShowMapControls(false);
       this.fS.trekSelected(indx);
       resolve(
         this.props.utilsSvc.formattedLocaleDateAbbrDay(trek.date) +
@@ -431,6 +409,17 @@ class ReviewTreks extends Component<
     });
   };
 
+  // toggle the selected falg and rebuild the graph
+  toggleShowValue = (type: string) => {
+    this.fS.toggleShowValue(type);
+    if(type === this.fS.show){
+      if(this.fS.show === 'Speed'){
+        this.fS.toggleSortDirection();
+      }
+      this.fS.sortAndBuild();
+    }
+  }
+
   // process a touch on a switchable value, allow touch feedback first
   callSwitchFn = (id: string) => {
     requestAnimationFrame(() => {
@@ -541,14 +530,14 @@ class ReviewTreks extends Component<
     const graphAreaWidth = width;
     const yAxisWidth = 60;
     const graphWidth = graphAreaWidth - yAxisWidth - 10;
-    const sortAsc = this.fS.sortDirection === 'Ascend';
-    const navMenuItems = 
+    const sortAsc = this.fS.sortDirection === SORTDIRECTION_ASCEND;
+    const hasNoCourse = !this.tInfo.course || !this.props.courseSvc.isCourse(this.tInfo.course);
+    let navMenuItems = 
     [ gotTreks ? 
         {label: 'Review Options', 
          submenu: [
           {icon: 'Delete', label: 'Delete', value: 'Delete'},
           {icon: extraFilters ? 'FilterRemove' : 'Filter', label: 'Edit Filters', value: 'Filter'},
-          {icon: 'Course', label: 'Link to Course', value: 'Course'},
           {icon: 'Map', label: 'View Map', value: 'Map'},
           // {icon: 'Upload', label: 'Upload Trek', value: 'Upload'},
         ]} :
@@ -562,6 +551,12 @@ class ReviewTreks extends Component<
         {icon: 'Target', label: 'Goals', value: 'Goals'},
         {icon: 'Settings', label: 'Settings', value: 'Settings'},
         {icon: 'PartCloudyDay', label: 'Conditions', value: 'Conditions'}]  
+
+    if(gotTreks && hasNoCourse){ 
+      navMenuItems[0].submenu.push({icon: 'Course', label: 'Link to Course', value: 'Course'});
+    }
+    const graphLabelType = (this.fS.show === 'Speed' && !this.fS.showAvgSpeed)
+                          ? YAXIS_TYPE_MAP['pace'] : YAXIS_TYPE_MAP[this.fS.show];
 
     const styles = StyleSheet.create({
       container: {
@@ -666,7 +661,7 @@ class ReviewTreks extends Component<
                         <View style={styles.sortCtrls}>
                           {this.fS.sortByDate && (
                             <SvgButton
-                              onPressFn={this.fS.toggleSortDirection}
+                              onPressFn={this.fS.toggleSort}
                               borderWidth={0}
                               areaOffset={0}
                               size={30}
@@ -682,7 +677,7 @@ class ReviewTreks extends Component<
                           )}
                           {!this.fS.sortByDate && (
                             <SvgButton
-                              onPressFn={this.fS.toggleSortDirection}
+                              onPressFn={this.fS.toggleSort}
                               style={sortAsc ? {transform: ([{ rotateX: "180deg" }])} : {}}
                               borderWidth={0}
                               areaOffset={0}
@@ -706,7 +701,7 @@ class ReviewTreks extends Component<
                               majorTics={5}
                               title={this.fS.barGraphData.title}
                               dataRange={this.fS.barGraphData.range}
-                              dataType={YAXIS_TYPE_MAP[this.fS.show]}
+                              dataType={graphLabelType}
                             />
                             <View style={styles.graph}>
                               <SvgGrid
@@ -742,6 +737,7 @@ class ReviewTreks extends Component<
                           showImagesFn={this.showTrekImage}
                           selected={this.fS.selectedTrekIndex}
                           showCourseEffortFn={this.showCourseEffort}
+                          toggleShowValueFn={this.toggleShowValue}
                         />
                       </View>
                     </ScrollView>

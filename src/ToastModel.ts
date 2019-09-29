@@ -47,6 +47,7 @@ export class ToastModel {
   @observable toastIsOpen;    // when true, Toast component will be open
 
   @observable tData  : ToastData;         // data object for Toast
+  toastQueue : ToastData[] = [];
   timerId: number;
 
   constructor () {
@@ -60,23 +61,38 @@ export class ToastModel {
     this.tData = {};
   }
 
-  @action
   toastOpen = (tData: ToastData) => {
-    this.tData.tType        = tData.tType || 'Info';
-    this.tData.icon         = tData.icon || this.TOAST_CONFIGS[this.tData.tType].icon;
-    this.tData.iColor       = tData.iColor || this.TOAST_CONFIGS[this.tData.tType].iColor;
-    this.tData.tColor       = tData.tColor || this.TOAST_CONFIGS[this.tData.tType].tColor;
-    this.tData.content      = tData.content || '';
-    this.tData.bColor       = tData.bColor || this.TOAST_CONFIGS[this.tData.tType].bColor
-    this.tData.time         = tData.time || this.TOAST_CONFIGS[this.tData.tType].time;
-    this.tData.location     = tData.location || 'Bottom';
-    this.tData.waitForOK    = tData.waitForOK;
-    this.toastIsOpen = true;
+    this.toastQueue.push(tData);
+    if (!this.toastIsOpen) {
+      this.processToastQueue();
+    }
+  }
+
+
+  @action
+  processToastQueue = () => {
+    if (this.toastQueue.length){
+      let tData = this.toastQueue.shift();
+      this.tData.tType        = tData.tType || 'Info';
+      this.tData.icon         = tData.icon || this.TOAST_CONFIGS[this.tData.tType].icon;
+      this.tData.iColor       = tData.iColor || this.TOAST_CONFIGS[this.tData.tType].iColor;
+      this.tData.tColor       = tData.tColor || this.TOAST_CONFIGS[this.tData.tType].tColor;
+      this.tData.content      = tData.content || '';
+      this.tData.bColor       = tData.bColor || this.TOAST_CONFIGS[this.tData.tType].bColor
+      this.tData.time         = tData.time || this.TOAST_CONFIGS[this.tData.tType].time;
+      this.tData.location     = tData.location || 'Bottom';
+      this.tData.waitForOK    = tData.waitForOK;
+      this.toastIsOpen = true;
+    }
   }
 
   @action
   closeToast = () => {
-    this.toastIsOpen = false;      
+    this.toastIsOpen = false;  
+    // allow toastIsOpen to propogate and close the prior toast (if any)
+    requestAnimationFrame(() => {
+      this.processToastQueue(); 
+    })   
   }
 
 }

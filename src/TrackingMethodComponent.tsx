@@ -59,18 +59,31 @@ function TrackingMethodForm({
 
   useEffect(() => {                       // DidUpdate
     if (inMethod !== method) {
-      updateMethod(inMethod);
+      if (inValue === undefined) {
+        updateMethod(inMethod)
+      } else {
+        updateMethod(inMethod !== 'courseTime' ? 'challenge' : inMethod);
+      }
     }
   },[inMethod])
+
+  useEffect(() => {                       // DidUpdate
+    if (inValue === undefined) {
+      updateMethod(inMethod)
+    } else {
+      updateMethod(inMethod !== 'courseTime' ? 'challenge' : inMethod);
+    }
+  },[title])
 
   function removeListeners() {
     BackHandler.removeEventListener('hardwareBackPress', onBackButtonPressTMethods);
     bHandler.current = false;
   }
 
-  const trackingMethods = ['courseTime', 'lastTime', 'bestTime', 'otherEffort', 
+  const trackingMethods = ['challenge', 'courseTime', 'lastTime', 'bestTime', 'otherEffort', 
                            'timeLimit', 'avgSpeed', 'avgRate'];
   const trackingMethodsLabels = [
+    'initial effort challenged',
     'standard time for course', 
     'last effort',
     'best effort',
@@ -90,13 +103,16 @@ function TrackingMethodForm({
 
   function setValueInput(val: string) {
     let v = parseFloat(val);
-    onChangeFn({value: v, method: method});
+    onChangeFn({value: v, method: method === 'challenge' ? inMethod : method});
   }
 
-  function updateMethod(val: CourseTrackingMethod) {
+  function updateMethod(val: string) {
     setMethod(val);
     setValue(''); 
     switch(val){
+      case 'challenge':
+        setValue(inValue.toString());
+        break;
       case 'courseTime':
         setValue(course.definingEffort.subject.duration.toString());
         break;
@@ -145,12 +161,19 @@ function TrackingMethodForm({
     const cTime = method === 'courseTime';
     const bTime = method === 'bestTime';
     const lTime = method === 'lastTime';
+    const challenge = method === 'challenge';
     const singleEffort = course.efforts.length === 1;
 
     let replayChoices = [];
     let replayLabels = [];
     trackingMethods.forEach((method, idx) => {
       switch(method){
+        case 'challenge':
+          if (inValue !== undefined && inMethod !== 'courseTime'){
+            replayChoices.push(method);
+            replayLabels.push(trackingMethodsLabels[idx])
+          }
+          break;
         case 'courseTime':
           if(trek === undefined || trek.date !== course.definingEffort.subject.date || 
                                         trek.group !== course.definingEffort.subject.group) {
@@ -314,7 +337,7 @@ function TrackingMethodForm({
                       itemHeight={radioItemHt}
                       radioFirst
                     />
-                    {(cTime || bTime || lTime) &&
+                    {(cTime || bTime || lTime || challenge) &&
                       <View style={styles.inputVal}>
                         <TimeInput
                           timeVal={value}

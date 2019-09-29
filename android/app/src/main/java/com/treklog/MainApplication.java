@@ -3,6 +3,7 @@ package com.treklog;
 import android.app.Application;
 
 import com.facebook.react.ReactApplication;
+import fr.bamlab.rnimageresizer.ImageResizerPackage;
 import com.marianhello.bgloc.react.BackgroundGeolocationPackage;
 import com.RNFetchBlob.RNFetchBlobPackage;
 import com.swmansion.gesturehandler.react.RNGestureHandlerPackage;
@@ -31,6 +32,7 @@ public class MainApplication extends Application implements ReactApplication {
     protected List<ReactPackage> getPackages() {
       return Arrays.<ReactPackage>asList(
           new MainReactPackage(),
+            new ImageResizerPackage(),
             new RNFetchBlobPackage(),
             new BackgroundGeolocationPackage(),
             new RNGestureHandlerPackage(),

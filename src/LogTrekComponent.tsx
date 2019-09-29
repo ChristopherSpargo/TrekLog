@@ -39,7 +39,7 @@ import {
   RESP_OK,
   TrekObj,
   TREK_TYPE_BOARD,
-  TREK_TYPE_DRIVE
+  TREK_TYPE_DRIVE,
 } from "./TrekInfoModel";
 import { ToastModel } from "./ToastModel";
 import { ModalModel, CONFIRM_INFO } from "./ModalModel";
@@ -49,13 +49,11 @@ import {
   M_PER_MILE,
   LB_PER_KG,
   UtilsSvc,
-  ACTIVITY_SPEEDS,
-  ACTIVITY_BY_SPEED
 } from "./UtilsService";
 import { WeatherSvc } from "./WeatherSvc";
 import { GoalObj, GoalsSvc, GoalDisplayItem } from "./GoalsService";
 import { BIG_CONTROLS_HEIGHT, NAV_ICON_SIZE, BIG_NAV_ICON_SIZE, HEADER_HEIGHT, 
-         TREKLOG_FILENAME_REGEX, COLOR_THEME_LIGHT } from "./App";
+         TREKLOG_FILENAME_REGEX, COLOR_THEME_LIGHT, TRACKING_STATUS_BAR_HEIGHT, TREK_TYPE_COLORS_OBJ } from "./App";
 import SpeedDial, { SpeedDialItem } from "./SpeedDialComponent";
 import TrekLogHeader from "./TreklogHeaderComponent";
 import { StorageSvc } from "./StorageService";
@@ -71,6 +69,7 @@ import { FilterSvc } from "./FilterService";
 import { CourseSvc, Course } from "./CourseService";
 import NavMenu from './NavMenuComponent';
 import PageTitle from './PageTitleComponent';
+import TrackingStatusBar from './TrackingStatusBar';
 
 
 const goBack = NavigationActions.back();
@@ -500,7 +499,7 @@ class LogTrek extends Component<
   // Start the logging process, timer starts when 1st GPS point recieved
   startLogging = () => {
     this.logSvc.startTrek();
-    this.trekInfo.setSpeedDialZoom(true);
+    this.trekInfo.setSpeedDialZoomedIn(true);
     this.logSvc.startPositionTracking(this.gotPos); // this sets minPointDist and starts geolocation
   };
 
@@ -692,7 +691,7 @@ class LogTrek extends Component<
     this.trekInfo.resObj = undefined;
     this.logSvc.setLayoutOpts("All");
     this.openGoalNotification();
-    this.trekInfo.setSpeedDialZoom(false);
+    this.trekInfo.setSpeedDialZoomedIn(false);
   }
 
   // user is finished with post-log review
@@ -764,10 +763,10 @@ class LogTrek extends Component<
     this.oldTrekType = this.trekInfo.type;
     this.limitProps = {
       heading: "Trek Type",
-      headingIcon: "Hike",
+      headingIcon: "BulletedList",
       onChangeFn: this.trekInfo.updateType,
-      okText: "OK",
-      label: "Select trek type to use:",
+      okText: "Auto",
+      label: "Select trek type for new log:",
       typeSelect: true
     };
     this.trekInfo.limitsCloseFn = this.selectTrekType;
@@ -826,14 +825,15 @@ class LogTrek extends Component<
     this.setTrackingMethodFormOpen(true);
   };
 
-  // Start the logging process for a Hike.
+  // Start the logging process tracking a prior effort.
   startTrekWithTracking = (start: boolean) => {
-    // this.setTrackingMethodFormDone("");
     this.setLockNavMenu(false);
     if (start) {
       this.trekInfo.trackingCourse = this.courseToTrack;
       this.startLogging()
       this.setTrackingMethodFormOpen(false);
+      this.logSvc.setLayoutOpts("All");
+      this.trekInfo.setSpeedDialZoomedIn(false);
       this.showMap();
     } else {
       this.setTrackingMethodFormOpen(false);
@@ -938,7 +938,7 @@ class LogTrek extends Component<
             content: msg,
             itemList: itemList,
             allowOutsideCancel: true,
-            okText: "KEEP IT UP!"
+            okText: "OK"
           })
           .then(() => {})
           .catch(() => {})
@@ -1136,37 +1136,13 @@ class LogTrek extends Component<
   // format the title for the default log screen.
   // change according to the activity and speed
   formatBigTitle = (startOk: boolean, reviewOk): string => {
-    let thisType = this.trekInfo.type;
     let label = "";
-    let sr = 0;
 
     if (startOk) {
-      label = "Start " + TREK_TYPE_LABELS[thisType];
+      label = "Start " + TREK_TYPE_LABELS[this.trekInfo.type];
     } else {
       if (reviewOk) {
         label = "Finished";
-      } else {
-        if (this.trekInfo.pointList.length) {
-          let sp = this.trekInfo.formattedCurrentSpeed(
-            this.trekInfo.measurementSystem,
-            true
-          ) as number;
-          // what is the speed range for the current speed
-          sr = this.props.utilsSvc.findRangeIndex(sp, ACTIVITY_SPEEDS);
-          if (sp === 0 || sr === -1) {
-            label = "Stopped";
-            if( sp === 0 ) { 
-              this.trekInfo.haveShownDriving = false; 
-            }
-          } else {
-            if (!this.trekInfo.haveShownDriving) {
-              label = ACTIVITY_BY_SPEED[thisType][sr];
-              this.trekInfo.haveShownDriving = label === "Driving";
-            } else {
-              label = "Driving";
-            }
-          }
-        }
       }
     }
     return label;
@@ -1216,19 +1192,20 @@ class LogTrek extends Component<
   };
 
   render() {
-    const numPts = this.trekInfo.trekPointCount;
-    const bgImage = this.trekInfo.haveBackgroundImage();
+    const tI = this.trekInfo;
+    const numPts = tI.trekPointCount;
+    const bgImage = tI.haveBackgroundImage();
     const formOpen = this.limitFormOpen || this.trackingMethodFormOpen || this.coursePickerOpen ||
                       this.radioPickerOpen;
     const stopOk =
       !this.waitingForSomething &&
-      (this.trekInfo.timerOn ||
-        this.trekInfo.logging ||
-        this.trekInfo.limitsActive);
+      (tI.timerOn ||
+        tI.logging ||
+        tI.limitsActive);
     const startOk =
-      !stopOk && !this.trekInfo.pendingReview;
+      !stopOk && !tI.pendingReview;
     const reviewOk =
-      !stopOk && this.trekInfo.pendingReview;
+      !stopOk && tI.pendingReview;
     const { controlsArea, navItem, navIcon, bigNavItemWithLabel, navItemWithLabel, navItemLabel,
             fontLight } = this.uiTheme;
     const {
@@ -1246,7 +1223,6 @@ class LogTrek extends Component<
       disabledTextColor,
       headerBorderColor,
       almostTransparent,
-      disabledHeaderTextColor
     } = this.uiTheme.palette[this.props.trekInfo.colorTheme];
     const lightTheme = this.props.trekInfo.colorTheme === COLOR_THEME_LIGHT;
     const navIconSize = NAV_ICON_SIZE;
@@ -1260,9 +1236,13 @@ class LogTrek extends Component<
     const tColor = bgImage ? mediumTextColor : headerTextColor;
     const nlColor = (bgImage && lightTheme) ? highTextColor : navIconColor
     const noMenu = formOpen || this.lockNavMenu;
+    const trackingMarker = tI.trackingMarkerLocation;
+    const trackingHeader = tI.trackingObj 
+                            ? 'Challenge ' + tI.trackingObj.courseName
+                            : undefined;
 
     const headerActions = [
-      // {icon: 'Image', iconColor: tColor, style: {marginTop: 10}, actionFn: this.trekInfo.toggleCurrentBackground},
+      // {icon: 'Image', iconColor: tColor, style: {marginTop: 10}, actionFn: tI.toggleCurrentBackground},
       {icon: 'YinYang', iconColor: tColor, style: {marginTop: 0}, actionFn: this.swapColorTheme}
     ];
     let navMenuItems;
@@ -1279,7 +1259,7 @@ class LogTrek extends Component<
       } else {
         navMenuItems = 
         [ {label: 'Logging Options', 
-          submenu: [{icon: this.trekInfo.type, label: 'Change Type', value: 'TType'},
+          submenu: [{icon: tI.type, label: 'Change Type', value: 'TType'},
                     {icon: 'Course', label: 'Challenge Course', value: 'StartC'},
                     {icon: 'TimerSand', label: 'Limit Time', value: 'StartT'},
                     {icon: 'CompassMath', label: 'Limit Distance', value: 'StartD'}
@@ -1310,11 +1290,6 @@ class LogTrek extends Component<
         backgroundColor: bgImage ? almostTransparent : pageBackground,
         borderWidth: 0,
       },
-      youAre: {
-        fontSize: 24,
-        fontFamily: fontLight,
-        color: disabledTextColor
-      },
       bigTitle: {
         marginTop: stopOk ? -15 : 25,
         fontSize: startOk ? 60 : 50,
@@ -1339,6 +1314,24 @@ class LogTrek extends Component<
       navLabelColor: {
         color: nlColor,
       },
+      trekStats: {
+        flex: 1,
+        marginTop: trackingMarker ? TRACKING_STATUS_BAR_HEIGHT + 15 : 0,
+        justifyContent: "space-around",
+        alignItems: "center",
+      },
+      trackingStatusDivider: {
+        flex: 1,
+        marginHorizontal: 20,
+        marginBottom: 25,
+        borderTopWidth: 2,
+        borderColor: disabledTextColor,
+        borderStyle: "solid",
+      },
+      pageTitleArea: {
+        marginBottom: 0, 
+        marginTop: 15,
+      }
     });
 
     return (
@@ -1363,17 +1356,17 @@ class LogTrek extends Component<
           <RadioPicker pickerOpen={this.radioPickerOpen}/>
           <RadioPicker pickerOpen={this.coursePickerOpen}/>
           <CheckboxPicker pickerOpen={this.checkboxPickerOpen} />
-          {this.trekInfo.waitingForSomething && (
-            <Waiting msg={this.trekInfo.waitingMsg} />
+          {tI.waitingForSomething && (
+            <Waiting msg={tI.waitingMsg} />
           )}
           {this.courseToTrack && 
             <TrackingMethodForm
               open={this.trackingMethodFormOpen}
               header="Course Challenge Method"
               title={'Challenge ' + this.courseToTrack.name + ' Using:'}
-              inMethod={this.trekInfo.trackingMethod || 'courseTime'}
+              inMethod={tI.trackingMethod || 'courseTime'}
               icon="Course"
-              onChangeFn={this.trekInfo.setTrackingValueInfo}
+              onChangeFn={tI.setTrackingValueInfo}
               course={this.courseToTrack}
             />
           }
@@ -1381,7 +1374,7 @@ class LogTrek extends Component<
             open={this.limitFormOpen}
             limits={this.limitProps}
           />
-          {bgImage && this.trekInfo.currentBackground === 0 &&
+          {bgImage && tI.currentBackground === 0 &&
             <Image source={require('../src/assets/desert1a.jpg')} 
               style={{width: iWidth, height: iHeight}}
             />
@@ -1394,16 +1387,30 @@ class LogTrek extends Component<
               ]}
             >
               <PageTitle 
-                titleText=""
-                style={{marginBottom: 0, marginTop: 15}}
-                groupName={this.trekInfo.group || "None"}
+                icon={tI.type}
+                iconColor={TREK_TYPE_COLORS_OBJ[tI.type]}
+                iconFn={this.setActiveNav}
+                iconFnArg={'TType'}
+                titleText={tI.type}
+                iconFnDisabled={!startOk}
+                style={styles.pageTitleArea}
+                groupName={tI.group || "None"}
                 setGroupFn={startOk ? this.getDifferentGroup : undefined}
               />
-              {numPts > 0 && stopOk &&
-                <Text style={styles.youAre}>You are</Text>
+              {(startOk || reviewOk) && !trackingMarker &&
+                <Text style={styles.bigTitle}>{bigTitle}</Text>
               }
-              <Text style={styles.bigTitle}>{bigTitle}</Text>
-              {!this.trekInfo.logging && !reviewOk && (
+              {(numPts > 0 && trackingMarker) &&
+                <TrackingStatusBar
+                  trackingDiffDist={tI.trackingDiffDist}
+                  trackingDiffTime={tI.trackingDiffTime}
+                  trackingHeader={trackingHeader}
+                  trackingTime={tI.trackingObj ? tI.trackingObj.goalValue : undefined}
+                  barTop={45}
+                  logOn={true}
+                />
+              }
+              {!tI.logging && !reviewOk && (
                 <View style={{ flex: 1, justifyContent: "center" }}>
                   <IconButton
                     iconSize={bigIconSize}
@@ -1418,17 +1425,16 @@ class LogTrek extends Component<
                   />
                 </View>
               )}
-              <View
-                style={{
-                  flex: 1,
-                  justifyContent: "space-around",
-                  alignItems: "center"
-                }}
-              >
+              <View style={styles.trekStats}>
+                {(numPts > 0 && trackingMarker) &&
+                  <View style={{flexDirection: 'row'}}>
+                    <View style={styles.trackingStatusDivider}/>
+                  </View>
+                }
                 {(stopOk || reviewOk) && numPts > 0 && (
                   <TrekStats 
                     logging={stopOk} 
-                    trekType={this.trekInfo.type} 
+                    trekType={tI.type} 
                     bgImage={bgImage} 
                     format='big'
                   />

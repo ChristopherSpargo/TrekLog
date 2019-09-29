@@ -7,7 +7,7 @@ import { observer, inject } from "mobx-react";
 import { action, observable } from "mobx";
 import { NavigationActions, StackActions } from "react-navigation";
 
-import { TrekInfo, TrekObj, MSG_LINK_NOT_REMOVED, TrekType,
+import { TrekInfo, TrekObj, MSG_LINK_NOT_REMOVED, TrekType, SortByTypes, ShowTypes,
          MeasurementSystemType, DIST_UNIT_CHOICES, MSG_UPDATING_TREK } from "./TrekInfoModel";
 import { UtilsSvc } from "./UtilsService";
 import { ModalModel } from "./ModalModel";
@@ -22,19 +22,17 @@ import TrekLogHeader from "./TreklogHeaderComponent";
 import CheckboxPicker from "./CheckboxPickerComponent";
 import RadioPicker from "./RadioPickerComponent";
 import { StorageSvc } from "./StorageService";
-import { CourseSvc, Course, CourseDetailObject, CourseEffort } from "./CourseService";
+import { CourseSvc, Course, CourseDetailObject } from "./CourseService";
 import TrackingMethodForm from './TrackingMethodComponent';
-import { FilterSvc, SortDirection, SORT_DIRECTIONS, 
-         SORT_DIRECTION_OTHER } from './FilterService';
+import { FilterSvc, SortDirection, SORTDIRECTION_ASCEND,
+         SORT_DIRECTION_OTHER, 
+         SORTDIRECTION_DESCEND} from './FilterService';
 import SvgYAxis, { YAXIS_TYPE_MAP } from './SvgYAxisComponent';
 import SvgGrid from './SvgGridComponent';
 import SpeedDial from './SpeedDialComponent';
 import NavMenu from './NavMenuComponent';
 import PageTitle from './PageTitleComponent';
          
-export type SortByTypes = "Dist" | "Time" | "Date" | "Speed" | "Steps" | "Cals";
-export type ShowTypes = "Dist" | "Time" | "Steps" | "Speed" | "Cals" | "Date";
-
 const goBack = NavigationActions.back();
 
 @inject(
@@ -167,7 +165,7 @@ class CourseDetails extends Component<
     this.setDataReady(false);
     this.setCheckboxPickerOpen(false);
     this.setCoursePickerOpen(false);
-    this.setSortDirection('Ascend');
+    this.setSortDirection(SORTDIRECTION_ASCEND);
     this.setSortByDate(false);
     this.setTrackingMethodFormOpen(false);
     this.setOpenNavMenu(false);
@@ -251,6 +249,12 @@ class CourseDetails extends Component<
   // toggle the sortByDate property
   toggleSortByDate = () => {
     this.setSortByDate(!this.sortByDate);
+    this.rebuildGraph();
+  }
+
+  // toggle the selected falg and rebuild the graph
+  toggleShowValue = (type: string) => {
+    this.fS.toggleShowValue(type);
     this.rebuildGraph();
   }
 
@@ -548,7 +552,7 @@ class CourseDetails extends Component<
   sortFunc = (a: CourseDetailObject, b: CourseDetailObject) : number => {
     let ta = a.trek;
     let tb = b.trek;
-    let ascendingSort = this.sortDirection === SORT_DIRECTIONS[0];
+    let ascendingSort = this.sortDirection === SORTDIRECTION_ASCEND;
     let sb = this.sortByDate ? 'Date' : this.sortBy;
 
     switch(sb){
@@ -569,14 +573,21 @@ class CourseDetails extends Component<
               (tb.duration ? (tb.trekDist / tb.duration) : 0) - 
               (ta.duration ? (ta.trekDist / ta.duration) : 0)); 
       case 'Cals':
-        return (ascendingSort ? 
-              ta.calories - tb.calories : tb.calories - ta.calories);
+        let ca = ta.calories;
+        let cb = tb.calories;
+        if(!this.fS.showTotalCalories){
+          ca = this.uSvc.getCaloriesPerMin(ca, ta.duration, true);
+          cb = this.uSvc.getCaloriesPerMin(cb, tb.duration, true);
+        }
+        return (ascendingSort ? ca - cb : cb - ca);
       case 'Steps':
-        return (ascendingSort ? 
-              this.uSvc.computeStepCount(ta.trekDist, ta.strideLength) - 
-              this.uSvc.computeStepCount(tb.trekDist, tb.strideLength) : 
-              this.uSvc.computeStepCount(tb.trekDist, tb.strideLength) - 
-              this.uSvc.computeStepCount(ta.trekDist, ta.strideLength)); 
+        let sta = this.uSvc.computeStepCount(ta.trekDist, ta.strideLength);
+        let stb = this.uSvc.computeStepCount(tb.trekDist, tb.strideLength);
+        if(this.fS.showStepsPerMin){
+          sta = this.uSvc.computeStepsPerMin(sta, ta.duration, true);
+          stb = this.uSvc.computeStepsPerMin(stb, tb.duration, true);
+        }
+        return (ascendingSort ? sta - stb : stb - sta); 
       default:
         return 0;
     }
@@ -606,19 +617,6 @@ class CourseDetails extends Component<
     return 0;
   }
 
-  // set the title property of the barGraphData object
-  setGraphTitle = (sType: ShowTypes) => {
-    this.barGraphData.title = undefined;
-    switch(sType){
-      case 'Dist':
-        this.barGraphData.title = this.tInfo.longDistUnitsCaps();
-        break;
-      case 'Speed':
-        this.barGraphData.title = this.tInfo.speedUnits();
-        break;
-    }
-  }
-
   // Create the data array for the bar graph.
   // Content depends on which show category is currently selected
   // The given treks array has already been sorted using the sortBy value.
@@ -630,7 +628,7 @@ class CourseDetails extends Component<
     this.barGraphData.items = [];
     dataRange.range = dataRange.max;
     dataRange.min = 0;
-    this.setGraphTitle(this.show);
+    this.barGraphData.title = this.fS.formatGraphTitle(this.show);
     this.barGraphData.range = dataRange;
     for(let i=0; i<this.trekList.length; i++) {
       let t = this.trekList[i].trek;
@@ -668,17 +666,24 @@ class CourseDetails extends Component<
           if (trek.duration > maxV) { maxV = trek.duration; }
           break;
         case 'Speed':
-          let s = this.uSvc.computeRoundedAvgSpeed(system, trek.trekDist, trek.duration);
+          let s = this.fS.showAvgSpeed 
+                    ? this.uSvc.computeRoundedAvgSpeed(system, trek.trekDist, trek.duration)
+                    : (trek.duration / this.uSvc.convertDist(trek.trekDist, this.tInfo.distUnits()));
           if (s < minV) { minV = s; }
           if (s > maxV) { maxV = s; }
           break;
         case 'Cals':
-          let c = trek.calories;
+          let c = this.fS.showTotalCalories 
+                    ? trek.calories 
+                    : this.uSvc.getCaloriesPerMin(trek.calories, trek.duration, true);
           if (c < minV) { minV = c; }
           if (c > maxV) { maxV = c; }
           break;
         case 'Steps':
-          let st = this.uSvc.computeStepCount(trek.trekDist, trek.strideLength);
+          let sc = this.uSvc.computeStepCount(trek.trekDist, trek.strideLength)
+          let st = this.fS.showStepsPerMin 
+                    ? this.uSvc.computeStepsPerMin(sc, trek.duration, true)
+                    : sc;
           if (st < minV) { minV = st; }
           if (st > maxV) { maxV = st; }
           break;
@@ -760,14 +765,14 @@ class CourseDetails extends Component<
       dividerColor,
       secondaryColor
     } = this.props.uiTheme.palette[this.tInfo.colorTheme];
-    const gotTreks = this.dataReady && this.cS.haveCourses();
+    const gotTreks = !this.dataReady ? 0 : (this.focusCourse.efforts.length);
     const graphBgColor = pageBackground;
     const graphHeight = 210;
     const maxBarHeight = 160;
     const graphAreaWidth = width;
     const yAxisWidth = 60;
     const graphWidth = graphAreaWidth - yAxisWidth - 10;
-    const sortAsc = this.sortDirection === 'Ascend';
+    const sortAsc = this.sortDirection === SORTDIRECTION_ASCEND;
     const replayFormOpen = this.trackingMethodFormOpen;
     const navMenuItems = 
     [ 
@@ -786,6 +791,8 @@ class CourseDetails extends Component<
       {icon: 'PartCloudyDay', label: 'Conditions', value: 'Conditions'}
     ]  
 
+    const graphLabelType = (this.show === 'Speed' && !this.fS.showAvgSpeed)
+                          ? YAXIS_TYPE_MAP['pace'] : YAXIS_TYPE_MAP[this.show];
 
     const styles = StyleSheet.create({
       container: {
@@ -885,7 +892,7 @@ class CourseDetails extends Component<
               <CheckboxPicker pickerOpen={this.checkboxPickerOpen} />
               <RadioPicker pickerOpen={this.coursePickerOpen} />
               <View style={styles.listArea}>
-                <PageTitle titleText="Course Detail"/>
+                <PageTitle titleText={"Course Efforts (" + gotTreks + ")"}/>
                 {gotTreks && 
                   <View style={styles.scrollArea}>
                     <ScrollView>
@@ -900,7 +907,7 @@ class CourseDetails extends Component<
                               fill={trekLogBlue}
                               path={
                                 APP_ICONS[
-                                  this.sortDirection === "Descend"
+                                  this.sortDirection === SORTDIRECTION_DESCEND
                                     ? "CalendarSortNewest"
                                     : "CalendarSortOldest"
                                 ]
@@ -933,7 +940,7 @@ class CourseDetails extends Component<
                               majorTics={5}
                               title={this.barGraphData.title}
                               dataRange={this.barGraphData.range}
-                              dataType={YAXIS_TYPE_MAP[this.show]}
+                              dataType={graphLabelType}
                             />
                             <View style={styles.graph}>
                               <SvgGrid
@@ -966,6 +973,7 @@ class CourseDetails extends Component<
                           switchSysFn={this.switchMeasurementSystem}
                           showImagesFn={this.showTrekImage}
                           showGroup={true}
+                          toggleShowValueFn={this.toggleShowValue}
                         />
                       </View>
                     </ScrollView>

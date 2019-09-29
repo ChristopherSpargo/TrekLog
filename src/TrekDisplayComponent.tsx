@@ -10,10 +10,10 @@ import { INTERVAL_MARKER_Z_INDEX, CURRENT_POS_MARKER_Z_INDEX, INITIAL_POS_MARKER
          PICTURE_MARKER_Z_INDEX, MAIN_PATH_Z_INDEX, TRACKING_POS_MARKER_Z_INDEX,
          SHORT_CONTROLS_HEIGHT, CONTROLS_HEIGHT,
          HEADER_HEIGHT,
-         HEADER_Z_INDEX,
          semitransWhite_8,
          semitransWhite_5,
          semitransBlack_5,
+         TRACKING_STATUS_BAR_HEIGHT,
         } from './App';
 import SpeedDial, {SpeedDialItem} from './SpeedDialComponent';
 import { TrekInfo, MapType, TrekPoint, TrekImageSet } from './TrekInfoModel';
@@ -25,6 +25,7 @@ import IconButton from './IconButtonComponent';
 import { LoggingSvc } from './LoggingService';
 import { RateRangePathsObj, INTERVAL_AREA_HEIGHT } from './IntervalSvc';
 import FadeInTemp from './FadeInTempComponent';
+import TrackingStatusBar from './TrackingStatusBar';
 
 export type mapDisplayModeType = "normal" | "noControls" | "noIntervals" | "noSpeeds";
 
@@ -209,8 +210,6 @@ class TrekDisplay extends Component<{
 
   constructor(props) {
     super(props);
-    // this.tInfo.setShowMapControls(true);
-    // this.showPrevPts(-1);      // **Debug
   }
 
   // shouldComponentUpdate(){
@@ -294,8 +293,11 @@ class TrekDisplay extends Component<{
 
   // change the focus or zoom level on the map
   layoutMap = ( path: LatLng[]) => {
-    let topPadding = 160;
-    let bPadding = (this.props.rateRangeObj || this.props.takeSnapshotFn) ? 175 : 40;
+    let log = this.props.timerType === 'Log';
+    let topPadding = (log && this.props.trackingHeader) ? 455 : 170;
+    let bPadding = (this.props.rateRangeObj ||
+                    this.props.takeSnapshotFn || 
+                    log) ? 175 : 40;
     switch(this.mode){
       case 'All':
         if (this.mapViewRef) { 
@@ -419,13 +421,12 @@ class TrekDisplay extends Component<{
   render () {
     const tInfo = this.tInfo;
     // alert(++this.renderCount)
-    const { trekLogYellow, highTextColor, secondaryColor, matchingMask_8, mediumTextColor,
+    const { trekLogYellow, highTextColor, secondaryColor, matchingMask_8,
             matchingMask_3, contrastingMask_5, pageBackground, pathColor, navItemBorderColor, 
             locationRadiusBorder, intervalMarkerBorderColor, intervalMarkerBackgroundColor,
-            trackingMarkerRadiusBorder, trackingMarkerPathColor, matchingMask_9, 
-            trackingColorMinus, trackingColorPlus, trackingStatsBackgroundHeader, dividerColor,
+            trackingMarkerRadiusBorder, trackingMarkerPathColor, dividerColor,
             primaryColor, rippleColor
-          } = this.props.uiTheme.palette[this.tInfo.colorTheme];
+          } = this.props.uiTheme.palette[tInfo.colorTheme];
     const { fontRegular, fontBold, navIcon, footerButton, footerButtonText } = this.props.uiTheme;
     const path = this.props.utilsSvc.cvtPointListToLatLng(this.props.pathToCurrent); // copy just the LaLo data
     const numPts = this.props.pathLength;
@@ -435,25 +436,16 @@ class TrekDisplay extends Component<{
     const mType = this.props.mapType;
     const triggerIcon = this.props.speedDialIcon || "Location";
     const radiusBg = "rgba(18, 46, 59, .5)";
-    const trekImages = this.tInfo.trekImageCount !== 0;
+    const trekImages = tInfo.trekImageCount !== 0;
     const imageMarkerIconSize = 18;
     const imageSelectorWidth = 50;
     const selectedIntervalColor = '#660000';//trekLogOrange; //'rgba(255, 167, 38,.8)';  //"#ff704d";
     const showNext = this.props.nextFn !== undefined;
     const showPrev = this.props.prevFn !== undefined;
     const minSDOffset = (this.props.bottom !== 0) ? 5 : SHORT_CONTROLS_HEIGHT;
-    const showControls = this.tInfo.showMapControls && !this.props.takeSnapshotFn;
+    const showControls = tInfo.showMapControls && !this.props.takeSnapshotFn;
     const rangesObj = this.props.rateRangeObj;
     const trackingMarker = this.props.trackingMarker;
-    const tdTime = this.props.trackingDiffTime;
-    const tdTimeColor = tdTime < 0 ? trackingColorMinus : trackingColorPlus;
-    const tdDist = this.props.trackingDiffDist ;
-    const tdDistColor = tdDist < 0 ? trackingColorMinus : trackingColorPlus;
-    const tdDistStr = tInfo.formattedDist(Math.abs(tdDist));
-    const spindx = tdDistStr.indexOf(' ');
-    const tdDistValue = tdDistStr.substr(0, spindx);
-    const tdDistUnits = tdDistStr.substr(spindx);
-    const trackingTime = this.props.trackingTime;
     const logOn = this.props.timerType === 'Log';
     const replayOn = (this.props.timerType === 'Play');
     const cmBackground = (logOn || replayOn) ? trekLogYellow : "red";
@@ -461,7 +453,6 @@ class TrekDisplay extends Component<{
                                                            : ['',''];
     const canTxt = 'CANCEL';
     const footerHeight = CONTROLS_HEIGHT;
-    // const badPoints = this.tInfo.badPointList && this.tInfo.badPointList.length > 0; // **Debug
 
     const styles = StyleSheet.create({
       container: { ... StyleSheet.absoluteFillObject },
@@ -631,50 +622,6 @@ class TrekDisplay extends Component<{
       legendRangeColor: {
         width: 15,
       },
-      trackingStatus: {
-        position: "absolute",
-        top: 0 + (logOn ? CONTROLS_HEIGHT : 0),
-        flex: 1,
-        marginLeft: logOn ? 0 : 56,
-        // paddingVertical: 5,
-        paddingRight: 5,
-        paddingLeft: logOn ? 5 : 0,
-        backgroundColor: logOn ? matchingMask_9 : trackingStatsBackgroundHeader,
-        flexDirection: "row",
-        alignItems: "center",
-        zIndex: HEADER_Z_INDEX+1,
-      },
-      trackingGroup: {
-        flex: 1,
-        flexDirection: "column",
-        justifyContent: "center",
-        alignItems: "center",
-      },
-      trackingItem: {
-        flex: 1,
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "center",
-      },
-      trackingItemValue: {
-        fontFamily: fontRegular,
-        fontSize: 34,
-      },
-      trackingTime: {
-        fontSize: 18,
-        fontFamily: fontRegular,
-        color: mediumTextColor
-      },
-      trackingItemUnits: {
-        fontSize: 28,
-        fontFamily: fontRegular,
-        marginTop: 4,
-      },
-      trackingHeader: {
-        fontSize: 20,
-        fontFamily: fontRegular,
-        color: highTextColor
-      },
       badMarker1: {
         width: 14,
         height: 14,
@@ -794,56 +741,6 @@ class TrekDisplay extends Component<{
           </Marker>
       )})
     )}
-
-    // const BadPoints = (props: any) => {       // **Debug
-    //   let list = this.props.pathToCurrent;
-    //   return (
-    //     props.bads.map((item, index) => {
-    //       return (
-    //         <View key={index}>
-    //           <Marker
-    //             zIndex={PICTURE_MARKER_Z_INDEX}
-    //             anchor={{x: 0.5, y: 0.5}}
-    //             coordinate={{latitude: list[item-1].l.a, longitude: list[item-1].l.o}}
-    //             tracksViewChanges={false}
-    //             title={list[item-1].t + ' \ ' + list[item-1].s}
-    //             onPress={() => this.showPrevPts(item-1)}
-    //           >
-    //             <View style={[styles.badMarker1, {backgroundColor: "purple"}]}/>
-    //           </Marker>
-    //           <Marker
-    //             zIndex={PICTURE_MARKER_Z_INDEX}
-    //             anchor={{x: 0.5, y: 0.5}}
-    //             coordinate={{latitude: list[item].l.a, longitude: list[item].l.o}}
-    //             tracksViewChanges={false}
-    //             title={(list[item].t - list[item-1].t) + ' | ' + 
-    //                    Math.round(this.props.utilsSvc.computeImpliedSpeed(list[item-1], list[item])) + ' | ' + 
-    //                    list[item].s + ' | ' + list[item].t}
-    //           >
-    //             <View style={styles.badMarker1}/>
-    //           </Marker>
-    //         </View>
-    //   )})
-    // )}
-
-    // const PreviousPts = (props: any) => {           // **Debug
-    //   let list = this.props.pathToCurrent;
-    //   return (
-    //     props.bads.map((i: number) => {
-    //       return (
-    //           <Marker
-    //             key={i}
-    //             zIndex={PICTURE_MARKER_Z_INDEX}
-    //             anchor={{x: 0.5, y: 0.5}}
-    //             coordinate={{latitude: list[props.start-i].l.a, longitude: list[props.start-i].l.o}}
-    //             tracksViewChanges={false}
-    //             title={list[props.start-i].t + ' | ' + list[props.start-i].s}
-    //           >
-    //             <View style={[styles.badMarker1, {backgroundColor: "orange"}]}/>
-    //           </Marker>
-    //       )}
-    //   )
-    // )}
 
     const  mapTypes : SpeedDialItem[] = 
               [ {icon: 'Orbit', label: 'Satellite', value: 'hybrid', lStyle: styles.sdLabelStyle},
@@ -965,20 +862,9 @@ class TrekDisplay extends Component<{
             }
             {((numPts > 0) && trekImages) &&
               <Images 
-                images={this.tInfo.trekImages}
+                images={tInfo.trekImages}
               />
             }
-            {/* {((numPts > 0) && badPoints) &&           // **Debug
-              <BadPoints 
-                bads={this.tInfo.badPointList}
-              />
-            }
-            {((numPts > 0) && badPoints && this.showPrevPtsIndex !== -1) &&   // **Debug
-              <PreviousPts 
-                bads={[1,2,3,4,5,6,7,8,9,10,11,12,13,14]}
-                start={this.showPrevPtsIndex}
-              />
-            } */}
           </MapView>
         }
         <View style={styles.menuTouchArea}/>
@@ -1006,31 +892,15 @@ class TrekDisplay extends Component<{
           </View>
         }
         {(numPts > 0 && trackingMarker) &&
-          <View style={styles.trackingStatus}>
-            <View style={[styles.trackingGroup]}>
-              <Text style={styles.trackingHeader}>{this.props.trackingHeader}</Text>
-              {trackingTime !== undefined &&
-                <View style={styles.trackingItem}>
-                  <Text style={styles.trackingTime}>
-                      {'(' + this.props.utilsSvc.timeFromSeconds(trackingTime) + ')'}
-                  </Text>
-                </View>
-              }
-            </View>
-            <View style={styles.trackingItem}>
-              <Text style={[styles.trackingItemValue, {color: tdTimeColor}]}>
-                {this.props.utilsSvc.timeFromSeconds(Math.abs(tdTime))}
-              </Text>
-            </View>
-            <View style={styles.trackingItem}>
-              <Text style={[styles.trackingItemValue, {color: tdDistColor}]}>
-                {tdDistValue}
-              </Text>
-              <Text style={[styles.trackingItemUnits, {color: tdDistColor}]}>
-                {tdDistUnits}
-              </Text>
-            </View>
-          </View>
+          <TrackingStatusBar
+            trackingHeader={this.props.trackingHeader}
+            headerLeft={!logOn}
+            trackingDiffDist={this.props.trackingDiffDist}
+            trackingDiffTime={this.props.trackingDiffTime}
+            trackingTime={this.props.trackingTime}
+            barTop={logOn ? CONTROLS_HEIGHT : 0}
+            logOn={logOn}
+          />
         }
         {(showControls && numPts > 0) &&
           <SpeedDial
@@ -1058,7 +928,7 @@ class TrekDisplay extends Component<{
         }
         {(showControls && numPts > 0) &&
           <SpeedDial
-            top={60 + HEADER_HEIGHT}
+            top={HEADER_HEIGHT + (trackingMarker ? TRACKING_STATUS_BAR_HEIGHT + 10 : 10)}
             items={mapTypes}
             icon="LayersOutline"
             menuColor="transparent"

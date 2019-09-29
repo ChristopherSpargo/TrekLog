@@ -26,7 +26,8 @@ function RadioGroup({
   colors = undefined, // color for each icon
   inline = undefined, // if true, labels should be inline with icons (otherwise above or below the icons)
   radioFirst = undefined, // if true, labels are after (or below) the icons
-  vertical = undefined // if true, arrange group vertically
+  vertical = undefined, // if true, arrange group vertically
+  autoNew = undefined   // auto focus on new element if true
 }) {
   const uiTheme: any = useContext(UiThemeContext);
   const trekInfo: TrekInfo = useContext(TrekInfoContext);
@@ -35,6 +36,7 @@ function RadioGroup({
   const [selectedIndex, setSelectedIndex] = useState(values.indexOf(selected));
   const [enterItem, setEnterItem] = useState(false);
   const [newItem, setNewItem] = useState('');
+
   const vert = vertical;
   const defHeight = 30;
   const iHeight = itemHeight || defHeight;
@@ -141,6 +143,11 @@ function RadioGroup({
     }
   },[selected]);
 
+  useEffect(() => {               // DidMount
+    if(autoNew) {
+      setEnterItem(true)
+    }
+  })
 
   // Update the value of the enterItem property
   function addNewItem() {
@@ -216,7 +223,7 @@ function RadioGroup({
                         kbType='default'
                         itemTest={itemTest}
                         placeholderValue={newItem}
-                        autoFocus
+                        autoFocus={true}
                       /> 
                     </View>
                     <View style={styles.addIconArea}>

@@ -51,9 +51,9 @@ class LogTrekMap extends Component<{
 
   componentWillMount() {
     if(this.trekInfo.layoutOpts === 'Open'){
-      this.toggleSpeedDialZoom(this.trekInfo.speedDialZoom ? 'All' : 'Current', true);
+      this.toggleSpeedDialZoom(this.trekInfo.speedDialZoomedIn ? 'All' : 'Current', true);
     } else {
-      this.logSvc.setLayoutOpts(this.trekInfo.speedDialZoom ? 'Current' : 'All')
+      this.logSvc.setLayoutOpts(this.trekInfo.speedDialZoomedIn ? 'Current' : 'All')
     }
   }
   // respond to action from controls
@@ -76,19 +76,21 @@ class LogTrekMap extends Component<{
 
   // show the images for the selected image marker
   showCurrentImageSet = (index: number) => {
-    this.props.navigation.navigate('Images', {icon: '*', cmd: 'show', setIndex: index});
+    this.props.navigation.navigate('Images', {icon: '*', cmd: 'show', setIndex: index, imageIndex: 0});
   }
 
-  // toggle the value of the speedDialZoom property
+  // toggle the value of the speedDialZoomedIn property
   toggleSpeedDialZoom = (val: string, toggle = true) => {
-    if (toggle) { this.trekInfo.setSpeedDialZoom(!this.trekInfo.speedDialZoom); }
+    if (toggle) { this.trekInfo.setSpeedDialZoomedIn(!this.trekInfo.speedDialZoomedIn); }
     this.logSvc.setLayoutOpts(val);
   }
 
   formattedCurrentSpeed = () => {
-    let sp = this.trekInfo.formattedCurrentSpeed() as string;
+    let sp = this.trekInfo.showSpeedNow ? this.trekInfo.speedNow : this.trekInfo.averageSpeed;
     let i = sp.indexOf(' ');
-    return {value: sp.substr(0, i), units: sp.substr(i), label: 'Speed Now'};
+    let u = sp.substr(i);
+    return { value: sp.substr(0, i), units: "" , 
+      label: this.trekInfo.showSpeedNow ? u : (u + " (avg)") };
   }
 
   formattedSteps = () => {
@@ -108,6 +110,11 @@ class LogTrekMap extends Component<{
     this.trekInfo.updateShowStepsPerMin(!this.trekInfo.showStepsPerMin);
   }
 
+  // toggle between displaying speed now and average speed
+  toggleShowSpeedNow = () => {
+    this.trekInfo.updateShowSpeedNow(!this.trekInfo.showSpeedNow);
+  }
+
   render () {
 
     const numPts = this.trekInfo.trekPointCount;
@@ -115,8 +122,8 @@ class LogTrekMap extends Component<{
     const reviewOk = !stopOk && this.trekInfo.pendingReview;
     const mapBottom = 0;
     const { controlsArea, fontRegular, fontBold } = this.props.uiTheme;
-    const sdIcon = this.trekInfo.speedDialZoom ? "ZoomOutMap" : "Location";
-    const sdValue = this.trekInfo.speedDialZoom ? "All" : "Current";
+    const sdIcon = this.trekInfo.speedDialZoomedIn ? "ZoomOutMap" : "Location";
+    const sdValue = this.trekInfo.speedDialZoomedIn ? "All" : "Current";
     const { highTextColor, trekLogBlue, matchingMask_7, rippleColor,
             trackingStatsBackgroundHeader 
           } = this.palette;
@@ -240,19 +247,19 @@ class LogTrekMap extends Component<{
         <View style={[controlsArea, styles.caAdjust, styles.caBottom]}>
           {(numPts > 0 && !reviewOk) &&
             <View style={styles.stats}>
-                {/* <BorderlessButton
-                  rippleColor={rippleColor}
-                  style={{flex: 1}}
-                  onPress={this.trekInfo.switchMeasurementSystem}> */}
-                  <View style={styles.statGroupStat}>
-                    <Text style={styles.bigStat}>
-                    {this.props.utilsSvc.zeroSuppressedValue(speedItem.value)}</Text>
-                    <Text style={styles.shortStat}>{speedItem.units}</Text>
-                  </View>
-                {/* </BorderlessButton> */}
+                  <BorderlessButton
+                    style={{flex: 1}}
+                    rippleColor={rippleColor}
+                    onPress={this.toggleShowSpeedNow}>
+                    <View style={[styles.statGroupStat, {flex: 0}]}>
+                      <Text style={styles.bigStat}>
+                      {this.props.utilsSvc.zeroSuppressedValue(speedItem.value)}</Text>
+                      <Text style={[styles.shortStat, {color: trekLogBlue}]}>{speedItem.label}</Text>
+                    </View>
+                  </BorderlessButton>
                 {STEPS_APPLY[this.trekInfo.type] && 
                   <BorderlessButton
-                    style={{flex: 1.3}}
+                    style={{flex: 1}}
                     rippleColor={rippleColor}
                     onPress={this.toggleShowStepsPerMin}>
                     <View style={[styles.statGroupStat, {flex: 0}]}>

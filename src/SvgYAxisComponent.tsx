@@ -13,7 +13,9 @@ export const YAXIS_TYPE_MAP = {
   Cals: 'Number',
   steps: 'Number',
   Steps: 'Number',
+  speed: 'Number',
   Speed: 'Number',
+  pace: 'Time',
   Date: 'String'
 }
 

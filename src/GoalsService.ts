@@ -6,6 +6,7 @@ import {
   TrekType,
   TrekObj,
   NumericRange,
+  SortByTypes, ShowTypes,
   DIST_UNIT_LONG_NAMES
 } from "./TrekInfoModel";
 import {
@@ -14,7 +15,6 @@ import {
   DateInterval,
   SortDateRange
 } from "./UtilsService";
-import { SortByTypes, ShowTypes } from "./ReviewComponent";
 import { ToastModel } from "./ToastModel";
 import { StorageSvc } from "./StorageService";
 import { BarData, BarGraphInfo } from "./BarDisplayComponent";
@@ -963,10 +963,10 @@ export class GoalsSvc {
     const DITGoal = gdo.goal.category === DIT_GOAL_CAT;
     const { trekLogGreen } = uiTheme.palette[this.trekInfo.colorTheme];
 
-    if (gdo.goal.category === DIT_GOAL_CAT && gdo.goal.metricUnits !== 'course') {
+    if (DITGoal && gdo.goal.metricUnits !== 'course') {
       metric = "rate";
     }
-    if (gdo.goal.category === DIT_GOAL_CAT && gdo.goal.metricUnits === 'course') {
+    if (DITGoal && gdo.goal.metricUnits === 'course') {
       metric = "rateCourse";
     }
     switch(metric){
@@ -988,6 +988,10 @@ export class GoalsSvc {
         break;
       case "steps":
         graphData.title = 'Steps';
+        break;
+      case "course":
+        graphData.title = this.intervalGraph ? 'Occurrences' : undefined;
+        metric = this.intervalGraph ? metric : 'time';
         break;
       default:
     }
@@ -1193,14 +1197,19 @@ export class GoalsSvc {
           if (g.metricUnits === "times") {
             metric = this.trekInfo.longDistUnits();
           }
-          msg =
+          if(g.metricUnits === 'course'){
+            msg =
+            "Time to " + g.activity + " course";
+          } else {
+            msg =
             metric +
             "/" +
             g.activity +
             ": " +
-            iDates.start.substr(0, 5) +
+            iDates.start +
             " - " +
-            iDates.end.substr(0, 5);
+            iDates.end;
+          }
         }
         msg = msg.replace(/Trek /gi, "treked ");
         msg = msg.replace(/Walk /gi, "walked ");
@@ -1219,33 +1228,6 @@ export class GoalsSvc {
     msg = msg.replace(/daily/gi, "per day");
     msg = msg.replace(/weekly/gi, "per week");
     msg = msg.replace(/monthly/gi, "per month");
-
-    return msg;
-  };
-
-  // format a label for the x axis of the graph
-  formatGraphXAxis = (gdo: GoalDisplayObj): string => {
-    let msg = "";
-    let g = gdo.goal;
-
-    switch (g.category) {
-      case DIT_GOAL_CAT:
-        msg = g.activity + " Dates";
-        break;
-      case CA_GOAL_CAT:
-        if (this.intervalGraph && g.testUnits !== "daily") {
-          msg = g.testUnits + " Ending Dates";
-        } else {
-          msg = g.activity + " Dates";
-        }
-        break;
-      default:
-    }
-    msg = msg.substr(0, 1).toUpperCase() + msg.substr(1);
-    msg = msg.replace(/Burn /gi, "Trek ");
-    msg = msg.replace(/daily/gi, "Day");
-    msg = msg.replace(/weekly/gi, "Week");
-    msg = msg.replace(/monthly/gi, "Month");
 
     return msg;
   };

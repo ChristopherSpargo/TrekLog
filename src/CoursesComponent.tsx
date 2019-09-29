@@ -223,6 +223,7 @@ class Courses extends Component<{
       this.cS.getDefiningTrek(index)
       .then((trek) => {
         this.tI.setTrekProperties(trek);
+        this.tI.setShowMapControls(true);
         this.props.navigation.navigate("SelectedTrek", {
           title: this.cS.courseList[index].name,
           icon: 'Course',
@@ -383,6 +384,22 @@ class Courses extends Component<{
         fontSize: 18,
         color: mediumTextColor,
       },
+      countRow: {
+        flexDirection: "row",
+        alignItems: "flex-start",
+        marginLeft: 5,
+      },
+      countLabel: {
+        fontFamily: fontRegular,
+        fontSize: 18,
+        color: mediumTextColor,
+      },
+      effortCount: {
+        fontFamily: fontRegular,
+        fontSize: 18,
+        color: mediumTextColor,
+        marginLeft: 6,
+      },
       courseDist: {
         fontFamily: fontRegular,
         fontSize: 20,
@@ -525,6 +542,11 @@ class Courses extends Component<{
                                               {this.uSvc.dateFromSortDateYY(dlItem.bestEffort.subject.date)}</Text>
                                       </View>
                                     }
+                                      <View style={styles.countRow}>
+                                        <Text style={styles.countLabel}>Total Efforts:</Text> 
+                                        <Text style={styles.effortCount}>
+                                              {dlItem.effortCount}</Text>
+                                      </View>
                                     </View>
                                 </View>
                                 <SpeedDial

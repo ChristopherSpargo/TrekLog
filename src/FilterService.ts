@@ -1,9 +1,9 @@
 import { observable, action } from "mobx"
 import { DatePickerAndroid } from 'react-native'
-import { TrekInfo, TrekType, TrekObj, DIST_UNIT_CHOICES, 
-         MeasurementSystemType, TREK_SELECT_BITS, ALL_SELECT_BITS, TREK_TYPE_HIKE, RESP_OK, RESP_CANCEL } from './TrekInfoModel'
+import { TrekInfo, TrekType, TrekObj, DIST_UNIT_CHOICES, SortByTypes, ShowTypes,
+         MeasurementSystemType, TREK_SELECT_BITS, ALL_SELECT_BITS, TREK_TYPE_HIKE, 
+         RESP_OK, RESP_CANCEL } from './TrekInfoModel'
 import { UtilsSvc, TimeFrame, TIME_FRAMES_NEXT, TIME_FRAME_CUSTOM  } from './UtilsService';
-import { SortByTypes, ShowTypes} from './ReviewComponent'
 import { ToastModel } from "./ToastModel";
 import { BarData, BarGraphInfo } from './BarDisplayComponent';
 
@@ -65,6 +65,9 @@ export class FilterSvc {
   @observable sortDirection;
   @observable show : ShowTypes;
   @observable sortByDate : boolean;
+  @observable showAvgSpeed: boolean;
+  @observable showStepsPerMin: boolean;
+  @observable showTotalCalories: boolean;
 
   // default filter values
   @observable dateDefMin : string;
@@ -131,6 +134,36 @@ export class FilterSvc {
     this.setFoundType(false);
     this.setFilterRuns(0);
     this.clearGroupList();
+  }
+
+  @action
+  setShowAvgSpeed = (status: boolean) => {
+    this.showAvgSpeed = status;
+  }
+
+  @action
+  setShowTotalCalories = (status: boolean) => {
+    this.showTotalCalories = status;
+  }
+
+  @action
+  setShowStepsPerMin = (status: boolean) => {
+    this.showStepsPerMin = status;
+  }
+
+  // toggle the selected flag
+  toggleShowValue = (type: string) => {
+    switch(type){
+      case 'Speed':
+        this.setShowAvgSpeed(!this.showAvgSpeed);
+        break;
+      case 'Steps':
+        this.setShowStepsPerMin (!this.showStepsPerMin);
+        break;
+      case 'Cals':
+        this.setShowTotalCalories(!this.showTotalCalories);
+        break;
+    }
   }
 
   // set observable that will cause the bar graph to scroll to a bar
@@ -493,8 +526,8 @@ export class FilterSvc {
   @action
   setShow = (value: ShowTypes) => {
     this.show = value;
-    this.setSortDirection(this.sortDirection);
-  }
+    this.sortAndBuild();
+}
 
   // set the sortBy filter property and then set the initial value of startWith.
   @action
@@ -507,6 +540,7 @@ export class FilterSvc {
         this.setShow(value); 
       } else {
         this.toggleSortDirection();
+        this.sortAndBuild();
       }
     }
   }
@@ -528,20 +562,30 @@ export class FilterSvc {
   @action
   toggleSortByDate = () => {
     this.setSortByDate(!this.sortByDate);
-    this.setSortDirection(this.sortDirection);
-  }
+    this.sortAndBuild();
+}
 
   // set the sortDirection filter property and process the existing filteredTreks
   @action
   setSortDirection = (value: string) => {
       this.sortDirection = value;
-      this.sortExistingTreks();
-      this.buildAfterFilter();
+  }
+
+  // Reverse the sort direction and resort and rebuild grap data
+  toggleSort = () => {
+    this.toggleSortDirection();
+    this.sortAndBuild();
   }
 
   // Change the sorting direction 
   toggleSortDirection = () => {
     this.setSortDirection(SORT_DIRECTION_OTHER[this.sortDirection]);
+  }
+
+  // sort existing treks and rebuild graph data
+  sortAndBuild = () => {
+    this.sortExistingTreks();
+    this.buildAfterFilter();
   }
 
   @action
@@ -588,34 +632,43 @@ export class FilterSvc {
     let uSvc = this.utilsSvc;
     let ta = this.trekInfo.allTreks[a];
     let tb = this.trekInfo.allTreks[b];
+    let ascendingSort = this.filter.sortDirection === SORTDIRECTION_ASCEND;
 
     switch(this.filter.sortBy){
       case 'Dist':
-        return (this.filter.sortDirection === SORT_DIRECTIONS[0] ? 
+        return (ascendingSort ? 
                 ta.trekDist - tb.trekDist : tb.trekDist - ta.trekDist);
       case 'Time':
-        return (this.filter.sortDirection === SORT_DIRECTIONS[0] ? 
+        return (ascendingSort ? 
                 ta.duration - tb.duration : tb.duration - ta.duration);
       case 'Date':
-        return (this.filter.sortDirection === SORT_DIRECTIONS[0] ?   
+        return (ascendingSort ?   
               (parseInt(ta.sortDate, 10) - parseInt(tb.sortDate, 10)) : 
               (parseInt(tb.sortDate, 10) - parseInt(ta.sortDate, 10))); 
       case 'Speed':
-        return (this.filter.sortDirection === SORT_DIRECTIONS[0] ? 
-              (ta.duration ? (ta.trekDist / ta.duration) : 0) - 
-              (tb.duration ? (tb.trekDist / tb.duration) : 0) : 
-              (tb.duration ? (tb.trekDist / tb.duration) : 0) - 
-              (ta.duration ? (ta.trekDist / ta.duration) : 0)); 
+        let spa = (ta.duration ? (ta.trekDist / ta.duration) : 0);
+        let spb = (tb.duration ? (tb.trekDist / tb.duration) : 0);
+        if(!this.showAvgSpeed){
+          spa = (ta.duration / uSvc.convertDist(ta.trekDist, this.trekInfo.distUnits()))
+          spb = (tb.duration / uSvc.convertDist(tb.trekDist, this.trekInfo.distUnits()))
+        }
+        return (ascendingSort ? spa - spb : spb - spa);
       case 'Cals':
         let ca = ta.calories;
         let cb = tb.calories;
-        return (this.filter.sortDirection === SORT_DIRECTIONS[0] ? ca - cb : cb - ca);
+        if(!this.showTotalCalories){
+          ca = uSvc.getCaloriesPerMin(ca, ta.duration, true);
+          cb = uSvc.getCaloriesPerMin(cb, tb.duration, true);
+        }
+        return (ascendingSort ? ca - cb : cb - ca);
       case 'Steps':
-        return (this.filter.sortDirection === SORT_DIRECTIONS[0] ? 
-              uSvc.computeStepCount(ta.trekDist, ta.strideLength) - 
-              uSvc.computeStepCount(tb.trekDist, tb.strideLength) : 
-              uSvc.computeStepCount(tb.trekDist, tb.strideLength) - 
-              uSvc.computeStepCount(ta.trekDist, ta.strideLength)); 
+        let sa = uSvc.computeStepCount(ta.trekDist, ta.strideLength);
+        let sb = uSvc.computeStepCount(tb.trekDist, tb.strideLength);
+        if(this.showStepsPerMin){
+          sa = uSvc.computeStepsPerMin(sa, ta.duration, true);
+          sb = uSvc.computeStepsPerMin(sb, tb.duration, true);
+        }
+        return (ascendingSort ? sa - sb : sb - sa); 
       default:
         return 0;
     }
@@ -919,19 +972,23 @@ export class FilterSvc {
   }
 
   // set the title property of the barGraphData object
-  setGraphTitle = (sType: ShowTypes) => {
-    this.barGraphData.title = undefined;
+  formatGraphTitle = (sType: ShowTypes) => {
+    let title = undefined;
     switch(sType){
       case 'Dist':
-        this.barGraphData.title = this.trekInfo.longDistUnitsCaps();
-        break;
-      case 'Speed':
-        this.barGraphData.title = this.trekInfo.speedUnits();
+        title = this.trekInfo.longDistUnitsCaps();
         break;
       case 'Cals':
-        this.barGraphData.title = 'Calories';
+        title = this.showTotalCalories ? 'Calories' : 'Calories/min';
+        break;
+      case 'Steps':
+        title = this.showStepsPerMin ? 'Steps/min' : 'Steps';
+        break;
+      case 'Speed':
+        title = this.showAvgSpeed ? this.trekInfo.speedUnits() : 'Time/' + this.trekInfo.distUnits();
         break;
     }
+    return title;
   }
 
   // Create the data array for the bar graph.
@@ -945,7 +1002,7 @@ export class FilterSvc {
     dataRange.min = 0;
     dataRange.range = dataRange.max
     this.clearBarGraphData();
-    this.setGraphTitle(this.show);
+    this.barGraphData.title = this.formatGraphTitle(this.show);
     this.barGraphData.range = dataRange;
     for(let tn=0; tn<treks.length; tn++) {
       let t = this.trekInfo.allTreks[treks[tn]];
@@ -977,17 +1034,20 @@ export class FilterSvc {
         break;
       case "Steps":
         let s = this.utilsSvc.computeStepCount(t.trekDist, t.strideLength);
-        // let spm = this.utilsSvc.computeStepsPerMin(s, t.duration);
+        if(this.showStepsPerMin){ s = this.utilsSvc.computeStepsPerMin(s, t.duration)}
         barItem.value = s;
         barItem.label1 = s.toString();
         break;
       case "Speed":
-        let speed = this.utilsSvc.computeRoundedAvgSpeed(this.trekInfo.measurementSystem, t.trekDist, t.duration);
+        let speed = this.showAvgSpeed 
+            ? this.utilsSvc.computeRoundedAvgSpeed(this.trekInfo.measurementSystem, t.trekDist, t.duration)
+            : (t.duration / this.utilsSvc.convertDist(t.trekDist, this.trekInfo.distUnits()))
         barItem.value = speed; 
-        barItem.label1 = speed.toString();
+        barItem.label1 = this.showAvgSpeed ? speed.toString() : this.utilsSvc.timeFromSeconds(speed);
         break;
       case "Cals":
-        barItem.value = t.calories;
+        barItem.value = this.showTotalCalories ? t.calories 
+                          : this.utilsSvc.getCaloriesPerMin(t.calories, t.duration)
         barItem.label1 = (barItem.value).toString();
         break;
       default:
@@ -1025,17 +1085,21 @@ export class FilterSvc {
           if (trek.duration > maxV) { maxV = trek.duration; }
           break;
         case 'Speed':
-          let s = this.utilsSvc.computeRoundedAvgSpeed(system, trek.trekDist, trek.duration);
+          let s = this.showAvgSpeed 
+            ? this.utilsSvc.computeRoundedAvgSpeed(this.trekInfo.measurementSystem, trek.trekDist, trek.duration)
+            : (trek.duration / this.utilsSvc.convertDist(trek.trekDist, this.trekInfo.distUnits()))
           if (s < minV) { minV = s; }
           if (s > maxV) { maxV = s; }
           break;
         case 'Cals':
-          let c = trek.calories;
+          let c = this.showTotalCalories ? trek.calories 
+                          : this.utilsSvc.getCaloriesPerMin(trek.calories, trek.duration)
           if (c < minV) { minV = c; }
           if (c > maxV) { maxV = c; }
           break;
         case 'Steps':
           let st = this.utilsSvc.computeStepCount(trek.trekDist, trek.strideLength);
+          if(this.showStepsPerMin){ st = this.utilsSvc.computeStepsPerMin(st, trek.duration)}
           if (st < minV) { minV = st; }
           if (st > maxV) { maxV = st; }
           break;

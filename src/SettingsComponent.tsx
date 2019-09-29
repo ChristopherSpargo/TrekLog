@@ -650,7 +650,7 @@ class Settings extends Component<{
   render() {
 
     const showSave = !this.changingGroup && !this.compareSettings(this.originalSettings);
-    const { cardLayout, navItem, navIcon, pageTitle, fontRegular,
+    const { cardLayout, navItem, navIcon, fontRegular,
             formInputItem  
           } = this.props.uiTheme;
     const settingIconSize = 24;

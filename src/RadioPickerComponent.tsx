@@ -233,6 +233,7 @@ function RadioPicker({pickerOpen}) {
                         inline
                         itemHeight={40}
                         radioFirst
+                        autoNew={mData.selectionValues.length === 1}
                       />
                     </View>
                   </ScrollView>

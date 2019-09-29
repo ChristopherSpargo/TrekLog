@@ -8,27 +8,32 @@ import { observable, action } from 'mobx';
 import ImageZoom from 'react-native-image-pan-zoom';
 import Video from 'react-native-video';
 import { NavigationActions } from 'react-navigation';
+import ImageResizer from 'react-native-image-resizer';
 
 import { TrekInfo, TrekPoint, TrekImageSet, TrekImage, TrekImageType,
-         IMAGE_TYPE_INFO, IMAGE_TYPE_PHOTO, IMAGE_TYPE_VIDEO } from './TrekInfoModel';
+         IMAGE_TYPE_INFO, IMAGE_TYPE_PHOTO, IMAGE_TYPE_VIDEO, IMAGE_STORE_COMPRESSED,
+         IMAGE_COMPRESSION_QUALITY 
+        } from './TrekInfoModel';
 import { UtilsSvc } from './UtilsService';
 import IconButton from './IconButtonComponent';
 import { ModalModel } from './ModalModel';
 import TrekLogHeader from './TreklogHeaderComponent';
 import { ToastModel } from './ToastModel';
 import Waiting from './WaitingComponent';
-import { semitransBlack_2, semitransWhite_8, semitransBlack_5, semitransBlack_9, 
+import { semitransBlack_2, semitransWhite_8, semitransBlack_5, 
        } from './App';
 import { StorageSvc } from './StorageService';
+import { GroupSvc } from './GroupService';
 
 const goBack = NavigationActions.back() ;
 
-@inject('trekInfo', 'uiTheme', 'utilsSvc', 'modalSvc', 'toastSvc', 'storageSvc')
+@inject('trekInfo', 'uiTheme', 'utilsSvc', 'modalSvc', 'toastSvc', 'storageSvc', 'groupSvc')
 @observer
 class TrekImages extends Component<{
   uiTheme ?: any,
   utilsSvc ?: UtilsSvc,
   modalSvc ?: ModalModel,
+  groupSvc ?: GroupSvc,
   trekInfo ?: TrekInfo,
   toastSvc ?: ToastModel,
   storageSvc ?: StorageSvc,
@@ -73,6 +78,8 @@ class TrekImages extends Component<{
   }  
 
   tInfo = this.props.trekInfo;
+  gS = this.props.groupSvc;
+
   currentImageSet       : TrekImageSet;
   currentImageSetIndex  : number;
   backgroundTimeoutID   : number;
@@ -102,6 +109,7 @@ class TrekImages extends Component<{
   @observable imageBackgroundText     : string;
   @observable audioMuted              : boolean;
   @observable videoPaused             : boolean;
+  @observable videoLoaded             : boolean;
   @observable showVideoControls       : boolean;
   @observable currentVideoPos         : number;
   @observable videoDuration           : number;
@@ -121,10 +129,11 @@ class TrekImages extends Component<{
     this.setVideoRecording(false);
     this.setPicturePaused(false);
     this.setDisplayingImage(false);
-    this.setCurrentImageSet(-1);
+    this.setCurrentImageSet(-1, 0);
     this.setFrontOrBackCamera(RNCamera.Constants.Type.back)
     this.setCameraZoom(0);
     this.setVideoPaused(true);
+    this.setVideoLoaded(false);
     this.setAudioMuted(false);
     this.setShowVideoControls(true);
     this.setCurrentVideoPos(0);
@@ -153,6 +162,7 @@ class TrekImages extends Component<{
     this.setPicturePaused(false);
     this.setDisplayingImage(false);
     this.setVideoPaused(true);
+    this.setVideoLoaded(false);
     this.currentImageSet = undefined;
     // this.showStatusBar();
   }
@@ -274,11 +284,22 @@ class TrekImages extends Component<{
 
   // set the value of the currentImageObject property
   @action
-  setCurrentImageSet = (setIndex: number, imageIndex = 0) => {
+  setCurrentImageSet = (setIndex: number, imageSel: any) => {
     this.currentImageSetIndex = setIndex;
     if (setIndex >= 0) {
+      let n: number;
       this.currentImageSet = this.tInfo.trekImages[setIndex];
-      this.setCurrentImageIndex(imageIndex);
+      switch(imageSel){
+        case 'last':
+          n = this.currentImageSet.images.length - 1;
+          break;
+        case 'first':
+          n = 0;
+          break;
+        default: 
+          n = imageSel;
+      }
+      this.setCurrentImageIndex(n);
       this.openImageDispaly();
     }
   }
@@ -288,16 +309,25 @@ class TrekImages extends Component<{
   setCurrentImageIndex = (val: number) => {
     this.currentImageIndex = val;
     if(this.currentImageSet){
+      this.setVideoLoaded(false);
+      let title = this.tInfo.formatImageTitle(this.currentImageSetIndex, val);
+      this.props.navigation.setParams({title: title});
+      title = this.tInfo.formatImageTitle(this.currentImageSetIndex, val, true);
+      this.setImageBackgroundTextTimeout(title + ' is missing');
       let ci : TrekImage = {} as TrekImage;
       Object.assign(ci, this.currentImageSet.images[val]);
       if(/TrekLog/g.test(ci.uri)) {
         ci.uri = 'file://' + ci.uri;
       }
       this.setCurrentImage(ci);
-      let title = this.tInfo.formatImageTitle(this.currentImageSetIndex, val);
-      this.props.navigation.setParams({title: title});
-      title = this.tInfo.formatImageTitle(this.currentImageSetIndex, val, true);
-      this.setImageBackgroundTextTimeout(title + ' is missing');
+      Image.getSize(ci.uri,
+        (w, h) => {
+          ci.width = w;
+          ci.height = h;
+          this.clearImageBackgroundTextTimeout();
+        }, 
+        () => {}
+      )
     }
   }
 
@@ -309,11 +339,11 @@ class TrekImages extends Component<{
 
   // set a timeout to change the imageBackgroundText property
   setImageBackgroundTextTimeout = (text: string) => {
-    this.setImageBackgroundText('Loading...');
-    window.clearTimeout(this.backgroundTimeoutID);
-    this.backgroundTimeoutID = window.setTimeout(() => {
-      this.setImageBackgroundText(text);
-    }, 3000);
+      this.setImageBackgroundText('Loading...');
+      window.clearTimeout(this.backgroundTimeoutID);
+      this.backgroundTimeoutID = window.setTimeout(() => {
+        this.setImageBackgroundText(text);
+      }, 2000);
   }
 
   // image loaded successfully, clear timeoud and loading message
@@ -341,6 +371,12 @@ class TrekImages extends Component<{
       this.setShowVideoControls(true);
       this.cancelHideControlsTimer();
     }
+  }
+
+  // set the value of the audioMuted property
+  @action
+  setVideoLoaded = (status: boolean) => {
+    this.videoLoaded = status;
   }
 
   // set the value of the audioMuted property
@@ -390,12 +426,13 @@ class TrekImages extends Component<{
   }
 
   // respond to onLoad video event
-  videoLoaded = (data) => {
+  videoLoad = (data) => {
     if (this.videoPlayerRef) { this.videoPlayerRef.seek(0); }
     this.clearImageBackgroundTextTimeout();
     this.setVideoDuration(data.duration);
     this.videoDurationStr = this.props.utilsSvc.timeFromSeconds(data.duration);
     this.setVideoPaused(true);
+    this.setVideoLoaded(true);
   }
 
   // respond to onEnd video event
@@ -428,13 +465,13 @@ class TrekImages extends Component<{
 
   // move to the next image in the images for the trek
   nextImage = () => {
-
+    this.clearImageBackgroundTextTimeout();
     if (this.currentImageIndex < this.currentImageSet.images.length - 1){
       this.setCurrentImageIndex(this.currentImageIndex + 1);      
     }
     else {
       if (this.currentImageSetIndex < this.tInfo.trekImages.length - 1){
-        this.setCurrentImageSet(this.currentImageSetIndex + 1);
+        this.setCurrentImageSet(this.currentImageSetIndex + 1, "first");
       }
     }
     this.resetImageZoom();
@@ -443,14 +480,13 @@ class TrekImages extends Component<{
 
   // move to the prior image in the images for the trek
   prevImage = () => {
-
+    this.clearImageBackgroundTextTimeout();
     if (this.currentImageIndex > 0){
       this.setCurrentImageIndex(this.currentImageIndex - 1);      
     }
     else {
       if (this.currentImageSetIndex > 0){
-        this.setCurrentImageSet(this.currentImageSetIndex - 1);
-        this.setCurrentImageIndex(this.currentImageSet.images.length - 1);      
+        this.setCurrentImageSet(this.currentImageSetIndex - 1, "last");
       }
     }
     this.resetImageZoom();
@@ -515,7 +551,7 @@ class TrekImages extends Component<{
     
   takePicture = () => {
       if (this.camera) {
-        const options = {pauseAfterCapture: true, skipProcessing: true};
+        const options = {pauseAfterCapture: true, fixOrientation: true };
         this.imageType = IMAGE_TYPE_PHOTO;
         this.camera.takePictureAsync(options)
         .then((data) => {
@@ -536,20 +572,47 @@ class TrekImages extends Component<{
     }
   }
 
+  // compress the image at the given uri
+  // return a result uri
+  compressImage = (data: any, type: TrekImageType) => {
+    return new Promise<any>((resolve, reject) => {
+      if (this.gS.getImageStorageMode() === IMAGE_STORE_COMPRESSED && type === IMAGE_TYPE_PHOTO) {
+        ImageResizer.createResizedImage(data.uri,
+                                        data.width, data.height,
+                                         'JPEG', IMAGE_COMPRESSION_QUALITY)
+        .then((result) => resolve(result.uri))
+        .catch((err) => reject(err))
+      }
+      else {
+        resolve(data.uri)
+      }
+    })
+  }
+
+  // save the given photo/video and associate it with the given location
   handlePicture = (data: any, type: TrekImageType, loc: TrekPoint) => {
     this.setWaitingForSave(true);
-    let imageName = this.props.utilsSvc.formatLongSortDate();
-    // store image as longSortDate.extension (jpg, mp4, etc.)
-    this.props.storageSvc.saveTrekLogPicture(data.uri, imageName)
-    .then((uri) => {
-      this.tInfo.addTrekImage(uri, data.deviceOrientation, type, loc.l, this.imageTime);
-      this.setWaitingForSave(false);
-      this.props.toastSvc.toastOpen({tType: 'Info', content: IMAGE_TYPE_INFO[type].name + ' saved'});
-      this.resumeCameraPreview();
+    this.compressImage(data, type)
+    .then((compressedUri) => {
+      let imageName = this.props.utilsSvc.formatLongSortDate();
+      // store image as longSortDate.extension (jpg, mp4, etc.)
+      this.props.storageSvc.saveTrekLogPicture(compressedUri, imageName)
+      .then((finalUri) => {
+        this.tInfo.addTrekImage(finalUri, data, type, loc.l, this.imageTime);
+        this.setWaitingForSave(false);
+        this.props.toastSvc.toastOpen({tType: 'Info', content: IMAGE_TYPE_INFO[type].name + ' saved'});
+        this.resumeCameraPreview();
+      })
+      .catch((error) => {
+        this.setWaitingForSave(false);
+        this.props.toastSvc.toastOpen({tType: 'Error',content: 'Error saving ' + 
+                                              IMAGE_TYPE_INFO[type].name + ': ' + error, time: 3000});
+        this.resumeCameraPreview();
+      })
     })
     .catch((error) => {
       this.setWaitingForSave(false);
-      this.props.toastSvc.toastOpen({tType: 'Error',content: 'Error saving ' + 
+      this.props.toastSvc.toastOpen({tType: 'Error',content: 'Error Processing ' + 
                                             IMAGE_TYPE_INFO[type].name + ': ' + error, time: 3000});
       this.resumeCameraPreview();
     })
@@ -558,7 +621,7 @@ class TrekImages extends Component<{
   keepThisImage = () => {
     // open form for label and note here
     this.handlePicture(this.cameraData, this.imageType, this.tInfo.lastPoint());
-     this.setShowVideoControls(true);
+    this.setShowVideoControls(true);
   }
 
   deleteCurrentImage = () => {
@@ -573,12 +636,11 @@ class TrekImages extends Component<{
         this.setCurrentImageIndex(newIndx);
       } else {
         if (this.currentImageSetIndex < this.tInfo.getTrekImageSetCount()) {
-          this.setCurrentImageSet(this.currentImageSetIndex);
+          this.setCurrentImageSet(this.currentImageSetIndex, "first");
         }
         else {
           if (this.tInfo.getTrekImageCount() > 0) {
-            this.setCurrentImageSet(this.currentImageSetIndex - 1);
-            this.setCurrentImageIndex(this.tInfo.trekImages[this.currentImageSetIndex].images.length - 1)
+            this.setCurrentImageSet(this.currentImageSetIndex - 1, "last");
           }
           else {
             this.closeImageDisplay();
@@ -592,7 +654,7 @@ class TrekImages extends Component<{
   }
 
   render () {
-    const { trekLogGreen, trekLogRed,
+    const { trekLogGreen, trekLogRed, mediumTextColor, pageBackground
           } = this.props.uiTheme.palette[this.tInfo.colorTheme];
     const { navIcon } = this.props.uiTheme;
     const noPrev = !this.havePrevImage();
@@ -601,12 +663,15 @@ class TrekImages extends Component<{
     const cameraControlButtonSize = 72;
     const cameraControlIconSize = 48;
     const controlsColor = semitransWhite_8;
-    const iWidth = Dimensions.get('window').width;
-    const iHeight = Dimensions.get('window').height;
+    const cWidth = Dimensions.get('window').width;
+    const cHeight = Dimensions.get('window').height;
+    const iHeight = (this.currentImage && this.currentImage.width)
+                    ? cWidth * (this.currentImage.height / this.currentImage.width)
+                    : cHeight;
     const buttonBorderColor = semitransBlack_5;
     
     const styles = StyleSheet.create({
-      container: { ... StyleSheet.absoluteFillObject },
+      container: { ... StyleSheet.absoluteFillObject, backgroundColor: pageBackground },
       cameraArea: {
         position: "absolute",
         top: 0,
@@ -695,16 +760,25 @@ class TrekImages extends Component<{
       },
       imageBackground: {
         position: "absolute",
-        right: imageSelectorWidth,
-        left: imageSelectorWidth,
+        right: 10,
+        left: 10,
         top: 0,
-        bottom: iHeight / 2,
+        bottom: 120,
         justifyContent: "center",
         alignItems: "center",
       },
       imageBackgroundMsg: {
-        color: semitransBlack_9,
+        color: mediumTextColor,
         fontSize: 18,
+      },
+      videoBackground: {
+        position: "absolute",
+        right: 10,
+        left: 10,
+        top: 0,
+        bottom: 0,
+        justifyContent: "center",
+        alignItems: "center",
       },
       videoControlsArea: {
         position: "absolute",
@@ -817,31 +891,32 @@ class TrekImages extends Component<{
           <View style={[styles.container, {alignItems: "center"}]}
             // {...this._panResponder.panHandlers}
           >
-          <View style={styles.container}>
+            <View style={styles.container}>
               <View style={styles.imageBackground}>
                 <Text style={styles.imageBackgroundMsg}>{this.imageBackgroundText}</Text>
               </View>
-                <View style={{flex: 1}}>
-                  {(this.currentImage.type === IMAGE_TYPE_PHOTO) &&
-                    <ImageZoom 
-                      ref={ref => { this.imageZoomRef = ref;}}
-                      cropWidth={iWidth}
-                      cropHeight={iHeight}
-                      imageWidth={iWidth}
-                      imageHeight={iHeight}
-                      onClick={this.toggleShowVideoContols}
-                    >
-                      <Image source={{uri: this.currentImage.uri}} 
-                        style={{flex:1}}
-                        onLoad={this.clearImageBackgroundTextTimeout}
-                      />
-                    </ImageZoom>
-                  }
-                  {(this.currentImage.type === IMAGE_TYPE_VIDEO) &&
-// @ts-ignore
+                {this.currentImage &&
+                  <View style={{flex: 1}}>
+                    {(this.currentImage.type === IMAGE_TYPE_PHOTO) &&
+                      <ImageZoom 
+                        ref={ref => { this.imageZoomRef = ref;}}
+                        cropWidth={cWidth}
+                        cropHeight={cHeight}
+                        imageWidth={cWidth}
+                        imageHeight={iHeight}
+                        onClick={this.toggleShowVideoContols}
+                      >
+                        <Image source={{uri: this.currentImage.uri}} 
+                          style={{flex:1}}
+                          onLoad={this.clearImageBackgroundTextTimeout}
+                        />
+                      </ImageZoom>
+                    }
+                    {(this.currentImage.type === IMAGE_TYPE_VIDEO) &&
+  // @ts-ignore
                       <Video source={{uri: this.currentImage.uri}}      
                         ref={(ref) => { this.videoPlayerRef = ref }}    // Store reference
-                        onLoad={this.videoLoaded} 
+                        onLoad={this.videoLoad} 
                         onEnd={this.videoEnded}
                         onProgress={this.newVideoPos}
                         onSeek={this.newVideoPos}
@@ -852,72 +927,74 @@ class TrekImages extends Component<{
                         muted={this.audioMuted}
                         resizeMode="cover"
                         progressUpdateInterval={1500}
-                        style={{flex: 1}} 
+                        style={this.videoLoaded ? {flex: 1} : undefined} 
                       />
-                  }
-                  {((this.currentImage.type === IMAGE_TYPE_VIDEO) && this.showVideoControls) &&
-                    <View style={styles.videoControlsArea}>
-                      <View style={styles.videoControls}>
-                        {this.audioMuted &&
-                          <CameraControl icon={"Speaker"} onPress={this.toggleAudioMuted}/>
+                    }
+                    {((this.currentImage.type === IMAGE_TYPE_VIDEO && this.videoLoaded) 
+                        && this.showVideoControls) &&
+                      <View style={styles.videoControlsArea}>
+                        <View style={styles.videoControls}>
+                          {this.audioMuted &&
+                            <CameraControl icon={"Speaker"} onPress={this.toggleAudioMuted}/>
+                          }
+                          {!this.audioMuted &&
+                            <CameraControl icon={"SpeakerOff"} onPress={this.toggleAudioMuted}/>
+                          }
+                          {this.videoPaused &&
+                            <CameraControl icon={"Play"} onPress={this.toggleVideoPaused}/>
+                          }
+                          {!this.videoPaused &&
+                            <CameraControl icon={"Pause"} onPress={this.toggleVideoPaused}/>
+                          }
+                        </View>
+                        <View style={styles.sliderArea}>
+                          <Text style={styles.sliderText}>
+                            {this.props.utilsSvc.timeFromSeconds(this.currentVideoPos)}</Text>
+                          <Slider
+                            style={{flex: 1}}
+                            step={1}
+                            maximumTrackTintColor="rgba(255, 255, 102, .8)"
+                            maximumValue={this.videoDuration}
+                            onValueChange={this.setNewVideoPos}
+                            value={this.currentVideoPos}
+                          />                        
+                          <Text style={styles.sliderText}>{this.videoDurationStr}</Text>
+                        </View>
+                      </View>
+                    }
+                    {(((this.currentImage.type !== IMAGE_TYPE_VIDEO) || this.videoPaused)
+                        && this.showVideoControls) && 
+                      <View style={styles.imageSelectorArea}>
+                        {!noPrev &&
+                          <View style={styles.imageSelectorPrev}>
+                            <IconButton 
+                              iconSize={imageSelectorWidth}
+                              style={styles.imageSelectorStyle}
+                              borderColor={buttonBorderColor}
+                              icon="ChevronLeft"
+                              color={controlsColor}
+                              iconStyle={navIcon}
+                              onPressFn={this.prevImage}
+                            />
+                          </View>
                         }
-                        {!this.audioMuted &&
-                          <CameraControl icon={"SpeakerOff"} onPress={this.toggleAudioMuted}/>
-                        }
-                        {this.videoPaused &&
-                          <CameraControl icon={"Play"} onPress={this.toggleVideoPaused}/>
-                        }
-                        {!this.videoPaused &&
-                          <CameraControl icon={"Pause"} onPress={this.toggleVideoPaused}/>
+                        {!noNext &&
+                          <View style={styles.imageSelectorNext}>
+                            <IconButton
+                              iconSize={imageSelectorWidth}
+                              style={styles.imageSelectorStyle}
+                              borderColor={buttonBorderColor}
+                              icon="ChevronRight"
+                              color={controlsColor}
+                              iconStyle={navIcon}
+                              onPressFn={this.nextImage}
+                            />
+                          </View>
                         }
                       </View>
-                      <View style={styles.sliderArea}>
-                        <Text style={styles.sliderText}>
-                          {this.props.utilsSvc.timeFromSeconds(this.currentVideoPos)}</Text>
-                        <Slider
-                          style={{flex: 1}}
-                          step={1}
-                          maximumTrackTintColor="rgba(255, 255, 102, .8)"
-                          maximumValue={this.videoDuration}
-                          onValueChange={this.setNewVideoPos}
-                          value={this.currentVideoPos}
-                        />                        
-                        <Text style={styles.sliderText}>{this.videoDurationStr}</Text>
-                      </View>
-                    </View>
-                  }
-                  {(((this.currentImage.type !== IMAGE_TYPE_VIDEO) || this.videoPaused)
-                      && this.showVideoControls) && 
-                    <View style={styles.imageSelectorArea}>
-                      {!noPrev &&
-                        <View style={styles.imageSelectorPrev}>
-                          <IconButton 
-                            iconSize={imageSelectorWidth}
-                            style={styles.imageSelectorStyle}
-                            borderColor={buttonBorderColor}
-                            icon="ChevronLeft"
-                            color={controlsColor}
-                            iconStyle={navIcon}
-                            onPressFn={this.prevImage}
-                          />
-                        </View>
-                      }
-                      {!noNext &&
-                        <View style={styles.imageSelectorNext}>
-                          <IconButton
-                            iconSize={imageSelectorWidth}
-                            style={styles.imageSelectorStyle}
-                            borderColor={buttonBorderColor}
-                            icon="ChevronRight"
-                            color={controlsColor}
-                            iconStyle={navIcon}
-                            onPressFn={this.nextImage}
-                          />
-                        </View>
-                      }
-                    </View>
-                  }
-                </View>
+                    }
+                  </View>
+                }
             </View>        
           </View>
         }

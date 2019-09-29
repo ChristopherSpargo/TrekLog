@@ -293,7 +293,7 @@ getCourse = () => {
             highlightedItemColor, primaryColor, rippleColor, navItemBorderColor, disabledTextColor
           } = this.props.uiTheme.palette[this.tInfo.colorTheme];
     const { cardLayout, footer, footerButton, footerButtonText,
-            navItem, navIcon, pageTitle, fontRegular } = this.props.uiTheme;
+            navItem, navIcon, fontRegular } = this.props.uiTheme;
     const validGoal = this.gS.validGoal(); 
     const editNew = this.gS.goalEditMode === 'New'
     const CAMetricUnits = this.gS.goalActivity === "Burn" ? CABurnGoalMetricUnitsArray : CAGoalMetricUnitsArray;

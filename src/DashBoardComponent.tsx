@@ -111,7 +111,7 @@ class DashBoard extends Component<{
   @action
   init = () => {
     this.sumSvc.scanTreks();
-    this.sumSvc.setSelectedInterval(0);
+    this.sumSvc.findStartingInterval();
     this.prepareGoals();
     this.ftCsum = this.fS.ftChecksum;
   }
@@ -185,6 +185,7 @@ class DashBoard extends Component<{
       this.tInfo.setTypeSelections(TREK_SELECT_BITS[value]);
     }
     this.sumSvc.scanTreks();
+    this.sumSvc.findStartingInterval(this.sumSvc.selectedInterval);
   }
 
   setType = (value: TrekType) => {

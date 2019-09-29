@@ -510,6 +510,7 @@ export class StorageSvc {
         t.dataVersion = version;
         upgraded = true;
         switch(dv){
+
           // change to storing only 4 significant digits for speed property of GPS points
           case '5.1':
             if(t.pointList.length > 0) {
@@ -521,6 +522,7 @@ export class StorageSvc {
                 }
               }
             }
+
           // change to starting point time is 0 and trek duration is lastPoint time
           case '5.2':
             let l = t.pointList;
@@ -531,6 +533,10 @@ export class StorageSvc {
               }
               t.duration = l[l.length-1].t;   // set duration to time of last point
             }
+            
+          // change to storing cumulative distance with each point
+          case '5.3':
+            this.utilsSvc.setPointDistances(t.pointList);
             break;
           default:
         }

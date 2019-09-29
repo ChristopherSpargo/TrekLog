@@ -99,6 +99,7 @@ function TrekLimitsForm({open=undefined, limits=undefined}) {
   
   function setType(tType: string){
     limits.onChangeFn(tType);
+    close();
   }
 
     // call the close method, indicate OK
@@ -272,18 +273,20 @@ function TrekLimitsForm({open=undefined, limits=undefined}) {
                       </Text>
                     </View>
                   </RectButton>
-                  <RectButton
-                    rippleColor={rippleColor}
-                    style={{flex: 1}}
-                    onPress={() => close()}>
-                    <View style={footerButton}>
-                      <Text
-                        style={footerButtonText}
-                      >
-                        {okTxt}
-                      </Text>
-                    </View>
-                  </RectButton>
+                  {okTxt !== 'Auto' && 
+                    <RectButton
+                      rippleColor={rippleColor}
+                      style={{flex: 1}}
+                      onPress={() => close()}>
+                      <View style={footerButton}>
+                        <Text
+                          style={footerButtonText}
+                        >
+                          {okTxt}
+                        </Text>
+                      </View>
+                    </RectButton>
+                  }
                 </View>
               </View>
             </SlideUpView>

@@ -60,7 +60,8 @@ function BarItem({
   }
 
     const { highTextColor, dividerColor, itemSelectedColor, itemMeetsGoal, itemMissesGoal,
-            itemNotSelected, rippleColor, mediumTextColor, gradientEndColor
+            itemNotSelected, rippleColor, mediumTextColor, gradientEndColor, gradientEndSelected,
+            itemMissesGoalEnd, itemMeetsGoalEnd, itemMissesGoalText, itemMeetsGoalText
           } = uiTheme.palette[trekInfo.colorTheme];
     const { fontRegular, fontBold } = uiTheme
     const iconPaths = item.icon ? APP_ICONS[item.icon] : undefined;
@@ -73,12 +74,16 @@ function BarItem({
     const idx = item.index !== undefined ? item.index : index;
     const selItem = selected === index;
     const animDur = animationDuration !== undefined ? animationDuration : 500;
-    let goalGrad = itemNotSelected;
+    let barGradientStart, barGradientEnd, valueColor;
     if(item.indicatorFill){
-        goalGrad = item.indicatorFill === 'red' ? itemMissesGoal : itemMeetsGoal;
+        barGradientStart = item.indicatorFill === 'red' ? itemMissesGoal : itemMeetsGoal;
+        barGradientEnd = item.indicatorFill === 'red' ? itemMissesGoalEnd : itemMeetsGoalEnd;
+        valueColor = item.indicatorFill === 'red' ? itemMissesGoalText : itemMeetsGoalText;
+    } else {
+      barGradientStart = selItem ? itemSelectedColor : itemNotSelected;
+      barGradientEnd = selItem ? gradientEndSelected : gradientEndColor;
+      valueColor = highTextColor;
     }
-    const barGradientEnd = gradientEnd || gradientEndColor;
-    const barGradientStart = (selItem  && !item.indicatorFill) ? itemSelectedColor : goalGrad; 
     const useDimColor = item.typeSelected !== undefined && item.typeSelected === false;
     const barPad = style.paddingHorizontal || 0;
 
@@ -134,7 +139,7 @@ function BarItem({
       value: {
         marginTop: item.showEmpty ? -3 : 0,
         fontSize: selItem ? 13 : 12,
-        color: highTextColor,
+        color: valueColor,
         fontFamily: selItem ? fontBold : fontRegular,
       },
       smallImages: {

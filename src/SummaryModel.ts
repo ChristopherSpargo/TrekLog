@@ -1,19 +1,20 @@
 import { action, observable } from 'mobx';
 
-import { TrekInfo, TrekObj, SWITCH_SPEED_AND_TIME, NumericRange, TREK_TYPE_CHOICES,
+import { TrekInfo, TrekObj, NumericRange, TREK_TYPE_CHOICES,
          TREK_SELECT_BITS, TrekTypeDataNumeric, STEPS_APPLY, TREKS_WITH_STEPS_BITS
        } from './TrekInfoModel'
 import { UtilsSvc, SortDateRange, DateInterval } from './UtilsService';
 import { BarData, BarGraphInfo } from "./BarDisplayComponent";
 import { FilterSvc } from './FilterService';
 
-export type ActivityStatType = 'time' | 'dist' | 'cals' | 'steps';
-export const STAT_CATS : ActivityStatType[] = ['time', 'dist', 'cals', 'steps'];
+export type ActivityStatType = 'time' | 'dist' | 'speed' | 'cals' | 'steps';
+export const STAT_CATS : ActivityStatType[] = ['time', 'dist', 'speed', 'cals', 'steps'];
 export const INTERVAL_CATS : DateInterval[] = ['daily', 'weekly', 'monthly']; 
 
 export interface ActivityBarGraphData {
   time: BarGraphInfo,
   dist: BarGraphInfo,
+  speed: BarGraphInfo,
   cals: BarGraphInfo,
   steps: BarGraphInfo,
 }
@@ -25,8 +26,8 @@ export interface ActivityStats {
   cals:     number,
   steps:    number,
   stepTime: number,
-  maxCPM:   number,
-  maxSPM:   number
+  maxCPM?:   number,
+  maxSPM?:   number
 }
 
 export interface AllActivityStats {
@@ -52,7 +53,7 @@ export class SummaryModel {
   @observable ftCount;                // count of treks encountered from filterTreks (?)
   @observable dataReady: boolean;
   @observable openItems;
-  @observable showSpeedOrTime;
+  @observable showAvgSpeed: boolean;
   @observable showStepsPerMin;
   @observable showTotalCalories;
   @observable showStatType : ActivityStatType;
@@ -82,14 +83,14 @@ export class SummaryModel {
     this.setFTCount(0);
     this.setDataReady(false);
     this.setOpenItems(false);
-    this.showSpeedOrTime = 'speed';
+    this.showAvgSpeed = true;
     this.showStepsPerMin = false;
     this.showTotalCalories = true;
     this.setShowStatType('time');
     this.setShowIntervalType('weekly');
     this.setSelectedInterval(-1);
     this.activeTypes = 0;
-    this.setAllowEmptyIntervals(true);
+    this.setAllowEmptyIntervals(false);
   }
 
   // set the value of the dataReady property
@@ -137,12 +138,22 @@ export class SummaryModel {
   }
 
   //set the selectedInterval to the first interval that satisfies the allowEmptyIntervals property
-  findStartingInterval = () => {
+  findStartingInterval = (startAt = 0) => {
     if (this.allowEmptyIntervals) {
-      this.setSelectedInterval(0);
+      this.setSelectedInterval(startAt);
     } else {  
+      // start looking for non-empty interval at the current interval
       let items = this.barGraphData[this.showStatType].items;
-      for(let i=0; i<items.length; i++){
+      if (startAt > items.length) { startAt = items.length; }
+      if (startAt < 0) { startAt = 0; }
+      for(let i=startAt; i<items.length; i++){
+        if(!items[i].showEmpty){
+          this.setSelectedInterval(i);  // found one that isn't empty
+          return;
+        }
+      }
+      // continue search from beginning if no valid intervals found after startAt
+      for(let i=0; i<startAt; i++){
         if(!items[i].showEmpty){
           this.setSelectedInterval(i);  // found one that isn't empty
           return;
@@ -159,8 +170,9 @@ export class SummaryModel {
   
   // toggle between displaying time/distance and distance/time
   @action
-  toggleAvgSpeedorTimeDisplay = () => {
-    this.showSpeedOrTime = SWITCH_SPEED_AND_TIME[this.showSpeedOrTime];
+  toggleAvgSpeedOrTimeDisplay = () => {
+    this.showAvgSpeed = !this.showAvgSpeed;
+    this.buildGraphData();
   }
 
   // toggle between displaying total steps and steps/min
@@ -246,13 +258,13 @@ export class SummaryModel {
 
       this.activityData.push({interval: ints[i], endDate: ieDate, label: ieDate.substr(0,5),
         data: {
-          Walk:     {treks: 0, dist: 0, time: 0, cals: 0,  steps: 0, stepTime: 0, maxCPM: 0, maxSPM: 0},
-          Run:      {treks: 0, dist: 0, time: 0, cals: 0,  steps: 0, stepTime: 0, maxCPM: 0, maxSPM: 0},
-          Bike:     {treks: 0, dist: 0, time: 0, cals: 0,  steps: 0, stepTime: 0, maxCPM: 0, maxSPM: 0},
-          Hike:     {treks: 0, dist: 0, time: 0, cals: 0,  steps: 0, stepTime: 0, maxCPM: 0, maxSPM: 0},
-          Board:    {treks: 0, dist: 0, time: 0, cals: 0,  steps: 0, stepTime: 0, maxCPM: 0, maxSPM: 0},
-          Drive:    {treks: 0, dist: 0, time: 0, cals: 0,  steps: 0, stepTime: 0, maxCPM: 0, maxSPM: 0},
-          Selected: {treks: 0, dist: 0, time: 0, cals: 0,  steps: 0, stepTime: 0, maxCPM: 0, maxSPM: 0},
+          Walk:     {treks: 0, dist: 0, time: 0, cals: 0,  steps: 0, stepTime: 0},
+          Run:      {treks: 0, dist: 0, time: 0, cals: 0,  steps: 0, stepTime: 0},
+          Bike:     {treks: 0, dist: 0, time: 0, cals: 0,  steps: 0, stepTime: 0},
+          Hike:     {treks: 0, dist: 0, time: 0, cals: 0,  steps: 0, stepTime: 0},
+          Board:    {treks: 0, dist: 0, time: 0, cals: 0,  steps: 0, stepTime: 0},
+          Drive:    {treks: 0, dist: 0, time: 0, cals: 0,  steps: 0, stepTime: 0},
+          Selected: {treks: 0, dist: 0, time: 0, cals: 0,  steps: 0, stepTime: 0},
           Total:    {treks: 0, dist: 0, time: 0, cals: 0,  steps: 0, stepTime: 0, maxCPM: 0, maxSPM: 0}
         }
       })
@@ -302,7 +314,7 @@ export class SummaryModel {
     iData.data.Total.cals += cals;              // add to overall cals Total
     if (selectedType) {iData.data.Selected.cals += cals;}
     iData.data[t.type].cals += cals;
-    let calsPM = t.calories / (t.duration / 60);
+    let calsPM = this.uSvc.getCaloriesPerMin(t.calories, t.duration, true);
     if (calsPM > iData.data.Total.maxCPM) { iData.data.Total.maxCPM = calsPM; }
 
     if (STEPS_APPLY[t.type]){
@@ -315,7 +327,7 @@ export class SummaryModel {
       }
       iData.data[t.type].steps += sc;             // add to type steps Total
       iData.data[t.type].stepTime += t.duration;  // add to type stepTime Total
-      let stepsPM = sc / (t.duration / 60);
+      let stepsPM = this.uSvc.computeStepsPerMin(sc, t.duration, true);
       if (stepsPM > iData.data.Total.maxSPM) { iData.data.Total.maxSPM = stepsPM; }
       }
   }
@@ -327,16 +339,25 @@ export class SummaryModel {
 
     this.activityData.forEach((iData: ActivityStatsInterval) => {
       let tData = iData.data.Total
-      let val = tData[sType];
+      let val;
       switch(sType){
+        case 'time':
+          val = tData.time;
+          break;
         case 'dist':
-          val = this.uSvc.getRoundedDist(val, this.tInfo.distUnits(), true)
+          val = this.uSvc.getRoundedDist(tData.dist, this.tInfo.distUnits(), true)
+          break;
+        case 'speed':
+          let sys = this.tInfo.measurementSystem;
+          val = this.showAvgSpeed 
+                          ? this.uSvc.computeRoundedAvgSpeed(sys, tData.dist, tData.time)
+                          : (tData.time / this.uSvc.convertDist(tData.dist, this.tInfo.distUnits()));
           break;
         case 'cals':
-          val = this.showTotalCalories ? val : tData.maxCPM;
-        break;
+          val = this.showTotalCalories ? tData.cals : tData.maxCPM;
+          break;
         case 'steps':
-          val = this.showStepsPerMin ? tData.maxSPM : val;
+          val = this.showStepsPerMin ? tData.maxSPM : tData.steps;
           break;
       }
       if (val > maxV) { maxV = val; }
@@ -348,8 +369,11 @@ export class SummaryModel {
   // build the data structure used to display the activityData bar graphs
   buildGraphData = () => {
     let graphData : ActivityBarGraphData = {
-      dist: {items: [], range: {} as NumericRange, title: this.tInfo.longDistUnitsCaps()},
       time: {items: [], range: {} as NumericRange},
+      dist: {items: [], range: {} as NumericRange, title: this.tInfo.longDistUnitsCaps()},
+      speed: {items: [], range: {} as NumericRange,
+              title: this.showAvgSpeed 
+              ? this.tInfo.speedUnits() : ("Time/" + this.tInfo.distUnits())},
       cals: {items: [], range: {} as NumericRange,
               title: this.showTotalCalories ? undefined : "Calories/min"},
       steps: {items: [], range: {} as NumericRange,
@@ -364,6 +388,7 @@ export class SummaryModel {
     this.activityData.forEach((intData) => {
       graphData.time.items.push(this.getBarItem(intData, 'time'))
       graphData.dist.items.push(this.getBarItem(intData, 'dist'))
+      graphData.speed.items.push(this.getBarItem(intData, 'speed'))
       graphData.cals.items.push(this.getBarItem(intData, 'cals'))
       graphData.steps.items.push(this.getBarItem(intData, 'steps'))
     })
@@ -373,6 +398,7 @@ export class SummaryModel {
   getBarItem = (iData: ActivityStatsInterval, sType: ActivityStatType) => {
     let barItem : BarData = {} as BarData;
     let data = iData.data.Selected;
+    let sys = this.tInfo.measurementSystem;
     let noData = '-';
     switch(sType){
       case "dist":
@@ -385,19 +411,26 @@ export class SummaryModel {
         // barItem.label1 = data.treks === 0 ? noData : this.uSvc.timeFromSeconds(data.time);
         break;
       case "steps":
-          barItem.value = this.showStepsPerMin ? 
-                  this.uSvc.computeStepsPerMin(data.steps, data.stepTime) : data.steps;
-          // barItem.label1 = data.treks === 0 ? noData : (barItem.value).toString();
+        barItem.value = this.showStepsPerMin ? this.uSvc.computeStepsPerMin(data.steps, data.stepTime) 
+                                             : data.steps;
+        // barItem.label1 = data.treks === 0 ? noData : (barItem.value).toString();
         break;
       case "cals":
-        barItem.value = this.showTotalCalories ? data.cals : this.uSvc.getCaloriesPerMin(data.cals, data.time); 
+        barItem.value = this.showTotalCalories ? data.cals 
+                                               : this.uSvc.getCaloriesPerMin(data.cals, data.time); 
         // barItem.label1 = data.treks === 0 ? noData : (barItem.value).toString();
+        break;
+      case "speed":
+        barItem.value = this.showAvgSpeed 
+                          ? this.uSvc.computeRoundedAvgSpeed(sys, data.dist, data.time)
+                          : (data.time / this.uSvc.convertDist(data.dist, this.tInfo.distUnits()));
         break;
       default:
         barItem.value = 0;
         barItem.label1 = '';
     }
     // barItem.indicator = iData.endDate;   // interval date for display
+    if(isNaN(barItem.value)) { barItem.value = 0; }
     barItem.label1 = !data.treks ? noData : ''; 
     barItem.showEmpty = !data.treks || barItem.value === 0;
     barItem.indicator = iData.label;

@@ -165,7 +165,7 @@ class ExtraFilters extends Component<{
   
   render() {
 
-    const { cardLayout, navItem, navIcon, pageTitle, fontRegular,
+    const { cardLayout, navItem, navIcon, fontRegular,
             formTextInput, formNumberInput } = this.props.uiTheme;
     const { highTextColor, pageBackground, secondaryColor, trekLogBlue, listIconColor,
             primaryColor, dividerColor, rippleColor, navItemBorderColor, mediumTextColor

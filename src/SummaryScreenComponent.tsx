@@ -1,5 +1,5 @@
 import React, { Component } from "react";
-import { View, StyleSheet, Text } from "react-native";
+import { View, StyleSheet } from "react-native";
 import { observer, inject } from "mobx-react";
 import { observable, action } from "mobx";
 import { NavigationActions, StackActions } from "react-navigation";
@@ -95,7 +95,7 @@ class SummaryScreen extends Component<
 
   @action
   findTime = () => {
-    this.fS.setDefaultSortValues()
+    this.fS.setDefaultSortValues();
     this.fS.findActiveTimeframe(this.tInfo.timeframe);  // filter the treks but don't build graph data
     this.tInfo.dtMin = this.fS.dateMin;
     this.tInfo.dtMax = this.fS.dateMax;
@@ -104,11 +104,12 @@ class SummaryScreen extends Component<
   @action
   focus = () => {
     this.typeSels = this.tInfo.typeSelections;
-      this.tInfo.setTypeSelections(ALL_SELECT_BITS);
+    this.tInfo.setTypeSelections(ALL_SELECT_BITS);
     if(this.fS.filterMode === FILTERMODE_FROM_STATS){
       this.tInfo.setUpdateDashboard(FILTERMODE_FROM_STATS);
       this.fS.setDateMax(this.sumSvc.beforeRFBdateMax, "None");
       this.fS.setDateMin(this.sumSvc.beforeRFBdateMin, "None");
+      this.fS.setDefaultSortValues();
       this.fS.setTimeframe(this.sumSvc.beforeRFBtimeframe);
     } else {
       this.findTime();
@@ -220,8 +221,8 @@ class SummaryScreen extends Component<
     [ {label: 'Summary Options', 
       submenu: [{icon: extraFilters ? 'FilterRemove' : 'Filter', label: 'Edit Filters', value: 'ExtraFilters'},
                 (this.sumSvc.allowEmptyIntervals 
-                    ? {icon: 'NoEmpties', label: 'No Empty Intervals', value: 'NoEmpties'} 
-                    : {icon: 'EmptiesOK', label: 'Empty Intervals OK', value: 'EmptiesOK'}),
+                    ? {icon: 'NoEmpties', label: 'Hide Empty Intervals', value: 'NoEmpties'} 
+                    : {icon: 'EmptiesOK', label: 'Show Empty Intervals', value: 'EmptiesOK'}),
                 {icon: 'ChartBar', label: 'Review', value: 'Review'},
                ]},
     {icon: 'Home', label: 'Home', value: 'GoBack'},

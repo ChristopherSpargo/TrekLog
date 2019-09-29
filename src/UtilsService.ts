@@ -1,6 +1,6 @@
 import { LaLo, TrekPoint, TrekType, TrekTimeInterval, MeasurementSystemType, SMALL_DIST_UNITS,
          ElevationData, TREK_TYPE_WALK, TREK_TYPE_RUN, TREK_TYPE_BIKE, TREK_TYPE_HIKE, 
-         NumericRange, SMALL_DIST_CUTOFF, STEPS_APPLY, TREK_TYPE_BOARD, TREK_TYPE_DRIVE, TrekObj } from './TrekInfoModel'
+         NumericRange, SMALL_DIST_CUTOFF, STEPS_APPLY, TREK_TYPE_BOARD, TREK_TYPE_DRIVE } from './TrekInfoModel'
 import { LatLng } from 'react-native-maps';
 import { TREK_LIMIT_TYPE_TIME } from './LoggingService';
 import { ELEVATION_API_URL, GOOGLE_MAPS_API_KEY, MAX_ELEVATION_SAMPLES_PER_REQUEST } from './AppInfo'
@@ -799,9 +799,11 @@ export class UtilsSvc {
     return 'N/A'
   }
 
-  // return the number of steps/min as a string, time is in seconds
-  computeStepsPerMin = (steps: number,  time?: number) : number => {
-      return (time ? Math.round(steps / (time / 60)) : 0 );
+  // return the number of steps/min as a number, time is in seconds
+  computeStepsPerMin = (steps: number,  time?: number, noRound = false) : number => {
+    let spm = time ? steps / (time / 60) : 0;
+    if (noRound) { return spm; }
+    return Math.round(spm);
   }
 
   // return the number of steps or steps/min as a string, time is in seconds
@@ -1222,11 +1224,29 @@ export class UtilsSvc {
             o: pt.l.o
           },
           t: pt.t,
-          s: pt.s
+          s: pt.s,
+          d: pt.d
         }
       })
     }
     return pathCopy;
+  }
+
+  // set the distance to point property of each point in the given path
+  // this property is used when finding a point on the path at a given distance or time
+  setPointDistances = (path: TrekPoint[]) => {
+    let dist = 0;
+    let last = path.length;
+
+    if (path.length) {        // skip if no points in path
+      path[0].d = dist;
+      if (--last > 0) {       // skip if only 1 point in path
+        for (let i = 0; i < last; i++) {
+          dist += this.calcDist(path[i].l.a, path[i].l.o, path[i+1].l.a, path[i+1].l.o);
+          path[i+1].d = this.fourSigDigits(dist); // set dist property for the point
+        }
+      }
+    }
   }
 
   // return a LatLng[] from the given TrekPoint[]
@@ -1263,10 +1283,11 @@ export class UtilsSvc {
   // params:
   //  cals -        total calories
   //  time -        duration that was used to compute cals
-  getCaloriesPerMin = (cals: number, time: number) : number => {
+  getCaloriesPerMin = (cals: number, time: number, noRound = false) : number => {
     // let net = cals - (weight * RESTING_CAL_PER_KG_PER_SEC * time);
     if(!time) { return 0; }
     let net = cals * 60 / time;
+    if (noRound) { return net; }
     // if (net < 0) { net = 0; }
     let precision = net < 10 ? 10 : 1;
     return Math.round(net * precision) / precision;

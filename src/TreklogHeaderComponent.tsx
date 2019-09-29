@@ -2,7 +2,6 @@ import React from "react";
 import { Component } from "react";
 import { View, StyleSheet, Text } from "react-native";
 import { observer, inject } from "mobx-react";
-import { RectButton } from "react-native-gesture-handler";
 
 import { TrekInfo } from "./TrekInfoModel";
 import { HEADER_HEIGHT, HEADER_ICON_SIZE, BACK_BUTTON_SIZE, HEADER_Z_INDEX,
@@ -201,7 +200,7 @@ class TrekLogHeader extends Component<
             style={styles.icon}
             size={this.props.logo ? iconWithLogoSize : HEADER_ICON_SIZE}
             paths={APP_ICONS[iconName]}
-            fill={htColor}
+            fill={this.props.iconColor || htColor}
           />
         )}
         <View style={styles.headerRight}>

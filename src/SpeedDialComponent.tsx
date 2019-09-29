@@ -11,7 +11,6 @@ import IconButton from './IconButtonComponent';
 import FadeInTemp from './FadeInTempComponent';
 import { APP_ICONS } from './SvgImages';
 import { TrekInfo } from './TrekInfoModel';
-import { SPEED_DIAL_Z_INDEX } from './App';
 
 export interface SpeedDialItem  {
   label: string,
