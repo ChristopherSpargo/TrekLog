@@ -1,15 +1,16 @@
 import React, { useContext } from "react";
 import { View, StyleSheet, Text } from "react-native";
 
-import { UiThemeContext, TrekInfoContext, UtilsSvcContext, HEADER_Z_INDEX, TRACKING_STATUS_BAR_HEIGHT, HEADER_HEIGHT
+import { UiThemeContext, TrekInfoContext, HEADER_Z_INDEX, TRACKING_STATUS_BAR_HEIGHT, HEADER_HEIGHT
        } from "./App";
 import { TrekInfo } from './TrekInfoModel';
-import { UtilsSvc } from './UtilsService';
 
 function TrackingStatusBar({
   trackingHeader,
   trackingDiffTime,
+  trackingDiffTimeStr,
   trackingDiffDist,
+  trackingDiffDistStr,
   trackingTime,
   barTop,
   headerLeft = undefined,
@@ -17,22 +18,17 @@ function TrackingStatusBar({
 }) {
   const uiTheme: any = useContext(UiThemeContext);
   const tInfo: TrekInfo = useContext(TrekInfoContext);
-  const uSvc: UtilsSvc = useContext(UtilsSvcContext);
 
-    const {
-            matchingMask_9, trackingStatsBackgroundHeader, highTextColor, trackingColorMinus,
+    const { matchingMask_9, trackingStatsBackgroundHeader, highTextColor, trackingColorMinus,
             trackingColorPlus
           } = uiTheme.palette[tInfo.colorTheme];
     const { fontRegular 
           } = uiTheme;
-    const tdTime = trackingDiffTime;
-    const tdTimeColor = tdTime < 0 ? trackingColorMinus : trackingColorPlus;
-    const tdDist = trackingDiffDist ;
-    const tdDistColor = tdDist < 0 ? trackingColorMinus : trackingColorPlus;
-    const tdDistStr = tInfo.formattedDist(Math.abs(tdDist));
-    const spindx = tdDistStr.indexOf(' ');
-    const tdDistValue = tdDistStr.substr(0, spindx);
-    const tdDistUnits = tdDistStr.substr(spindx);
+    const tdTimeColor = trackingDiffTime < 0 ? trackingColorMinus : trackingColorPlus;
+    const tdDistColor = trackingDiffDist < 0 ? trackingColorMinus : trackingColorPlus;
+    const spindx = trackingDiffDistStr.indexOf(' ');
+    const tdDistValue = trackingDiffDistStr.substr(0, spindx);
+    const tdDistUnits = trackingDiffDistStr.substr(spindx);
 
     const styles = StyleSheet.create({
     container: { ...StyleSheet.absoluteFillObject },
@@ -98,7 +94,7 @@ function TrackingStatusBar({
         {trackingTime !== undefined &&
           <View style={[styles.trackingItem, {flex: 0}]}>
             <Text style={styles.trackingTime}>
-                {' (' + uSvc.timeFromSeconds(trackingTime) + ')'}
+                {' (' + trackingTime + ')'}
             </Text>
           </View>
         }
@@ -106,7 +102,7 @@ function TrackingStatusBar({
       <View style={styles.trackingGroup}>
         <View style={styles.trackingItem}>
           <Text style={[styles.trackingItemValue, {color: tdTimeColor}]}>
-            {uSvc.timeFromSeconds(Math.abs(tdTime))}
+            {trackingDiffTimeStr}
           </Text>
         </View>
         <View style={styles.trackingItem}>

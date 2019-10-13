@@ -186,6 +186,12 @@ export class GoalsSvc {
     this.goalCourse = undefined;
   };
 
+  // set the dataReady property
+  @action
+  setDataReady = (status: boolean) => {
+    this.dataReady = status;
+  }
+
   // return an object with the current filter values
   getFilterSettingsObj = (): GoalsFilterObj => {
     return {

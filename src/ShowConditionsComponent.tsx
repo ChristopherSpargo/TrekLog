@@ -91,7 +91,9 @@ class ShowConditions extends Component<{
             openMenuFn={this.openMenu}
           />
           <View style={[cardLayout, {marginBottom: 0, paddingBottom: 15}]}>
-            <PageTitle titleText="At Your Location" style={{paddingLeft: 0}}/>
+            <PageTitle titleText="At Your Location" style={{paddingLeft: 0}}
+                        colorTheme={this.props.trekInfo.colorTheme}
+            />
           </View>
           <Conditions/>
         </View>

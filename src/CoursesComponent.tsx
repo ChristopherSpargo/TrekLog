@@ -20,6 +20,7 @@ import { SCROLL_DOWN_DURATION, FADE_IN_DURATION } from './App';
 import NavMenu, { NavMenuItem } from './NavMenuComponent';
 import PageTitle from './PageTitleComponent';
 
+const pageTitleFormat = {marginBottom: 10};
 const goBack = NavigationActions.back() ;
 
 @inject('trekInfo', 'toastSvc', 'uiTheme', 'utilsSvc', 'modalSvc', 'courseSvc')
@@ -467,7 +468,9 @@ class Courses extends Component<{
           />
           {this.dataReady &&
             <View style={styles.listArea}>
-              <PageTitle titleText="Course List"/>
+              <PageTitle titleText="Course List" 
+                         style={pageTitleFormat}
+                         colorTheme={this.tI.colorTheme}/>
               <ScrollView snapToInterval={courseCardHeight} decelerationRate={.90}> 
                 {!displayList && 
                   <View style={styles.centered}>

@@ -57,7 +57,7 @@ export class SummaryModel {
   @observable showStepsPerMin;
   @observable showTotalCalories;
   @observable showStatType : ActivityStatType;
-  @observable statIndex;
+  statIndex;
   @observable showIntervalType;
   @observable intervalIndex;
   @observable selectedInterval;
@@ -123,11 +123,44 @@ export class SummaryModel {
     this.statIndex = STAT_CATS.indexOf(sType)
   }
 
+  // consolidate actions associated with a show interval type change
+  @action
+  processShowStatTypeChange = (sType : ActivityStatType) => {
+    if (this.showStatType !== sType) {
+      this.setShowStatType(sType);
+    } else {
+      switch(sType){
+        case 'dist':
+          this.tInfo.switchMeasurementSystem();
+          this.buildGraphData();
+          break;
+        case 'speed':
+          this.toggleAvgSpeedOrTimeDisplay();
+          break;
+        case 'cals':
+          this.toggleShowTotalCalories();
+          break;
+        case 'steps':
+          this.toggleShowStepsPerMin();
+          break;
+        default:
+      }
+    }
+  }
+
   // set the showIntervalType and intervalIndex properties
   @action
   setShowIntervalType = (iType: DateInterval) => {
     this.showIntervalType = iType;
     this.intervalIndex = INTERVAL_CATS.indexOf(iType)
+  }
+
+  @action
+  // consolidate actions associated with a show interval type change
+  processShowIntervalTypeChange = (iType: DateInterval) => {
+    this.setShowIntervalType(iType);
+    this.scanTreks();
+    this.findStartingInterval();
   }
 
   @action
@@ -432,7 +465,7 @@ export class SummaryModel {
     // barItem.indicator = iData.endDate;   // interval date for display
     if(isNaN(barItem.value)) { barItem.value = 0; }
     barItem.label1 = !data.treks ? noData : ''; 
-    barItem.showEmpty = !data.treks || barItem.value === 0;
+    barItem.showEmpty = !data.treks;// || barItem.value === 0;
     barItem.indicator = iData.label;
     return barItem;
   }

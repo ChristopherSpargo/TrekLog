@@ -134,7 +134,7 @@ function RadioGroup({
       fontFamily: fontRegular,
       fontSize: 14
     },
-});
+  });
 
   useEffect(() => {
     if (selectedIndex !== values.indexOf(selected)){

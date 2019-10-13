@@ -160,7 +160,7 @@ export class IntervalSvc {
   // Handle onDragEnd event for interval marker
   // Find the nearest point in the segment of the marker or the one after it to the given drop point.
   // Then find the segment of the main trek that contains the new marker location.
-  markerToPath = (index: number, pt: LatLng, path: LatLng[]) => {
+  markerToPath = (index: number, pt: LatLng, path: LatLng[], pointList: TrekPoint[]) => {
     let segAndPt: SegmentAndPoint;
     let iData = this.intervalData;
     let validPath : LatLng[];
@@ -168,7 +168,7 @@ export class IntervalSvc {
     validPath = iData.segPaths[index].concat(iData.segPaths[index+1]);
     segAndPt = this.findNearestPoint(pt, validPath);    // restrict search to validPath
     segAndPt = this.findNearestPoint(segAndPt.point, path); // get segAndPt.segIndex relative to full path
-    this.moveIntervalMarker(index, segAndPt, this.trekInfo.pointList);
+    this.moveIntervalMarker(index, segAndPt, pointList);
     this.buildGraphData(this.intervalData);
     this.setIntervalChange(true);
   } 

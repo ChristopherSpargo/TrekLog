@@ -148,9 +148,9 @@ function TrackingMethodForm({
 
 
     const { highTextColor, dividerColor, textOnPrimaryColor,
-            pageBackground, rippleColor,
+            pageBackground, rippleColor, footerButtonText,
           } = uiTheme.palette[trekInfo.colorTheme];
-    const { cardLayout, roundedTop, footer, footerButton, footerButtonText,
+    const { cardLayout, roundedTop, footer, footerButton,
             formHeader, formHeaderText, formBodyText, formTextInput, formNumberInput,
             fontRegular } = uiTheme;
     const headerHeight = FORMHEADER_HEIGHT;

@@ -127,10 +127,10 @@ class TrekLabelForm extends React.Component<{
     const bPadding = 10;
     const cardWidth = width - (bPadding * 2);
     const mData = this.props.modalSvc.lfData;
-    const { cardLayout, roundedTop, footer, footerButton, footerButtonText,
+    const { cardLayout, roundedTop, footer, footerButton,
             formTextInput, formHeader, formHeaderText } = this.props.uiTheme;
     const { highTextColor, dividerColor, mediumTextColor, pageBackground,
-            trekLogBlue, contrastingMask_3, textOnPrimaryColor, rippleColor
+            trekLogBlue, contrastingMask_3, textOnPrimaryColor, rippleColor, footerButtonText,
           } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
     const defHIcon = mData.headingIcon || "Edit";
     const labelPrompt = "Label:"

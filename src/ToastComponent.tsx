@@ -65,8 +65,8 @@ function Toast({toastOpen}) {
   
     const {width} = Dimensions.get('window');
     const toastWidth = width - 20;
-    const { footerButtonText, roundedLeft, roundedRight, fontRegular } = uiTheme;
-    const { primaryColor, rippleColor, textOnPrimaryColor
+    const { roundedLeft, roundedRight, fontRegular } = uiTheme;
+    const { primaryColor, rippleColor, textOnPrimaryColor, footerButtonText,
           } = uiTheme.palette[trekInfo.colorTheme];
     const styles = StyleSheet.create({
       container: { ... StyleSheet.absoluteFillObject },

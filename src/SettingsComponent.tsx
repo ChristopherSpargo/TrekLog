@@ -35,6 +35,7 @@ import { GroupSvc, DEFAULT_WEIGHT, SettingsObj, WeightObj, GroupsObj } from './G
 import NavMenu, { NavMenuItem } from './NavMenuComponent';
 import PageTitle from './PageTitleComponent';
 
+const pageTitleFormat = {marginBottom: 0};
 const goBack = NavigationActions.back() ;
 
 @inject('trekInfo', 'toastSvc', 'uiTheme', 'utilsSvc', 'modalSvc', 'storageSvc', 'groupSvc')
@@ -841,9 +842,11 @@ class Settings extends Component<{
           {this.dataReady &&
             <View style={styles.listArea}>
               <PageTitle 
+                colorTheme={this.props.trekInfo.colorTheme}
                 titleText="TrekLog Settings"
                 groupName={this.group || "None"}
                 setGroupFn={this.getDifferentGroup}
+                style={pageTitleFormat}
               />
               <ScrollView>
                 <FadeInView startValue={0.1} endValue={1} open={this.openItems} 

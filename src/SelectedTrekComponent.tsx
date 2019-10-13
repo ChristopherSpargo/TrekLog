@@ -67,8 +67,10 @@ class SelectedTrek extends Component<{
 
   @observable courseMarker : TrekPoint;
   trackingStatsTime :  number;
+  trackingStatsTimeStr :  string;
   trackingStatsDist :  number;
-  trackingTime : number;
+  trackingStatsDistStr :  string;
+  trackingTime : string;
   @observable replayTimerStatus : string;
   @observable replayRate : number;
   @observable mapShapshotFn : Function;
@@ -98,6 +100,7 @@ class SelectedTrek extends Component<{
   snapshotTrekPath : TrekPoint[];
   snapshotChanged = false;
   intervalCatIndex = 2;           // Speed is the default category when intervals first opened
+  statLabelWidth = 0;
 
   replayDisplayTime: number;
   replayTimerId;
@@ -144,8 +147,6 @@ class SelectedTrek extends Component<{
     this.setTrackingShapshotItems(this.cS.trackingSnapshot);
     if (this.cS.trackingSnapshot) {
       this.setTrackingTime(this.cS.trackingSnapshot.courseDuration);
-      // this.setTrackingTime(Math.min(this.cS.trackingSnapshot.courseDuration, 
-      //   this.cS.trackingSnapshot.trekDuration));
     }
     this.snapshotChanged = false;
     this.setRateRangeObj(this.mapDisplayMode.includes('noSpeeds') ? undefined : this.currRangeData);
@@ -278,15 +279,17 @@ class SelectedTrek extends Component<{
   // set the trackingStatsTime property
   setTrackingStatsTime = (time: number) => {
     this.trackingStatsTime = time;
+    this.trackingStatsTimeStr = this.props.utilsSvc.timeFromSeconds(Math.abs(time));
   }
 
   // set the trackingStatsDist property
   setTrackingStatsDist = (dist: number) => {
     this.trackingStatsDist = dist;
+    this.trackingStatsDistStr = this.tInfo.formattedDist(Math.abs(dist));
   }
 
   setTrackingTime = (time: number) => {
-    this.trackingTime = time;
+    this.trackingTime = this.props.utilsSvc.timeFromSeconds(time);
   }
 
   @action
@@ -342,8 +345,8 @@ class SelectedTrek extends Component<{
   }
 
   // call the markerToPath function then forceUpdate
-  callMarkerToPath = (index: number, pt: LatLng, path: LatLng[]) => {
-    this.iSvc.markerToPath(index, pt, path);
+  callMarkerToPath = (index: number, pt: LatLng, path: LatLng[], pointList: TrekPoint[]) => {
+    this.iSvc.markerToPath(index, pt, path, pointList);
     this.forceUpdate();
   }
 
@@ -566,7 +569,7 @@ class SelectedTrek extends Component<{
             if (ss.coursePos < ss.coursePosMax){
               let timeAtDistCourse;
 
-                timeAtDistCourse = this.lSvc.getPointAtLimit(ss.coursePath, 
+                timeAtDistCourse = this.lSvc.getPointAtLimit(ss.coursePath,
                                                               trekPtInfo.dist, ss.courseDist, 'Dist').time;
                 this.setTrackingStatsTime(timeAtDistCourse - Math.min(ss.trekPos, ss.trekPosMax));
             } else {        
@@ -580,7 +583,7 @@ class SelectedTrek extends Component<{
             if (ss.trekPos < ss.trekPosMax){
               let timeAtDistTrek;
 
-                timeAtDistTrek = this.lSvc.getPointAtLimit(ss.trekPath, 
+                timeAtDistTrek = this.lSvc.getPointAtLimit(ss.trekPath,
                                                             coursePtInfo.dist, ss.trekDist, 'Dist').time;
                 this.setTrackingStatsTime(Math.min(ss.coursePos, ss.coursePosMax) - timeAtDistTrek);
             } else {        
@@ -600,7 +603,7 @@ class SelectedTrek extends Component<{
             let timeAtTrekDist = trekPtInfo.dist / ss.courseInc;
             this.setTrackingStatsTime(timeAtTrekDist - trekPtInfo.time);
           } else {                                        // trek is behind
-            let timeAtCourseDist = this.lSvc.getPointAtLimit(ss.trekPath, 
+            let timeAtCourseDist = this.lSvc.getPointAtLimit(ss.trekPath,
                                                               coursePtInfo.dist, ss.trekDist, 'Dist').time;
 
             // we don't use coursePtInfo.time here since it reflects the actual time from the data
@@ -713,7 +716,7 @@ class SelectedTrek extends Component<{
   repositionReplayPoint = (dist: number, trekOrCourse: "trek" | "course") => {
     let ss = this.cS.trackingSnapshot;
     let coursePtInfo = {} as PointAtLimitInfo;
-    let cPos: number, tPos: number;
+    let cPos: number, tPos: number, cIndex: number = 0;
 
     switch(trekOrCourse){
       // user dragged the trek marker
@@ -739,13 +742,15 @@ class SelectedTrek extends Component<{
         } else {
           coursePtInfo = this.lSvc.getPointAtLimit(ss.coursePath, dist, ss.courseDist, TREK_LIMIT_TYPE_DIST);
           cPos = coursePtInfo.time;
+          cIndex = coursePtInfo.index;
         }
         tPos = coursePtInfo.time;
         break;
       default:
     }
     this.replayDisplayTime = tPos;
-    this.cS.updateCourseTrackingSnapshot({coursePos: cPos, trekPos: tPos, lastUpdateTime: new Date().getTime()});
+    this.cS.updateCourseTrackingSnapshot({coursePos: cPos, coursePosInxex: cIndex, trekPos: tPos, 
+                                          lastUpdateTime: new Date().getTime()});
     this.setTrackingTime(tPos);
     this.setTrackingShapshotItems(this.cS.trackingSnapshot);
     this.snapshotChanged = true;
@@ -817,8 +822,6 @@ class SelectedTrek extends Component<{
               this.setTrackingShapshotItems(this.cS.trackingSnapshot);
               if(this.cS.trackingSnapshot){
                 this.setTrackingTime(this.cS.trackingSnapshot.courseDuration);
-                // this.setTrackingTime(Math.min(this.cS.trackingSnapshot.courseDuration, 
-                //                               this.cS.trackingSnapshot.trekDuration));
               }
               if (this.intervalsActive) { this.cancelIntervalsActive(); }
               this.props.navigation.setParams({ title: title, icon: this.tInfo.type });
@@ -919,7 +922,7 @@ class SelectedTrek extends Component<{
     const tracking = this.cS.trackingSnapshot !== undefined;
     const graphHeight = INTERVAL_GRAPH_HEIGHT;
     const maxBarHeight = 70;
-    const statLabelWidth = (width - 10) / (haveElevs ? 5 : 4);
+    this.statLabelWidth = (width - 10) / (haveElevs ? 5 : 4);
 
     const intervalsIcon = ints ? "Edit" : "RayStartEnd";
     const intervalsLabel = ints ? "Edit Intervals" 
@@ -932,7 +935,9 @@ class SelectedTrek extends Component<{
     const playPauseIcon = replayOn ? "Pause" : "Play";
     const playPauseLabel = replayOn ? "Pause Replay" : "Start Replay";
     const playPauseAction = this.replayTimerStatus !== "Play" ? "Play" : "Pause";
-
+    const statUnderlineWidth = this.statLabelWidth;
+    const labelMarginTop = -1;
+  
     let navMenuItems = 
     [ !ints ? 
         {label: 'Map Options', 
@@ -1046,12 +1051,13 @@ class SelectedTrek extends Component<{
         width: 50,
         height: 120,
       },
-      statTypeUnderline: {
-        marginTop: -1,
-        width: statLabelWidth,
-        borderWidth: 1,
-        borderStyle: "solid",
-        borderColor: highlightColor,
+      intervalGraphStyle: {
+        height: graphHeight
+      },
+      intervalBarStyle: {
+        height: graphHeight, 
+        width: 60,
+        backgroundColor: "transparent",
       },
     })
 
@@ -1083,7 +1089,9 @@ class SelectedTrek extends Component<{
             trackingHeader={this.cS.trackingSnapshot ? this.cS.trackingSnapshot.header : undefined}
             trackingMarker={this.courseMarker}
             trackingDiffDist={this.trackingStatsDist}
+            trackingDiffDistStr={this.trackingStatsDistStr}
             trackingDiffTime={this.trackingStatsTime}
+            trackingDiffTimeStr={this.trackingStatsTimeStr}
             trackingPath={this.coursePath}
             trackingTime={this.trackingTime}
             timerType={this.replayTimerStatus}
@@ -1124,85 +1132,92 @@ class SelectedTrek extends Component<{
           {this.tInfo.waitingForSomething && 
             <Waiting msg={this.tInfo.waitingMsg}/>
           }
-          <View style={styles.graphAndControls}>
-            <SlideUpView 
-              bgColor={pageBackground}
-              startValue={graphAndControlsHt}
-              endValue={0}
-              open={this.graphOpen}
-              beforeOpenFn={this.setVisible}
-              afterCloseFn={this.setNotVisible}
-            >
-              <View style={{height: graphAndControlsHt, backgroundColor: pageBackground}}>
-                <View style={styles.showControls}>
-                  <IconButton
-                    label="DIST"
-                    horizontal
-                    onPressFn={this.changeIntervalStatType}
-                    onPressArg={'Distance'}
-                    style={styles.showButton}
-                    labelStyle={this.iSvc.show === "Distance" ? styles.buttonTextSelected : styles.buttonText}
-                  />
-                  <IconButton
-                    label="TIME"
-                    horizontal
-                    onPressFn={this.changeIntervalStatType}
-                    onPressArg={'Time'}
-                    style={styles.showButton}
-                    labelStyle={this.iSvc.show === "Time" ? styles.buttonTextSelected : styles.buttonText}
-                  />
-                  <IconButton
-                    label="SPEED"
-                    horizontal
-                    onPressFn={this.changeIntervalStatType}
-                    onPressArg={'Speed'}
-                    style={styles.showButton}
-                    labelStyle={this.iSvc.show === "Speed" ? styles.buttonTextSelected : styles.buttonText}
-                  />
-                  <IconButton
-                    label="CALS"
-                    horizontal
-                    onPressFn={this.changeIntervalStatType}
-                    onPressArg={'Calories'}
-                    style={styles.showButton}
-                    labelStyle={this.iSvc.show === "Calories" ? styles.buttonTextSelected : styles.buttonText}
-                  />
-                  {haveElevs && 
-                    <IconButton
-                      label="ELEV"
-                      horizontal
-                      onPressFn={this.changeIntervalStatType}
-                      onPressArg={'Elevation'}
-                      style={styles.showButton}
-                      labelStyle={this.iSvc.show === "Elevation" ? styles.buttonTextSelected : styles.buttonText}
-                    />
+            <View style={styles.graphAndControls}>
+              <SlideUpView 
+                bgColor={pageBackground}
+                startValue={graphAndControlsHt}
+                endValue={0}
+                open={this.graphOpen}
+                beforeOpenFn={this.setVisible}
+                afterCloseFn={this.setNotVisible}
+              >
+                <View style={{height: graphAndControlsHt, backgroundColor: pageBackground}}>
+                  {ints &&
+                    <View style={styles.showControls}>
+                      <IconButton
+                        label="DIST"
+                        horizontal
+                        onPressFn={this.changeIntervalStatType}
+                        onPressArg={'Distance'}
+                        style={styles.showButton}
+                        labelStyle={this.iSvc.show === "Distance" ? styles.buttonTextSelected : styles.buttonText}
+                      />
+                      <IconButton
+                        label="TIME"
+                        horizontal
+                        onPressFn={this.changeIntervalStatType}
+                        onPressArg={'Time'}
+                        style={styles.showButton}
+                        labelStyle={this.iSvc.show === "Time" ? styles.buttonTextSelected : styles.buttonText}
+                      />
+                      <IconButton
+                        label="SPEED"
+                        horizontal
+                        onPressFn={this.changeIntervalStatType}
+                        onPressArg={'Speed'}
+                        style={styles.showButton}
+                        labelStyle={this.iSvc.show === "Speed" ? styles.buttonTextSelected : styles.buttonText}
+                      />
+                      <IconButton
+                        label="CALS"
+                        horizontal
+                        onPressFn={this.changeIntervalStatType}
+                        onPressArg={'Calories'}
+                        style={styles.showButton}
+                        labelStyle={this.iSvc.show === "Calories" ? styles.buttonTextSelected : styles.buttonText}
+                      />
+                      {haveElevs && 
+                        <IconButton
+                          label="ELEV"
+                          horizontal
+                          onPressFn={this.changeIntervalStatType}
+                          onPressArg={'Elevation'}
+                          style={styles.showButton}
+                          labelStyle={this.iSvc.show === "Elevation" ? styles.buttonTextSelected : styles.buttonText}
+                        />
+                      }
+                    </View>
                   }
+                  {ints && 
+                    <HorizontalSlideView 
+                      index={this.intervalCatIndex}
+                      width={this.statLabelWidth}
+                      underlineMarginTop={labelMarginTop}
+                      underlineWidth={statUnderlineWidth}
+                      color={highlightColor}
+                      offset={5}
+                      duration={400}/>
+                  } 
+                  {ints && 
+                    <View style={styles.graphArea}>
+                      <View style={styles.graph}>
+                        <BarDisplay 
+                          data={this.iSvc.intervalGraphData.items} 
+                          dataRange={this.iSvc.intervalGraphData.range}
+                          selected={this.selectedIntervalIndex}
+                          selectFn={this.setSelectedIntervalIndex} 
+                          openFlag={this.openItems}
+                          maxBarHeight={maxBarHeight}
+                          style={styles.intervalGraphStyle}
+                          barStyle={styles.intervalBarStyle}
+                          scrollToBar={this.scrollToBar}
+                        />
+                      </View>
+                    </View>
+                  }             
                 </View>
-                <HorizontalSlideView 
-                      endValue={(this.intervalCatIndex * (statLabelWidth+1)) + 5}
-                      duration={400}>
-                      <View style={styles.statTypeUnderline}/>
-                </HorizontalSlideView>                  
-                <View style={styles.graphArea}>
-                  <View style={styles.graph}>
-                    <BarDisplay 
-                      data={this.iSvc.intervalGraphData.items} 
-                      dataRange={this.iSvc.intervalGraphData.range}
-                      selected={this.selectedIntervalIndex}
-                      selectFn={this.setSelectedIntervalIndex} 
-                      openFlag={this.openItems}
-                      maxBarHeight={maxBarHeight}
-                      style={{height: graphHeight}}
-                      barStyle={{ height: graphHeight, 
-                              width: 60,
-                              backgroundColor: "transparent" }}
-                      scrollToBar={this.scrollToBar}
-                    />
-                  </View>
-                </View>
-              </View>
-            </SlideUpView>
-          </View>
+              </SlideUpView>
+            </View>
           <NumbersBar 
             bottom={0} 
             open={this.statsOpen}

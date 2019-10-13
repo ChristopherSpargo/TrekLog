@@ -51,10 +51,11 @@ function RadioPicker({pickerOpen}) {
     rippleColor,
     disabledTextColor,
     primaryColor,
-    textOnPrimaryColor
+    textOnPrimaryColor,
+    footerTextColor,
+    footerButtonText,
   } = uiTheme.palette[trekInfo.colorTheme];
-  const { cardLayout, roundedTop, roundedBottom, footer, footerButton, 
-          footerButtonText, fontRegular 
+  const { cardLayout, roundedTop, roundedBottom, footer, footerButton, fontRegular 
         } = uiTheme;
   const headerHeight = 50;
   const okDisabled = selection === '#new#';
@@ -256,7 +257,8 @@ function RadioPicker({pickerOpen}) {
                       onPress={okDisabled ? undefined : () => close()}>
                       <View style={footerButton}>
                         <Text
-                          style={{...footerButtonText, ...{ color: okDisabled ? disabledTextColor : primaryColor }}}
+                          style={{...footerButtonText, 
+                                  ...{ color: okDisabled ? disabledTextColor : footerTextColor }}}
                         >
                           {mData.okText}
                         </Text>

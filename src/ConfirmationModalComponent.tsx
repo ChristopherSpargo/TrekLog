@@ -84,9 +84,10 @@ function ConfirmationModal({confirmOpen}) {
     pageBackground,
     dividerColor,
     rippleColor,
-    contrastingMask_2
+    contrastingMask_2,
+    footerButtonText,
   } = uiTheme.palette[trekInfo.colorTheme];
-  const { cardLayout, roundedTop, roundedBottom, footer, footerButton, footerButtonText,
+  const { cardLayout, roundedTop, roundedBottom, footer, footerButton,
           formHeader, formHeaderText, formBody, formBodyText } = uiTheme;
   const titleColor = smData.dType === CONFIRM_INFO ? infoConfirmTextColor : warningConfirmTextColor;
   const bgColor = smData.dType === CONFIRM_INFO ? infoConfirmColor : warningConfirmColor;

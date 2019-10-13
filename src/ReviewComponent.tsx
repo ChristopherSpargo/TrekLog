@@ -31,6 +31,7 @@ import SvgGrid from './SvgGridComponent';
 import NavMenu from './NavMenuComponent';
 import PageTitle from './PageTitleComponent';
 
+const pageTitleFormat = {marginBottom: 5};
 
 const goBack = NavigationActions.back();
 
@@ -84,6 +85,7 @@ class ReviewTreks extends Component<
     this.initializeObservables();
   }
 
+  @action
   componentWillMount() {
     this.setOpenItems(false);
     this.AFFIndex = this.fS.setAfterFilterFn(this.runAfterFilterTreks);
@@ -103,8 +105,6 @@ class ReviewTreks extends Component<
     this.fS.setSelectedTrekIndex(-1);
     this.fS.setDataReady(false);
     this.tInfo.restoreCurrentGroupSettings();
-    this.props.loggingSvc.stopTrackingMarker();
-    // this.tInfo.badPointList = [];                    // **Debug
   }
 
   // initialize all the observable properties in an action for mobx strict mode
@@ -112,7 +112,7 @@ class ReviewTreks extends Component<
   initializeObservables = () => {
     this.setHeaderTitle('Scanning...')
     this.setOpenItems(true);
-    this.setUpdateView(false);
+    this.setUpdateView(true);
     this.setCheckboxPickerOpen(false);
     this.setCoursePickerOpen(false);
     this.setOpenNavMenu(false);
@@ -150,6 +150,7 @@ class ReviewTreks extends Component<
   }
 
   // call the filterTreks function and manage the message in the header
+  @action
   callFilterTreks = () => {
     this.setHeaderTitle("Scanning...");
     this.fS.filterTreks();
@@ -163,6 +164,7 @@ class ReviewTreks extends Component<
   };
 
   // Display the map for the Trek at the given index in filteredTreks
+  @action
   showTrekMap = (indx: number) => {
     if (this.fS.filteredTreks.length) {
       let trek = this.tInfo.allTreks[this.fS.filteredTreks[indx]];
@@ -404,8 +406,10 @@ class ReviewTreks extends Component<
 
   // request an animation frame then call fS.setSortBy()
   callSetSortBy = (value: SortByTypes) => {
+    // this.setOpenItems(false);
     requestAnimationFrame(() => {
       this.fS.setSortBy(value);
+      // this.setOpenItems(true);
     });
   };
 
@@ -493,6 +497,11 @@ class ReviewTreks extends Component<
       .catch(() => {})
   };
 
+  // provide a fixed function to call from header back button so memoization works
+  callGoBack = () => {
+    this.props.navigation.dispatch(goBack)
+  }
+
   render() {
     if (!this.updateView) {
       return (
@@ -521,7 +530,6 @@ class ReviewTreks extends Component<
       pageBackground,
       trekLogBlue,
       mediumTextColor,
-      dividerColor
     } = this.props.uiTheme.palette[this.tInfo.colorTheme];
     const gotTreks = this.fS.dataReady && !this.fS.filteredTreksEmpty();
     const graphBgColor = pageBackground;
@@ -618,16 +626,14 @@ class ReviewTreks extends Component<
         height: areaHt,
       },
       graphStyle: {
-        height: graphHeight
+        height: graphHeight,
+        width: graphWidth
       },
       barStyle: { 
         height: graphHeight, 
         width: 40,
         borderColor: "transparent",
         backgroundColor: "transparent",
-      },
-      pageTitleAdj: {
-        marginBottom: 5,
       },
     });
 
@@ -644,15 +650,16 @@ class ReviewTreks extends Component<
               <TrekLogHeader
                 titleText={this.headerTitle}
                 icon="*"
-                backButtonFn={() => this.props.navigation.dispatch(goBack)}
+                backButtonFn={this.callGoBack}
                 openMenuFn={this.openMenu}
               />
               <RadioPicker pickerOpen={this.coursePickerOpen} />
               <View style={[cardLayout, styles.noPadding, {paddingTop: 10, marginBottom: 0}]}>
                 <PageTitle 
+                  colorTheme={this.tInfo.colorTheme}
                   titleText="Trek Review"
                   groupName={this.fS.groupList.length === 1 ? this.fS.groupList[0] : "Multiple"}
-                  style={styles.pageTitleAdj}
+                  style={pageTitleFormat}
                 />
                 {gotTreks && 
                   <View style={styles.scrollArea}>
@@ -708,7 +715,7 @@ class ReviewTreks extends Component<
                                 graphHeight={graphHeight}
                                 gridWidth={graphWidth}
                                 lineCount={3}
-                                color={dividerColor}
+                                colorTheme={this.tInfo.colorTheme}
                                 maxBarHeight={maxBarHeight}
                                 minBarHeight={20}
                               />
@@ -718,7 +725,7 @@ class ReviewTreks extends Component<
                                 selected={this.fS.selectedTrekIndex}
                                 selectFn={this.callTrekSelected}
                                 openFlag={this.openItems}
-                                maxBarHeight={maxBarHeight}
+                                maxBarHeight={160}
                                 style={styles.graphStyle}
                                 barStyle={styles.barStyle}
                                 labelAngle={0}

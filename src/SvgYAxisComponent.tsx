@@ -40,9 +40,7 @@ function SvgYAxis({
     const majorTicDist = axisHeight / (majorTics - 1);
     const strokeWidth = lineWidth || 1;
     const majorTicWidth = 5;
-    // const minorTicWidth = 3;
     const majorTicStart = adjWidth - majorTicWidth;
-    // const minorTicStart = adjWidth - minorTicWidth;
     const lastIndex = majorTics - 1;
 
     const { fontLight, fontRegular } = uiTheme;
@@ -92,17 +90,9 @@ function SvgYAxis({
       return l;
     }
     // alert('rendering yAxis')
-      // alert(axisHeight + '\n' + 
-      //       axisWidth + '\n' + 
-      //       majorTicDist + '\n' + 
-      //       strokeWidth + '\n' + 
-      //       color + '\n' + 
-      //       majorTics + '\n' + 
-      //       JSON.stringify(majors(),null,2))
     
 
     const startY = 5;
-    // const startX = title ? 23 : 8;
     const styles = StyleSheet.create({
       container: {
         position: "absolute",

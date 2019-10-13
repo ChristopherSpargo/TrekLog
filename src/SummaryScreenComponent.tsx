@@ -17,6 +17,7 @@ import { SummaryModel } from "./SummaryModel";
 import NavMenu from './NavMenuComponent';
 import PageTitle from './PageTitleComponent';
 
+const pageTitleFormat = {marginBottom: 0};
 const goBack = NavigationActions.back();
 
 @inject(
@@ -49,8 +50,11 @@ class SummaryScreen extends Component<
   tInfo = this.props.trekInfo;
   fS = this.props.filterSvc;
   sumSvc = this.props.summarySvc;
+  headerTextColor = this.props.uiTheme.palette[this.tInfo.colorTheme].headerTextColor;
+
   typeSels = 0;
   originalGroup;
+  headerActions = [];
 
   _didFocusSubscription;
 
@@ -59,9 +63,8 @@ class SummaryScreen extends Component<
     this._didFocusSubscription = props.navigation.addListener("didFocus", () =>
       this.focus()
     );
-    this.setCheckboxPickerOpen(false);
-    this.setRadioPickerOpen(false);
-    this.setOpenNavMenu(false);
+    this.initializeObservables();
+    this.setHeaderActions();
   }
 
   componentWillMount() {
@@ -79,9 +82,17 @@ class SummaryScreen extends Component<
     this._didFocusSubscription && this._didFocusSubscription.remove();
     this.tInfo.clearTrek();
     this.sumSvc.setFTCount(0);
-    if(this.tInfo.group !== this.originalGroup){
+    if(this.fS.groupList.length !== 1 || this.fS.groupList[0] !== this.originalGroup){
       this.tInfo.setTrekLogGroupProperties(this.originalGroup)
     }
+  }
+
+  // give initial values to all observable properties
+  @action
+  initializeObservables = () => {
+    this.setCheckboxPickerOpen(false);
+    this.setRadioPickerOpen(false);
+    this.setOpenNavMenu(false);
   }
 
   @action
@@ -204,19 +215,26 @@ class SummaryScreen extends Component<
       .catch(() => {});
   };
 
+  // provide a fixed function to call from header back button so memoization works
+  callGoBack = () => {
+    this.props.navigation.dispatch(goBack)
+  }
+
+  setHeaderActions = () => {
+    const { headerTextColor } = this.props.uiTheme.palette[this.tInfo.colorTheme];
+    this.headerActions.push(
+      {icon: 'YinYang', iconColor: headerTextColor, style: {marginTop: 0}, actionFn: this.swapColorTheme});
+  }
+  
   render() {
     const {
       disabledTextColor,
       pageBackground,
-      headerTextColor,
     } = this.props.uiTheme.palette[this.tInfo.colorTheme];
     const {
       cardLayout,
     } = this.props.uiTheme;
     const extraFilters = this.fS.extraFilterSet();
-    const headerActions = [
-      {icon: 'YinYang', color: headerTextColor, style: {marginTop: 10}, actionFn: this.swapColorTheme}
-    ];
     const navMenuItems = 
     [ {label: 'Summary Options', 
       submenu: [{icon: extraFilters ? 'FilterRemove' : 'Filter', label: 'Edit Filters', value: 'ExtraFilters'},
@@ -261,9 +279,6 @@ class SummaryScreen extends Component<
         paddingRight: 0,
         backgroundColor: pageBackground,
       },
-      pageTitleAdj: {
-        marginBottom: 0,
-      },
     });
 
     return (
@@ -280,16 +295,17 @@ class SummaryScreen extends Component<
               <TrekLogHeader
                 titleText="Activity"
                 icon="*"
-                backButtonFn={() => this.props.navigation.dispatch(goBack)}
-                actionButtons={headerActions}
+                backButtonFn={this.callGoBack}
+                actionButtons={this.headerActions}
                 openMenuFn={this.openMenu}
               />
               <View style={styles.listArea}>
               <PageTitle 
+                colorTheme={this.tInfo.colorTheme}
                 titleText="Activity Summary"
                 groupName={this.fS.groupList.length === 1 ? this.fS.groupList[0] : "Multiple"}
                 setGroupFn={this.getDifferentGroups}
-                style={styles.pageTitleAdj}
+                style={pageTitleFormat}
               />
                 {this.props.trekInfo.dataReady && (
                   <DashBoard

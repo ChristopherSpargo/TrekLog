@@ -53,7 +53,8 @@ import {
 import { WeatherSvc } from "./WeatherSvc";
 import { GoalObj, GoalsSvc, GoalDisplayItem } from "./GoalsService";
 import { BIG_CONTROLS_HEIGHT, NAV_ICON_SIZE, BIG_NAV_ICON_SIZE, HEADER_HEIGHT, 
-         TREKLOG_FILENAME_REGEX, COLOR_THEME_LIGHT, TRACKING_STATUS_BAR_HEIGHT, TREK_TYPE_COLORS_OBJ } from "./App";
+         TREKLOG_FILENAME_REGEX, COLOR_THEME_LIGHT, TRACKING_STATUS_BAR_HEIGHT, 
+         TREK_TYPE_COLORS_OBJ } from "./App";
 import SpeedDial, { SpeedDialItem } from "./SpeedDialComponent";
 import TrekLogHeader from "./TreklogHeaderComponent";
 import { StorageSvc } from "./StorageService";
@@ -71,7 +72,7 @@ import NavMenu from './NavMenuComponent';
 import PageTitle from './PageTitleComponent';
 import TrackingStatusBar from './TrackingStatusBar';
 
-
+const pageTitleFormat = {marginBottom: 0, marginTop: 15};
 const goBack = NavigationActions.back();
 
 @inject(
@@ -135,11 +136,12 @@ class LogTrek extends Component<
   typeSDRef: RefObject<SpeedDial>;
   optionsTimerID : number;
   oldTrekType : TrekType;
-
-
+  headerActions = [];
+      
   constructor(props) {
     super(props);
     this.typeSDRef = React.createRef();
+    this.setHeaderActions();
     this._didFocusSubscription = props.navigation.addListener(
       "didFocus",
       () => {
@@ -163,36 +165,39 @@ class LogTrek extends Component<
       .then((ro: RestoreObject) => {
         this.props.storageSvc.removeRestoreObj();
         this.trekInfo.resObj = ro;
-        this.trekInfo.restoreLogState(ro);
-        this.cS.getCourseList(ro.measurementSystem);
-        this.trekInfo.setMeasurementSystem(ro.measurementSystem);
-        this.trekInfo.setAppReady(true);
-        this.logSvc.smoothTrek();
-        if (ro.timerOn) {
-          this.logSvc.startTrekTimer();
-        }
-        if (ro.timeLimit) {
-          this.startLimitTimer();
-        }
-        if (ro.trackingObj){
-          this.logSvc.restartTrackingMarker(ro.trackingObj)
-        }
-        this.logSvc.watchGeolocationPosition(this.gotPos, false);
-        if (ro.showMapInLog) {
-          this.props.navigation.navigate("LogTrekMap");
-        }
-        if (ro.saveDialogOpen) {
-          this.stopLogging();
-        } else {
-          if (ro.trekLabelFormOpen) {
-            this.setPendingReview(true);
-            this.setTrekLabel();
+        this.trekInfo.restoreLogState(ro)
+        .then(() => {
+          this.cS.getCourseList(ro.measurementSystem);
+          this.trekInfo.setMeasurementSystem(ro.measurementSystem);
+          this.trekInfo.setAppReady(true);
+          this.logSvc.smoothTrek();
+          if (ro.timerOn) {
+            this.logSvc.startTrekTimer();
+          }
+          if (ro.timeLimit) {
+            this.startLimitTimer();
+          }
+          if (ro.trackingObj){
+            this.logSvc.restartTrackingMarker(ro.trackingObj)
+          }
+          this.logSvc.watchGeolocationPosition(this.gotPos, false);
+          if (ro.showMapInLog) {
+            this.props.navigation.navigate("LogTrekMap");
+          }
+          if (ro.saveDialogOpen) {
+            this.stopLogging();
           } else {
-            if (ro.cancelDialogOpen) {
-              this.checkBackButton();
+            if (ro.trekLabelFormOpen) {
+              this.setPendingReview(true);
+              this.setTrekLabel();
+            } else {
+              if (ro.cancelDialogOpen) {
+                this.checkBackButton();
+              }
             }
           }
-        }
+        })
+        .catch((err) => alert(err))
       })
       .catch(() => {
         // nothingToRestore
@@ -408,6 +413,15 @@ class LogTrek extends Component<
     this.trekInfo.swapColorTheme();
   }
 
+  setHeaderActions = () => {
+    const { mediumTextColor, headerTextColor } = this.uiTheme.palette[this.props.trekInfo.colorTheme];
+    this.headerActions.push(
+      { icon: 'YinYang', 
+        iconColor: this.trekInfo.haveBackgroundImage() ? mediumTextColor : headerTextColor, 
+        style: {marginTop: 0}, actionFn: this.swapColorTheme});
+    // {icon: 'Image', iconColor: tColor, style: {marginTop: 10}, actionFn: this.trekInfo.toggleCurrentBackground},
+  }
+
   // set the value of the limitFormOpen property to false
   @action
   closeLimitForm = () => {
@@ -500,6 +514,7 @@ class LogTrek extends Component<
   startLogging = () => {
     this.logSvc.startTrek();
     this.trekInfo.setSpeedDialZoomedIn(true);
+    this.trekInfo.updateShowSpeedStat('speedNow');
     this.logSvc.startPositionTracking(this.gotPos); // this sets minPointDist and starts geolocation
   };
 
@@ -1209,11 +1224,7 @@ class LogTrek extends Component<
     const { controlsArea, navItem, navIcon, bigNavItemWithLabel, navItemWithLabel, navItemLabel,
             fontLight } = this.uiTheme;
     const {
-      mediumTextColor,
       highTextColor,
-      headerBackgroundColor,
-      dividerColor,
-      headerTextColor,
       navIconColor,
       trekLogGreen,
       trekLogRed,
@@ -1221,7 +1232,6 @@ class LogTrek extends Component<
       pageBackground,
       pageBackgroundFilm,
       disabledTextColor,
-      headerBorderColor,
       almostTransparent,
     } = this.uiTheme.palette[this.props.trekInfo.colorTheme];
     const lightTheme = this.props.trekInfo.colorTheme === COLOR_THEME_LIGHT;
@@ -1232,19 +1242,10 @@ class LogTrek extends Component<
     const iWidth = Dimensions.get('window').width;
     const iHeight = Dimensions.get('window').height;
     const bgColor = bgImage ? pageBackgroundFilm : pageBackground;
-    const hbgColor = bgImage ? pageBackgroundFilm : headerBackgroundColor;
-    const tColor = bgImage ? mediumTextColor : headerTextColor;
     const nlColor = (bgImage && lightTheme) ? highTextColor : navIconColor
     const noMenu = formOpen || this.lockNavMenu;
     const trackingMarker = tI.trackingMarkerLocation;
-    const trackingHeader = tI.trackingObj 
-                            ? 'Challenge ' + tI.trackingObj.courseName
-                            : undefined;
 
-    const headerActions = [
-      // {icon: 'Image', iconColor: tColor, style: {marginTop: 10}, actionFn: tI.toggleCurrentBackground},
-      {icon: 'YinYang', iconColor: tColor, style: {marginTop: 0}, actionFn: this.swapColorTheme}
-    ];
     let navMenuItems;
     if (stopOk){    
       navMenuItems =   
@@ -1345,11 +1346,11 @@ class LogTrek extends Component<
           <TrekLogHeader
             logo
             icon="*"
-            actionButtons={headerActions}
-            backgroundColor={hbgColor}
-            textColor={tColor}
+            actionButtons={this.headerActions}
+            // backgroundColor={bgImage ? pageBackgroundFilm : headerBackgroundColor}
+            // textColor={bgImage ? mediumTextColor : headerTextColor}
             position="absolute"
-            borderBottomColor={bgImage ? dividerColor : headerBorderColor}
+            // borderBottomColor={bgImage ? dividerColor : headerBorderColor}
             openMenuFn={this.openMenu}
             disableMenu={noMenu}
           />
@@ -1387,13 +1388,14 @@ class LogTrek extends Component<
               ]}
             >
               <PageTitle 
+                colorTheme={this.trekInfo.colorTheme}
                 icon={tI.type}
                 iconColor={TREK_TYPE_COLORS_OBJ[tI.type]}
                 iconFn={this.setActiveNav}
                 iconFnArg={'TType'}
                 titleText={tI.type}
                 iconFnDisabled={!startOk}
-                style={styles.pageTitleArea}
+                style={pageTitleFormat}
                 groupName={tI.group || "None"}
                 setGroupFn={startOk ? this.getDifferentGroup : undefined}
               />
@@ -1403,9 +1405,11 @@ class LogTrek extends Component<
               {(numPts > 0 && trackingMarker) &&
                 <TrackingStatusBar
                   trackingDiffDist={tI.trackingDiffDist}
+                  trackingDiffDistStr={tI.trackingDiffDistStr}
                   trackingDiffTime={tI.trackingDiffTime}
-                  trackingHeader={trackingHeader}
-                  trackingTime={tI.trackingObj ? tI.trackingObj.goalValue : undefined}
+                  trackingDiffTimeStr={tI.trackingDiffTimeStr}
+                  trackingHeader={tI.trackingObj ? tI.trackingObj.challengeTitle : undefined}
+                  trackingTime={tI.trackingObj ? tI.trackingObj.goalTime : undefined}
                   barTop={45}
                   logOn={true}
                 />

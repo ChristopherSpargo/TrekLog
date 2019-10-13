@@ -43,7 +43,9 @@ class TrekLogHeader extends Component<
     }
   }
 
+
   render() {
+    // alert('render ' + this.props.titleText);
     const {
       headerBackgroundColor,
       headerBorderColor,
@@ -247,4 +249,4 @@ class TrekLogHeader extends Component<
   }
 }
 
-export default TrekLogHeader;
+export default React.memo(TrekLogHeader);

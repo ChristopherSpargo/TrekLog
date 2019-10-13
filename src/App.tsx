@@ -248,6 +248,12 @@ export const uiTheme = {
       navMenuRippleColor:  "rgba(0,0,0,.2)",
       navMenuDividerColor: "gray",
       menuItemDisabledColor: "gray",
+      footerTextColor: "rgb(156, 39, 176)",
+      footerButtonText: {
+        color: "rgb(156, 39, 176)",
+        fontFamily: fontFamilyBold,
+        fontSize: 18,
+      },
       topBorder: {
         borderTopWidth: 1,
         borderStyle: "solid",
@@ -352,6 +358,12 @@ export const uiTheme = {
       navMenuRippleColor:  "rgba(0,0,0,.2)",
       navMenuDividerColor: "gray",
       menuItemDisabledColor: "gray",
+      footerTextColor: "#ffff00",
+      footerButtonText: {
+        color: "#ffff00",
+        fontFamily: fontFamilyBold,
+        fontSize: 18,
+      },
       topBorder: {
         borderTopWidth: 1,
         borderStyle: "solid",
@@ -482,12 +494,6 @@ export const uiTheme = {
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "transparent",
-    
-  },
-  footerButtonText: {
-    color: primaryColor,
-    fontFamily: fontFamilyBold,
-    fontSize: 18,
   },
   dateInputText: {
     color: TL_BLUE,

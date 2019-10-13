@@ -42,10 +42,12 @@ function CheckboxPicker({pickerOpen}) {
     rippleColor,
     primaryColor,
     disabledTextColor,
-    textOnPrimaryColor
+    textOnPrimaryColor,
+    footerTextColor,
+    footerButtonText,
   } = uiTheme.palette[trekInfo.colorTheme];
   const { cardLayout, roundedTop, roundedBottom, footer, footerButton, 
-          fontRegular, footerButtonText } = uiTheme;
+          fontRegular } = uiTheme;
   const headerHeight = 50;
   const canClose = this.allowNone || haveSelections();
 
@@ -246,7 +248,7 @@ function CheckboxPicker({pickerOpen}) {
                       onPress={canClose ? close : undefined}>
                       <View style={footerButton}>
                         <Text
-                          style={{...footerButtonText, ...{ color: canClose ? primaryColor : disabledTextColor }}}
+                          style={{...footerButtonText, ...{ color: canClose ? footerTextColor : disabledTextColor }}}
                         >
                           {mData.okText}
                         </Text>

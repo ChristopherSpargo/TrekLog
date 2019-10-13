@@ -1,11 +1,12 @@
 import React, { useContext } from "react";
 import { View, StyleSheet, Text, Dimensions } from "react-native";
 import { RectButton } from "react-native-gesture-handler";
+// import { useObserver } from "mobx-react-lite";
 
-import { UiThemeContext, TrekInfoContext } from "./App";
+import { UiThemeContext } from "./App";
 import SvgIcon from "./SvgIconComponent";
 import { APP_ICONS } from "./SvgImages";
-import { TrekInfo } from './TrekInfoModel';
+// import { TrekInfo } from './TrekInfoModel';
 
 
 // this component provides a title for a page 
@@ -20,9 +21,10 @@ function PageTitle({
   style=undefined,      // styling to add to default styling
   groupName=undefined,  // group name to show on right
   setGroupFn=undefined, // allow group selection via this function if present
+  colorTheme            // pass trekInfo.colorTheme to cause update on theme change
 }) {
   const uiTheme: any = useContext(UiThemeContext);
-  const trekInfo: TrekInfo = useContext(TrekInfoContext);
+  // const trekInfo: TrekInfo = useContext(TrekInfoContext);
   const { width } = Dimensions.get('window');
 
   function callSetGroupFn() {
@@ -32,12 +34,13 @@ function PageTitle({
   function callIconFn() {
     iconFn(iconFnArg);
 }
-
-const { disabledTextColor, highTextColor, rippleColor, secondaryColor
-        } = uiTheme.palette[trekInfo.colorTheme];
+  // alert('render ' + titleText)
+  const { disabledTextColor, highTextColor, rippleColor, secondaryColor
+        } = uiTheme.palette[colorTheme];
   const { fontRegular, pageTitle } = uiTheme; 
   const groupTextColor = setGroupFn !== undefined ? highTextColor : disabledTextColor;
   const canPressIcon = iconFn && !iconFnDisabled;
+  const propStyle = style || {marginBottom: 0, marginTop: 15};
 
   const groupIconSize = 20;
   const titleIconSize = 24;
@@ -50,7 +53,7 @@ const { disabledTextColor, highTextColor, rippleColor, secondaryColor
       alignItems: "center",
       justifyContent: "space-between",
       width: width,
-      ...style
+      ...propStyle
     },
     iconAndTitle: {
       flexDirection: "row",
@@ -88,8 +91,8 @@ const { disabledTextColor, highTextColor, rippleColor, secondaryColor
     },
 });
 
-  return  (
-    <View style={styles.titleArea}>
+return (
+  <View style={styles.titleArea}>
       {icon && !canPressIcon &&
         <View style={styles.iconAndTitle}>
           <SvgIcon
@@ -142,5 +145,6 @@ const { disabledTextColor, highTextColor, rippleColor, secondaryColor
   )
 }
 export default React.memo(PageTitle);
+// export default PageTitle;
 
 

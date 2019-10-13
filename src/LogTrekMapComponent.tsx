@@ -5,7 +5,7 @@ import { NavigationActions } from 'react-navigation';
 import { observer, inject } from 'mobx-react'
 import { BorderlessButton } from 'react-native-gesture-handler'
 
-import { TrekInfo, STEPS_APPLY } from './TrekInfoModel';
+import { TrekInfo, STEPS_APPLY, SWITCH_SPEED_STAT, SpeedStatType } from './TrekInfoModel';
 import TrekDisplay from './TrekDisplayComponent';
 import { ModalModel } from './ModalModel'
 import {LimitsObj} from './TrekLimitsComponent'
@@ -85,12 +85,25 @@ class LogTrekMap extends Component<{
     this.logSvc.setLayoutOpts(val);
   }
 
-  formattedCurrentSpeed = () => {
-    let sp = this.trekInfo.showSpeedNow ? this.trekInfo.speedNow : this.trekInfo.averageSpeed;
-    let i = sp.indexOf(' ');
-    let u = sp.substr(i);
-    return { value: sp.substr(0, i), units: "" , 
-      label: this.trekInfo.showSpeedNow ? u : (u + " (avg)") };
+  formattedSpeedStat = () => {
+    let spStr : string;
+    let i : number;
+    switch (this.trekInfo.showSpeedStat) {
+      case 'time':
+        spStr = this.trekInfo.timePerDist;
+        i = spStr.indexOf("/");
+        return { value: spStr.substr(0, i), units: "", label: " " + spStr.substr(i) };
+      case 'speedAvg':
+        spStr = this.trekInfo.averageSpeed;
+        i = spStr.indexOf(" ");
+        return { value: spStr.substr(0, i), units: "", label: spStr.substr(i) + " (avg)" };
+      case 'speedNow':
+        spStr = this.trekInfo.speedNow;
+        i = spStr.indexOf(" ");
+        return { value: spStr.substr(0, i), units: "", label: spStr.substr(i) };
+      default:
+      return { value: 'N/A', units: '', label: "" };
+    }
   }
 
   formattedSteps = () => {
@@ -111,8 +124,8 @@ class LogTrekMap extends Component<{
   }
 
   // toggle between displaying speed now and average speed
-  toggleShowSpeedNow = () => {
-    this.trekInfo.updateShowSpeedNow(!this.trekInfo.showSpeedNow);
+  toggleShowSpeedStat = () => {
+    this.trekInfo.updateShowSpeedStat(SWITCH_SPEED_STAT[this.trekInfo.showSpeedStat] as SpeedStatType);
   }
 
   render () {
@@ -129,7 +142,7 @@ class LogTrekMap extends Component<{
           } = this.palette;
     const semiTrans = matchingMask_7;
     const distItem = this.formattedDist();
-    const speedItem = this.formattedCurrentSpeed();
+    const speedItem = this.formattedSpeedStat();
     const stepsItem = this.formattedSteps();
     const bgBottom = (numPts > 0 && !reviewOk) ? semiTrans : "transparent"
     const reviewTracking = reviewOk && this.trekInfo.trackingObj;
@@ -207,13 +220,19 @@ class LogTrekMap extends Component<{
           changeMapFn={this.trekInfo.setDefaultMapType}
           useCameraFn={this.useCamera}
           showImagesFn={this.showCurrentImageSet}
+          timerType={'Log'}
           trackingPath={this.trekInfo.trackingObj ? this.trekInfo.trackingObj.path : undefined}
           trackingMarker={this.trekInfo.trackingMarkerLocation}
-          trackingDiffDist={this.trekInfo.trackingDiffDist}
-          trackingDiffTime={this.trekInfo.trackingDiffTime}
-          timerType={'Log'}
-          trackingHeader={this.trekInfo.trackingObj ? this.trekInfo.trackingObj.header : undefined}
-          trackingTime={this.trekInfo.trackingObj ? this.trekInfo.trackingObj.goalValue : undefined}
+
+          // the following lines will show the tracking status bar here on the map display page.
+          // unfortunately, there seems to be a high cost to displaying it and the one on the main page.
+          
+          // trackingDiffDist={this.trekInfo.trackingDiffDist}
+          // trackingDiffDistStr={this.trekInfo.trackingDiffDistStr}
+          // trackingDiffTime={this.trekInfo.trackingDiffTime}
+          // trackingDiffTimeStr={this.trekInfo.trackingDiffTimeStr}
+          // trackingHeader={this.trekInfo.trackingObj ? this.trekInfo.trackingObj.header : undefined}
+          // trackingTime={this.trekInfo.trackingObj ? this.trekInfo.trackingObj.goalTime : undefined}
         />
         <View style={[controlsArea, styles.caAdjust, styles.caTop]}>
           {(numPts > 0) &&
@@ -250,7 +269,7 @@ class LogTrekMap extends Component<{
                   <BorderlessButton
                     style={{flex: 1}}
                     rippleColor={rippleColor}
-                    onPress={this.toggleShowSpeedNow}>
+                    onPress={this.toggleShowSpeedStat}>
                     <View style={[styles.statGroupStat, {flex: 0}]}>
                       <Text style={styles.bigStat}>
                       {this.props.utilsSvc.zeroSuppressedValue(speedItem.value)}</Text>

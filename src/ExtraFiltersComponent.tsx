@@ -292,7 +292,8 @@ class ExtraFilters extends Component<{
           />
           <RadioPicker pickerOpen={this.radioPickerOpen}/>
           <View style={[cardLayout, {paddingBottom: 0}]}>
-            <PageTitle titleText="Filter Settings" style={{paddingLeft: 0}}/>
+            <PageTitle titleText="Filter Settings" style={{paddingLeft: 0}}
+                       colorTheme={this.tInfo.colorTheme}/>
           </View>
           <ScrollView>
             {this.fS.filterMode !== FILTERMODE_DASHBOARD &&

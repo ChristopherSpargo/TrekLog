@@ -32,10 +32,9 @@ function NewComponent({
   },[]);
 
   // const {
-  //   rippleColor,
+  //   rippleColor, footerButtonText,
   // } = uiTheme.palette[trekInfo.colorTheme];
-  // const { cardLayout, roundedTop, roundedBottom, footer, footerButton, 
-  //         footerButtonText, fontRegular 
+  // const { cardLayout, roundedTop, roundedBottom, footer, footerButton, fontRegular 
   //       } = uiTheme;
   // const styles = StyleSheet.create({
   //   container: { ...StyleSheet.absoluteFillObject },

@@ -127,9 +127,9 @@ function TrekLimitsForm({open=undefined, limits=undefined}) {
       setValue('');
   }
 
-    const { highTextColor, dividerColor, textOnPrimaryColor,
+    const { highTextColor, dividerColor, textOnPrimaryColor, footerButtonText,
             pageBackground, rippleColor } = uiTheme.palette[tInfo.colorTheme];
-    const { cardLayout, roundedTop, footer, footerButton, footerButtonText,
+    const { cardLayout, roundedTop, footer, footerButton,
             formHeader, formHeaderText, formBody, formBodyText, formTextInput, formNumberInput
           } = uiTheme;
     const footerHeight = FOOTER_HEIGHT;

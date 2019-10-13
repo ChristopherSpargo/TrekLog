@@ -814,7 +814,7 @@ class GoalDetails extends Component<{
             />        
             <RadioPicker pickerOpen={this.coursePickerOpen} />
             <View style={styles.listArea}>
-              <PageTitle titleText={pTitle}/>
+              <PageTitle titleText={pTitle} colorTheme={this.tInfo.colorTheme}/>
               {(validDisplayObj) && 
                 <View style={styles.scrollArea}>
                   <ScrollView>
@@ -850,7 +850,7 @@ class GoalDetails extends Component<{
                                   graphHeight={graphHeight}
                                   gridWidth={graphWidth}
                                   lineCount={3}
-                                  color={dividerColor}
+                                  colorTheme={this.tInfo.colorTheme}
                                   maxBarHeight={maxBarHeightTrek}
                                   minBarHeight={20}
                                 />
@@ -889,7 +889,7 @@ class GoalDetails extends Component<{
                                   graphHeight={graphHeight}
                                   gridWidth={graphWidth}
                                   lineCount={3}
-                                  color={dividerColor}
+                                  colorTheme={this.tInfo.colorTheme}
                                   maxBarHeight={maxBarHeightInterval}
                                   minBarHeight={20}
                                 />

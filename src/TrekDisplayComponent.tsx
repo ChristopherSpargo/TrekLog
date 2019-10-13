@@ -2,7 +2,6 @@ import React from 'react';
 import { Component } from 'react';
 import { View, StyleSheet, Text } from 'react-native';
 import { observer, inject } from 'mobx-react';
-import { observable, action } from 'mobx';
 import MapView, { Marker, Polyline, LatLng, Region } from 'react-native-maps';
 import { RectButton } from 'react-native-gesture-handler'
 
@@ -164,8 +163,10 @@ class TrekDisplay extends Component<{
   pathToCurrent : TrekPoint[], // path for polyLine to current trek position
   pathLength : number,          // number of points in pathToCurrent
   trackingDiffDist ?: number,
+  trackingDiffDistStr ?: string,
   trackingDiffTime ?: number,
-  trackingTime ?: number,     // elapsed tracking time
+  trackingDiffTimeStr ?: string,
+  trackingTime ?: string,     // elapsed tracking time (hh:mm:ss)
   trekMarkerDragFn ?: Function, // call this function if replay trek marker dragged
   courseMarkerDragFn ?: Function, // call this function if replay course marker dragged
   timerType ?: string,        // if 'Log', 'Paused' or 'Play' show trek current position with yellow marker, else red
@@ -180,7 +181,6 @@ class TrekDisplay extends Component<{
   loggingSvc ?: LoggingSvc,
   }, {} > {
 
-  @observable showPrevPtsIndex;
 
   tInfo = this.props.trekInfo;
   mapViewRef;
@@ -368,9 +368,9 @@ class TrekDisplay extends Component<{
     this.props.changeZoomFn(val);
   }
 
-  markerDragEnd = (index, path, event) => {
+  markerDragEnd = (index, path, pointList, event) => {
     if(this.props.markerDragFn){
-      this.props.markerDragFn(index, event.nativeEvent.coordinate, path);
+      this.props.markerDragFn(index, event.nativeEvent.coordinate, path, pointList);
       this.selectedMarker = -1;
       this.props.selectFn(index);   // select this marker and show it's callout
     }
@@ -398,15 +398,6 @@ class TrekDisplay extends Component<{
     })
   }
 
-  @action
-  showPrevPts = (index: number) => {        // **Debug
-    if(this.showPrevPtsIndex === index){
-      this.showPrevPtsIndex = -1;
-    } else {
-      this.showPrevPtsIndex = index;
-    }
-  }
-
   takeMapSnapshot () {
     const snapshot = this.mapViewRef.takeSnapshot({
       format: 'jpg',   // image formats: 'png', 'jpg' (default: 'png')
@@ -425,9 +416,9 @@ class TrekDisplay extends Component<{
             matchingMask_3, contrastingMask_5, pageBackground, pathColor, navItemBorderColor, 
             locationRadiusBorder, intervalMarkerBorderColor, intervalMarkerBackgroundColor,
             trackingMarkerRadiusBorder, trackingMarkerPathColor, dividerColor,
-            primaryColor, rippleColor
+            primaryColor, rippleColor, footerButtonText,
           } = this.props.uiTheme.palette[tInfo.colorTheme];
-    const { fontRegular, fontBold, navIcon, footerButton, footerButtonText } = this.props.uiTheme;
+    const { fontRegular, fontBold, navIcon, footerButton } = this.props.uiTheme;
     const path = this.props.utilsSvc.cvtPointListToLatLng(this.props.pathToCurrent); // copy just the LaLo data
     const numPts = this.props.pathLength;
     const selection = (this.props.selectedInterval !== undefined || this.props.selectedInterval !== -1) 
@@ -695,7 +686,8 @@ class TrekDisplay extends Component<{
             ref={e => this.markerRefs[index] = e}         
             tracksViewChanges={false}  
             draggable={index !== last ? true : undefined}
-            onDragEnd={index !== last ? this.markerDragEnd.bind(this, index, path) : undefined}
+            onDragEnd={index !== last ? 
+                       this.markerDragEnd.bind(this, index, path, this.props.pathToCurrent) : undefined}
             onPress={() => props.selectFn(index)}
           >
             {index !== last &&
@@ -891,12 +883,14 @@ class TrekDisplay extends Component<{
           </FadeInTemp>
           </View>
         }
-        {(numPts > 0 && trackingMarker) &&
+        {(numPts > 0 && this.props.trackingTime) &&
           <TrackingStatusBar
             trackingHeader={this.props.trackingHeader}
             headerLeft={!logOn}
             trackingDiffDist={this.props.trackingDiffDist}
+            trackingDiffDistStr={this.props.trackingDiffDistStr}
             trackingDiffTime={this.props.trackingDiffTime}
+            trackingDiffTimeStr={this.props.trackingDiffTimeStr}
             trackingTime={this.props.trackingTime}
             barTop={logOn ? CONTROLS_HEIGHT : 0}
             logOn={logOn}

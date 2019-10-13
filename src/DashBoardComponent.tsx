@@ -49,6 +49,10 @@ class DashBoard extends Component<{
   gS = this.props.goalsSvc;
   uSvc = this.props.utilsSvc;
   sumSvc = this.props.summarySvc;
+  winHeight : number;
+  winWidth : number;
+  statAreaWidth : number;
+  summaryHeight : number;
 
   scanCount = 0;
 
@@ -62,6 +66,7 @@ class DashBoard extends Component<{
 
   constructor(props) {
     super(props);
+    this.getWindowSize();
     this.initializeObservables();
   }
 
@@ -93,6 +98,7 @@ class DashBoard extends Component<{
       this.sumSvc.scanTreks();
       if (this.ftCsum !== cSum){
         this.prepareGoals();
+        this.sumSvc.findStartingInterval();
       }
       this.ftCsum = cSum;
     } else {
@@ -106,6 +112,14 @@ class DashBoard extends Component<{
   @action
   initializeObservables = () => {
     this.setCurrScrollPos(0);
+  }
+
+  // get the window dimensions for later use and save in a stable location
+  getWindowSize = () => {
+    const { height, width } = Dimensions.get('window');
+    this.winHeight = height;
+    this.winWidth = width;
+    this.statAreaWidth = width - 6;
   }
 
   @action
@@ -253,11 +267,10 @@ class DashBoard extends Component<{
   render() {
     ++this.renderCount;
     // alert('rendering Dashboard');
-    const {height, width} = Dimensions.get('window');
     const dateAreaHt = 65;
     const sectionTitleHt = 40;
-    const sectionCardHeight = height - (dateAreaHt + HEADER_HEIGHT + PAGE_TITLE_HEIGHT + 25);
-    const sectionCardWidth = width;
+    const sectionCardHeight = this.winHeight - (dateAreaHt + HEADER_HEIGHT + PAGE_TITLE_HEIGHT + 25);
+    const sectionCardWidth = this.winWidth;
     const currScrollPage = Math.trunc(this.currScrollPos / sectionCardHeight) + 1;
     const haveTreks = !this.fS.filteredTreksEmpty();
     const bikeSel  = ((this.tInfo.typeSelections  & BIKE_SELECT_BIT)  !== 0);
@@ -611,7 +624,7 @@ class DashBoard extends Component<{
                 <SummaryIntervals
                   showFn={this.showReviewFromBarGraph}
                   summaryHeight={summaryHeight}
-                  statAreaWidth={width - 6}
+                  statAreaWidth={this.statAreaWidth}
                   haveTreks={haveTreks}
                 />
               </View>

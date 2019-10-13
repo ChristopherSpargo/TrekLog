@@ -48,9 +48,8 @@ function BarItem({
   pressed,
   animationDuration,
   open,
-  animIndex,
+  animate,
   iAngle,
-  gradientEnd
 }) {
   const uiTheme: any = useContext(UiThemeContext);
   const trekInfo: TrekInfo = useContext(TrekInfoContext);
@@ -66,6 +65,7 @@ function BarItem({
     const { fontRegular, fontBold } = uiTheme
     const iconPaths = item.icon ? APP_ICONS[item.icon] : undefined;
     const barWidth = style.width;
+    const graphLabelHt = graphHt - maxHt - 5;
     const newVal = range.max - item.value;
     const rangePct = (range.range / range.max);
     const newRange = rangePct < .25 ? (range.max * .25) : range.range;
@@ -157,13 +157,13 @@ function BarItem({
             <View style={styles.areaAbove}>
               <SvgGraphLabel
                 width={barWidth}
-                height={graphHt - maxHt - 5}
+                height={graphLabelHt}
                 labelAngle={iAngle}
                 labelStyle={styles.indicatorText}
                 labelText={item.indicator}
               />
             </View>
-            {index < animIndex &&
+            {(animate > 0) &&
               <ExpandViewY startValue={itemHeight + 1} endValue={0} open={open} duration={animDur}>
                 <View style={styles.areaBelow}>
                   {item.type && 
@@ -204,7 +204,7 @@ function BarItem({
                 </View>
               </ExpandViewY>
             }
-            {index >= animIndex &&
+            {(animate <= 0) &&
               <View style={styles.areaBelow}>
                 {item.type && 
                   <View style={styles.typeAndImages}>
@@ -263,17 +263,16 @@ function BarDisplay({
   hideScrollBar = undefined,  // if true, don't show the scrollbar on the flatlist 
   animationDuration = undefined, // duration for the ExpandViewY component used for bars
   labelAngle = undefined,     // rotation angle for indicator
-  gradientEnd = undefined,
 }) {
 
   const scrollRef : MutableRefObject<FlatList<any>> = useRef();
   const selectedBar = useRef(0);
-  // const updateCount = useRef(0);
+  const renderCount = useRef(0);
   const graphHeight = style.height;
   const barWidth = barStyle.width;
-  const barsPerView = style.width ? Math.round(style.width / barWidth) : 6;
-  const maxRender = barsPerView + 1;
-  const initRender = Math.min(data.length, maxRender)
+  const barsPerView = style.width ? Math.round(style.width / barWidth) : 8;
+  const maxRender = barsPerView + 2;
+  const initRender = Math.min(data.length + 1, maxRender)
   const minHt = minBarHeight || 25;
   const iAngle = labelAngle || 0;
 
@@ -316,6 +315,7 @@ function BarDisplay({
 
   const _renderItem = ({item, index}) =>
         { if (!item.showEmpty || allowEmptyBars) {
+          if(renderCount.current > 0) {renderCount.current--;}
           return (
             <BarItem 
               item={item}
@@ -330,15 +330,15 @@ function BarDisplay({
               animationDuration={animationDuration}
               pressed={barPressed}
               open={openFlag}
-              animIndex={initRender}
+              animate={renderCount.current}
               iAngle={iAngle}
-              gradientEnd={gradientEnd}
             />
           )
         } else {
           return null;
       }
     };
+  renderCount.current = initRender;
     // alert("rendering graph " + ++updateCount.current)
   return useObserver(() => (
         <FlatList

@@ -50,34 +50,10 @@ function SummaryIntervals({
     })
   }
 
-  // switch the measurement system and update
-  function switchMeasurementSystem() {
-    tInfo.switchMeasurementSystem();
-    sumSvc.buildGraphData();
-  }
-
   function updateShowStatType(sType: ActivityStatType) {
     sumSvc.setOpenItems(false);
     requestAnimationFrame(() => {
-      if (sumSvc.showStatType !== sType) {
-        sumSvc.setShowStatType(sType);
-      } else {
-        switch(sType){
-          case 'dist':
-            switchMeasurementSystem();
-            break;
-          case 'speed':
-            sumSvc.toggleAvgSpeedOrTimeDisplay();
-            break;
-          case 'cals':
-            sumSvc.toggleShowTotalCalories();
-            break;
-          case 'steps':
-            sumSvc.toggleShowStepsPerMin();
-            break;
-          default:
-        }
-      }
+      sumSvc.processShowStatTypeChange(sType);
       sumSvc.setOpenItems(true);
     })
   }
@@ -86,11 +62,7 @@ function SummaryIntervals({
   function updateShowIntervalType(iType: DateInterval) {
     sumSvc.setOpenItems(false);
     scrollBarGraph(0);
-    requestAnimationFrame(() => {
-      sumSvc.setShowIntervalType(iType);
-      sumSvc.scanTreks();
-      sumSvc.findStartingInterval();
-    })
+    sumSvc.processShowIntervalTypeChange(iType);
   }
 
   // format the TITLE for the total line displayed below the graph
@@ -244,11 +216,14 @@ function SummaryIntervals({
   const showSteps = sumSvc.haveStepData();
   const numStats = showSteps ? 5 : 4;
   const statLabelWidth = (statAreaWidth - 20) / numStats;
+  const statLabelUnderlineWidth = statLabelWidth - 8;
   const intervalLabelWidth = (statAreaWidth - 20) / 3;
+  const intervalLabelUnderlineWidth = intervalLabelWidth - 12;
+  const labelMarginTop = -9;
   const graphLabelType = (sumSvc.showStatType === 'speed' && !sumSvc.showAvgSpeed)
                           ? YAXIS_TYPE_MAP['pace'] : YAXIS_TYPE_MAP[sumSvc.showStatType];
 
-  const { rippleColor, trekLogBlue, highTextColor, secondaryColor, dividerColor,
+  const { rippleColor, trekLogBlue, highTextColor, secondaryColor,
           mediumTextColor
         } = uiTheme.palette[tInfo.colorTheme];
   const { fontRegular 
@@ -324,7 +299,8 @@ function SummaryIntervals({
       borderStyle: "solid",
       borderColor: secondaryColor,
     },
-    barStyle: { height: graphHeight, 
+    barStyle: { 
+      height: graphHeight, 
       width: gBarWidth,
       paddingHorizontal: 2,
       borderColor: "transparent",
@@ -361,10 +337,13 @@ return useObserver(() => (
       <IntervalButton selectFn={updateShowIntervalType} value='monthly' label='Monthly'/>
     </View>
     <HorizontalSlideView 
-      endValue={(sumSvc.intervalIndex * (intervalLabelWidth+1)) + 14}
-      duration={500}>
-      <View style={styles.intervalTypeUnderline}/>
-    </HorizontalSlideView>                  
+      index={sumSvc.intervalIndex}
+      width={intervalLabelWidth}
+      underlineWidth={intervalLabelUnderlineWidth}
+      underlineMarginTop={labelMarginTop}
+      color={secondaryColor}
+      offset={14}
+      duration={500}/>
     <View style={{...styles.statLine, ...styles.statLineTitle}}>
       <IntervalButton selectFn={updateShowStatType} value='time' label='Time'/>
       <IntervalButton selectFn={updateShowStatType} value='dist' label='Dist'/>
@@ -376,10 +355,13 @@ return useObserver(() => (
       }
     </View>
     <HorizontalSlideView 
-      endValue={(sumSvc.statIndex * (statLabelWidth + 1)) + 14}
-      duration={500}>
-      <View style={styles.statTypeUnderline}/>
-    </HorizontalSlideView>                  
+      index={sumSvc.statIndex}
+      width={statLabelWidth}
+      underlineWidth={statLabelUnderlineWidth}
+      underlineMarginTop={labelMarginTop}
+      color={secondaryColor}
+      offset={14}
+      duration={500}/>
     {sumSvc.barGraphData &&
       <View style={styles.graphArea}>
         <SvgYAxis
@@ -399,7 +381,7 @@ return useObserver(() => (
             graphHeight={graphHeight}
             gridWidth={graphWidth}
             lineCount={3}
-            color={dividerColor}
+            colorTheme={tInfo.colorTheme}
             maxBarHeight={maxBarHeight}
             minBarHeight={10}
           />
@@ -416,7 +398,6 @@ return useObserver(() => (
             minBarHeight={10}
             labelAngle={287}
             scrollToBar={scrollToBar}
-            // gradientEnd={altCardBackground}
             allowEmptyBars={sumSvc.allowEmptyIntervals}
           />
         </View>
@@ -440,4 +421,4 @@ return useObserver(() => (
 
   ))
 }
-export default SummaryIntervals;
+export default React.memo(SummaryIntervals);

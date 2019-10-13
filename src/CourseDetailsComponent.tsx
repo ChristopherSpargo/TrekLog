@@ -762,7 +762,6 @@ class CourseDetails extends Component<
       pageBackground,
       trekLogBlue,
       mediumTextColor,
-      dividerColor,
       secondaryColor
     } = this.props.uiTheme.palette[this.tInfo.colorTheme];
     const gotTreks = !this.dataReady ? 0 : (this.focusCourse.efforts.length);
@@ -892,7 +891,8 @@ class CourseDetails extends Component<
               <CheckboxPicker pickerOpen={this.checkboxPickerOpen} />
               <RadioPicker pickerOpen={this.coursePickerOpen} />
               <View style={styles.listArea}>
-                <PageTitle titleText={"Course Efforts (" + gotTreks + ")"}/>
+                <PageTitle titleText={"Course Efforts (" + gotTreks + ")"} 
+                           colorTheme={this.tInfo.colorTheme}/>
                 {gotTreks && 
                   <View style={styles.scrollArea}>
                     <ScrollView>
@@ -947,7 +947,7 @@ class CourseDetails extends Component<
                                 graphHeight={graphHeight}
                                 gridWidth={graphWidth}
                                 lineCount={3}
-                                color={dividerColor}
+                                colorTheme={this.tInfo.colorTheme}
                                 maxBarHeight={maxBarHeight}
                                 minBarHeight={20}
                               />

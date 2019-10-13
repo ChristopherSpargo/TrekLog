@@ -172,7 +172,10 @@ export interface TrackingObject {
   courseName: string,           // name of the course used for tracking
   method: CourseTrackingMethod, // method used for tracking
   goalValue: number,            // goal time (sec) or speed/rate (mps)
+  goalTime: string,             // goal time as a time string (hh:mm:ss)
   pointList: TrekPoint[],       // point data to use for computing the tracking movement
+  lastIndex1: number,           // index of pointList array with current marker location
+  lastIndex2: number,           // index of pointList array with marker at current trek distance
   path: LatLng[],               // path to show on screen of the course being tracked
   markerLocation: TrekPoint,    // current point on the course path for the marker
   markerValue: number,          // current value of data being tracked (dist or time)
@@ -182,8 +185,10 @@ export interface TrackingObject {
   maxValue: number,             // max value to end tracking
   incrementValue: number,       // amount to move marker every interval
   initialValue: number,         // starting point for marker on course path
+  timerId: number,              // id of interval timer
   timerInterval: number,        // milliseconds between each marker movement
   startTime: number             // when timer was started milliseconds
+  challengeTitle: string,       // title string for tracking status during course challenge
   header?:  string,             // header for the tracking status display
   timeDiff: number,             // current time differential with trek
   distDiff: number              // current dist differential with trek
@@ -215,8 +220,7 @@ export interface RestoreObject {
   timerOn ?:            boolean,
   trekSaved ?:          boolean,
   typeSelections ?:     number,
-  showAvgSpeed ?:       boolean,
-  showSpeedNow ?:       boolean,
+  showSpeedStat ?:      SpeedStatType,
   defaultMapType ?:     MapType,
   currentMapType ?:     MapType,
   saveDialogOpen ?:     boolean,
@@ -269,7 +273,8 @@ export const PLURAL_STEP_NAMES = {Walk: 'Steps', Run: 'Strides', Bike: 'Steps',
 export type SortByTypes = "Dist" | "Time" | "Date" | "Speed" | "Steps" | "Cals";
 export type ShowTypes = "Dist" | "Time" | "Steps" | "Speed" | "Cals" | "Date";
 
-export const SWITCH_SPEED_AND_TIME = {speed: 'time', time: 'speed'};
+export type SpeedStatType = 'speedNow' | 'speedAvg' | 'time';
+export const SWITCH_SPEED_STAT = {speedNow: 'speedAvg', speedAvg: 'time', time: 'speedNow'};
 
 export const INVALID_NAMES = [
   'new', 'courses', 'groups', 'settings', 'goals', 'treklog', 'course', 'cancel'
@@ -355,11 +360,10 @@ export class TrekInfo {
   @observable averageSpeed: string;
   @observable timePerDist: string;
   @observable speedNow: string;
-  @observable showSpeedNow: boolean;
+  @observable showSpeedStat: SpeedStatType;     // Determines showing Speed Now, Avg Speed and Time/Dist
   @observable currentDist;
   @observable currentCalories;
   @observable currentNetCalories;
-  @observable showAvgSpeed;                    // Flag to switch between showing Dist/Time and Time/Dist
   @observable showStepsPerMin;                    // Flag to switch between showing Total Steps and Steps/Min
   @observable showTotalCalories;                  // Flag to switch between showing Calories and Calories/Min
   @observable speedDialZoomedIn: boolean;
@@ -371,7 +375,9 @@ export class TrekInfo {
   @observable currentBackground;
   @observable trackingMarkerLocation : TrekPoint;
   @observable trackingDiffTime : number;
+  @observable trackingDiffTimeStr : string;
   @observable trackingDiffDist : number;
+  @observable trackingDiffDistStr : string;
   @observable trackingValue : number;             // value associated with tracking method
   @observable trackingMethod : CourseTrackingMethod;   // method being used to track progress .vs. course
   @observable currentTime: string;
@@ -414,12 +420,12 @@ export class TrekInfo {
   waitingMsg = "";
   limitsCloseFn: Function;
   currentTimeIntervalId: number;
+  trackingMarkerTimerId: number;
 
   currentGroupSettings = {                         // used to restore current group settings after Reviewing Treks
-    weight: 0,                                    // in kg
-    packWeight: 0,                                // in kg
+    weight: 0,                                     // in kg
+    packWeight: 0,                                 // in kg
   }
-  // badPointList : number[];                     // **Debug
 
   constructor ( private utilsSvc: UtilsSvc, private storageSvc: StorageSvc, private modalSvc: ModalModel,
     private groupSvc: GroupSvc ) {
@@ -451,8 +457,7 @@ export class TrekInfo {
     this.currentDist = 'N/A';
     this.currentCalories = 'N/A';
     this.currentNetCalories = 'N/A';
-    this.showSpeedNow = true;
-    this.showAvgSpeed = true;
+    this.showSpeedStat = 'speedAvg';
     this.showStepsPerMin = false;
     this.showTotalCalories = true;
     this.layoutOpts = 'Current';
@@ -662,7 +667,6 @@ readAllTreks = (groups: string[]) => {
     this.setPointList(data.pointList);
     this.elevations     = data.elevations;
     this.elevationGain  = data.elevationGain;
-    // this.hills          = data.hills;
     this.hills          = this.utilsSvc.analyzeHills(this.elevations, this.elevationGain, this.trekDist);
     this.intervals      = data.intervals;
     this.intervalDisplayUnits = data.intervalDisplayUnits;
@@ -705,8 +709,7 @@ readAllTreks = (groups: string[]) => {
       timerOn:            this.timerOn,
       trekSaved:          this.trekSaved,
       typeSelections:     this.typeSelections,
-      showAvgSpeed:       this.showAvgSpeed,
-      showSpeedNow:       this.showSpeedNow,
+      showSpeedStat:      this.showSpeedStat,
       defaultMapType:     this.defaultMapType,
       currentMapType:     this.currentMapType,
       saveDialogOpen:     this.saveDialogOpen,
@@ -727,6 +730,7 @@ readAllTreks = (groups: string[]) => {
 
   @action
   restoreLogState = (resObj: RestoreObject) => {
+    return new Promise<string> ((resolve, reject) => {
       this.setDataReady(false);
       BackgroundGeolocation.getLocations((dataPts) => {
         BackgroundGeolocation.startTask(taskKey => {
@@ -760,8 +764,7 @@ readAllTreks = (groups: string[]) => {
           this.setTimerOn(resObj.timerOn);
           this.updateTrekSaved(resObj.trekSaved);
           this.setTypeSelections(resObj.typeSelections);
-          this.updateShowAvgSpeed(resObj.showAvgSpeed);
-          this.updateShowSpeedNow(resObj.showSpeedNow);
+          this.updateShowSpeedStat(resObj.showSpeedStat);
           this.defaultMapType = resObj.defaultMapType;
           this.setCurrentMapType(resObj.currentMapType);
           this.currentGroupSettings.weight = this.weight;            // from setTrekProperties
@@ -776,12 +779,16 @@ readAllTreks = (groups: string[]) => {
           this.setTrackingMethod(resObj.trackingMethod);
           this.trackingCourse = resObj.trackingCourse;
           this.startCurrentTimeTimer();
-          this.readAllTreks(this.group);                             // this will set dataReady to true
+          resolve(this.readAllTreks(this.group));                    // this will set dataReady to true
           BackgroundGeolocation.endTask(taskKey);
         });
-      },
-      (err) => {Alert.alert('Resume Error', JSON.stringify(err));}
-    )
+        },
+        (err) => {
+          Alert.alert('Resume Error', JSON.stringify(err));
+          reject('Error');
+        }
+      )
+    })
   }
 
   // Save the given trek object to the database and optionally add/update entry to in-memory list of treks.
@@ -889,12 +896,14 @@ readAllTreks = (groups: string[]) => {
   @action
   setTrackingDiffTime = (diff: number) => { 
     this.trackingDiffTime = diff;
+    this.trackingDiffTimeStr = diff !== undefined ? this.utilsSvc.timeFromSeconds(Math.abs(diff)) : '';
   }
 
   // set the value of the trackingDiffDist property
   @action
   setTrackingDiffDist = (diff: number) => { 
     this.trackingDiffDist = diff;
+    this.trackingDiffDistStr = diff !== undefined ? this.formattedDist(Math.abs(diff)) : '';
   }
 
   @action
@@ -1447,7 +1456,9 @@ readAllTreks = (groups: string[]) => {
     this.updateCalculatedValues(true);
   }
 
-  // set/clear the bit in typeSelections representing the given type
+  // set/toggle the bit in typeSelections representing the given type
+  // if the set parameter is true then unconditionally set the given bit
+  // otherwise toggle the bit.
   @action
   updateTypeSelections = (value: TrekType, set: boolean) => {
     if (set) {
@@ -1509,16 +1520,10 @@ readAllTreks = (groups: string[]) => {
     this.trekSaved = status;
   }
 
-  // Indicate whether Avg Speed or Time/Dist should show in the status
+  // Indicate whether Avg Speed, Speed Now or Time/Dist should show in the status
   @action
-  updateShowAvgSpeed = (status: boolean) => {
-    this.showAvgSpeed = status;
-  }
-
-  // Indicate whether Avg Speed or Speed Now should show in the status
-  @action
-  updateShowSpeedNow = (status: boolean) => {
-    this.showSpeedNow = status;
+  updateShowSpeedStat = (stat: SpeedStatType) => {
+    this.showSpeedStat = stat;
   }
 
   // Indicate whether Steps or Steps/Min should show in the status
@@ -1590,12 +1595,7 @@ readAllTreks = (groups: string[]) => {
         speed = 0;
       }
       if (!mpsOnly) {
-        switch(system){
-          case 'Metric':
-            return speed + ' kph';    // return km/hr
-          case 'US':
-          return speed + ' mph';      // return km/hr
-        }      
+        return speed + ' ' + SPEED_UNIT_CHOICES[system];
       }
     }
     return mpsOnly ? speedMPS : 'N/A';

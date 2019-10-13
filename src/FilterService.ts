@@ -325,7 +325,7 @@ export class FilterSvc {
   // add the given group to the group list
   @action
   addGroupListItem = (group: string) => {
-    if(this.groupList.indexOf(group) === -1) {
+    if(!this.isInGroupList(group)) {
       this.groupList.push(group);
     }
   }
@@ -705,6 +705,7 @@ export class FilterSvc {
   }
 
   // build the graph data, set the selectedTrekIndex value and run the after filtering treks functions
+  @action
   buildAfterFilter = () => {
     this.buildGraphData(this.filteredTreks);        
     this.setDataReady(true);

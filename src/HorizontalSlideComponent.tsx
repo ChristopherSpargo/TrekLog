@@ -1,43 +1,55 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Animated } from 'react-native';
+import { View, Animated, StyleSheet } from 'react-native';
 import { AnimatedValue } from "react-navigation";
 
 function HorizontalSlideView({ 
-  endValue = undefined,
+  index,
+  width,
+  offset,
+  underlineWidth,
+  underlineMarginTop,
   style = undefined,      
   duration = undefined,   
-  children
+  color,
 }) {
-  const [scaleAnim] = useState<AnimatedValue>(new Animated.Value(endValue));
-  const currValue = useRef();
+  const currValue = useRef(index * (width+1) + offset)
+  const [scaleAnim] = useState<AnimatedValue>(new Animated.Value(currValue.current));
 
   useEffect(() => {      
-    if (endValue !== currValue.current){
-      currValue.current = endValue;
+      currValue.current = index * (width+1) + offset;
       slide();
-    }           
-  },[endValue]);
+  },[index]);
 
 
   function slide() {
     Animated.timing(                          // Animate over time
       scaleAnim,                              // The animated value to drive
       {
-        toValue: endValue,                    // Animate to final marginLeft
+        toValue: currValue.current,           // Animate to final marginLeft
         duration: duration,
         useNativeDriver: true,
       }       
     ).start();                                // Starts the animation
   }
 
-    return (
+  const styles = StyleSheet.create({
+    statTypeUnderline: {
+      marginTop: underlineMarginTop,
+      width: underlineWidth,
+      borderWidth: 1,
+      borderStyle: "solid",
+      borderColor: color,
+    }
+  })
+
+return (
       <Animated.View                          // Special animatable View
         style={{
           ...style,
           transform: [{translateX: scaleAnim}]    // Bind translateX to animated value
         }}
       >
-        {children}
+        <View style={styles.statTypeUnderline}/>
       </Animated.View>
     );
 }

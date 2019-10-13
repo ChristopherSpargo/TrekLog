@@ -8,7 +8,9 @@ import {
   TrekInfo,
   STEPS_APPLY,
   DIST_UNIT_CHOICES,
-  PLURAL_STEP_NAMES
+  PLURAL_STEP_NAMES,
+  SWITCH_SPEED_STAT,
+  SpeedStatType
 } from "./TrekInfoModel";
 import { UtilsSvc } from "./UtilsService";
 import SvgIcon from "./SvgIconComponent";
@@ -55,13 +57,6 @@ function TrekStats({
 
   const [elevDisplay, setElevDisplay] = useState("Gain");
   const [intervalElevDisplay, setIntervalElevDisplay] = useState("Elevation");
-
-  function formattedCurrentSpeed() {
-    let sp = tInfo.showSpeedNow ? tInfo.speedNow : tInfo.averageSpeed;
-    let i = sp.indexOf(" ");
-    return { value: sp.substr(0, i), units: sp.substr(i), 
-             label: tInfo.showSpeedNow ? "Speed Now" : "Avg Speed" };
-  }
 
   function formattedSteps() {
     let showRate = tInfo.showStepsPerMin;
@@ -152,38 +147,49 @@ function TrekStats({
     return tInfo.drivingACar;
   }
 
-  // return average speed or pace of the trek (or interval if specified)
-  function displaySpeedOrPace() {
+  // return current speed, average speed or pace of the trek (or interval if specified)
+  function displaySpeedStat() {
     let ms = tInfo.measurementSystem;
-    let showSpeed = tInfo.showAvgSpeed;
+    let speedStat = tInfo.showSpeedStat;
     let sp: string;
-    let sepStr = showSpeed ? " " : "/";
-    let skip = showSpeed ? 1 : 0;
+    let sepStr = speedStat === 'time' ? "/" : " ";
 
     if (interval !== undefined && interval >= 0) {
-      sp = showSpeed
-        ? uSvc.formatAvgSpeed(
-            ms,
-            intervalData.iDists[interval],
-            intervalData.times[interval]
-          )
-        : uSvc.formatTimePerDist(
-            DIST_UNIT_CHOICES[ms],
-            intervalData.iDists[interval],
-            intervalData.times[interval]
-          );
+      switch(speedStat){
+        case 'speedAvg':
+          sp = uSvc.formatAvgSpeed(ms, intervalData.iDists[interval], intervalData.times[interval]);
+          break;
+        case 'time':
+          sp = uSvc.formatTimePerDist(DIST_UNIT_CHOICES[ms], intervalData.iDists[interval],
+                                      intervalData.times[interval]);
+          break;
+        default:
+      }
     } else {
-      sp = showSpeed ? tInfo.averageSpeed : tInfo.timePerDist;
+      switch(speedStat){
+        case 'speedAvg':
+          sp = tInfo.averageSpeed;
+          break;
+        case 'speedNow':
+          sp = tInfo.speedNow;
+          break;
+        case 'time':
+          sp = tInfo.timePerDist;
+          break;
+        default:
+      }
     }
     let i = sp.indexOf(sepStr);
-    if (!showSpeed) {
-      return {
-        value: sp.substr(0, i),
-        units: "",
-        label: "Time" + sp.substr(i + skip)
-      };
+    switch (speedStat) {
+      case 'time':
+        return { value: sp.substr(0, i), units: "", label: "Time" + sp.substr(i) };
+      case 'speedAvg':
+        return { value: sp.substr(0, i), units: sp.substr(i), label: "Avg Speed" };
+      case 'speedNow':
+        return { value: sp.substr(0, i), units: sp.substr(i), label: "Speed Now" };
+      default:
+      return { value: 'N/A', units: '', label: "" };
     }
-    return { value: sp.substr(0, i), units: sp.substr(i), label: "Avg Speed" };
   }
 
   // return the title to use for the elevDisplay value
@@ -267,14 +273,13 @@ function TrekStats({
     }
   }
 
-  // toggle between displaying time/distance and distance/time
-  function toggleAvgSpeedorTimeDisplay() {
-    tInfo.updateShowAvgSpeed(!tInfo.showAvgSpeed);
-  }
-
   // toggle between displaying current speed and average speed
-  function toggleShowSpeedNowDisplay() {
-    tInfo.updateShowSpeedNow(!tInfo.showSpeedNow);
+  function toggleSpeedStatDisplay() {
+    let nextStat = SWITCH_SPEED_STAT[tInfo.showSpeedStat];
+    if (nextStat === 'speedNow' && !logging){
+      nextStat = SWITCH_SPEED_STAT[nextStat];
+    }
+    tInfo.updateShowSpeedStat(nextStat as SpeedStatType);
   }
 
   // toggle between displaying total steps and steps/min
@@ -421,18 +426,18 @@ function TrekStats({
           item={formattedDist()}
           switchFn={switchSys}
         />
-        {logging && 
+        {/* {logging && 
           <StatItem 
             item={formattedCurrentSpeed()} 
             switchFn={toggleShowSpeedNowDisplay}
           />
         }
-        {!logging && (
+        {!logging && ( */}
           <StatItem
-            item={displaySpeedOrPace()}
-            switchFn={toggleAvgSpeedorTimeDisplay}
+            item={displaySpeedStat()}
+            switchFn={toggleSpeedStatDisplay}
           />
-        )}
+        {/* )} */}
       </View>
       <View style={[styles.bigStatPair, {marginTop: calsMarginTop}]}>
         <StatItem

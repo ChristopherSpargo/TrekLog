@@ -1,7 +1,8 @@
-import React from 'react'
+import React, { useContext } from "react";
 import { View, StyleSheet } from 'react-native'
 import Svg, { G, Line } from 'react-native-svg'
 
+import { UiThemeContext } from "./App";
 // Functional component to draw grid lines for a graph
 
 function SvgGrid({
@@ -9,11 +10,12 @@ function SvgGrid({
   gridWidth,                    // width of grid
   maxBarHeight,                 // height of grid
   minBarHeight,                 // minimum bar height (lowest grid line)
-  color,                        // color for grid line
+  colorTheme,                   // pass trekInfo.colorTheme to cause update on theme change
   lineWidth = undefined,        // width of grid line (defaults to 1)
   lineCount,                    // number of grid lines
 }) {
   
+    const uiTheme: any = useContext(UiThemeContext);
     const gridHeight = maxBarHeight - minBarHeight;
     const lineSpace = gridHeight  / (lineCount + 1);
     const strokeWidth = lineWidth || 1;
@@ -33,7 +35,7 @@ function SvgGrid({
       //       lineCount + '\n' + 
       //       JSON.stringify(lines(),null,2))
     
-
+    const { dividerColor } = uiTheme.palette[colorTheme]
     const styles = StyleSheet.create({
       container: {
         position: "absolute",
@@ -53,7 +55,7 @@ function SvgGrid({
               y1={1}
               x2={gridWidth - 1}
               y2={1}
-              stroke={color}
+              stroke={dividerColor}
               strokeWidth={strokeWidth}
             />
             {lines().map((n, i) => 
@@ -63,7 +65,7 @@ function SvgGrid({
                     y1={(n * lineSpace)}
                     x2={gridWidth - 1}
                     y2={(n * lineSpace)}
-                    stroke={color}
+                    stroke={dividerColor}
                     strokeWidth={strokeWidth}
                   />
               )
@@ -73,7 +75,7 @@ function SvgGrid({
               y1={gridHeight-1}
               x2={gridWidth - 1}
               y2={gridHeight-1}
-              stroke={color}
+              stroke={dividerColor}
               strokeWidth={strokeWidth}
             />
           </G>

@@ -290,9 +290,10 @@ getCourse = () => {
   render() {
 
     const { mediumTextColor, pageBackground, trekLogBlue, highTextColor, dividerColor, secondaryColor,
-            highlightedItemColor, primaryColor, rippleColor, navItemBorderColor, disabledTextColor
+            highlightedItemColor, primaryColor, rippleColor, navItemBorderColor, disabledTextColor,
+            footerButtonText,
           } = this.props.uiTheme.palette[this.tInfo.colorTheme];
-    const { cardLayout, footer, footerButton, footerButtonText,
+    const { cardLayout, footer, footerButton,
             navItem, navIcon, fontRegular } = this.props.uiTheme;
     const validGoal = this.gS.validGoal(); 
     const editNew = this.gS.goalEditMode === 'New'
@@ -462,7 +463,8 @@ getCourse = () => {
                               backButtonFn={() =>  this.props.navigation.dispatch(goBack)}
           />        
           <View style={[cardLayout, {paddingBottom: 0}]}>
-            <PageTitle titleText={this.getGoalPrompt()} style={{paddingLeft: 0}}/>
+            <PageTitle titleText={this.getGoalPrompt()} style={{paddingLeft: 0}}
+                        colorTheme={this.tInfo.colorTheme}/>
           </View>
             {validCat &&
               <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
