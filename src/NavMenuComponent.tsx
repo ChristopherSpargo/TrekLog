@@ -6,7 +6,7 @@ import { useObserver } from 'mobx-react-lite';
 import { UiThemeContext, TrekInfoContext } from "./App";
 import SvgIcon from "./SvgIconComponent";
 import { APP_ICONS } from "./SvgImages";
-import { TrekInfo } from './TrekInfoModel';
+import { TrekInfo, CURRENT_TREKLOG_VERSION } from './TrekInfoModel';
 
 export interface NavMenuItem {
   icon?:      string,             // icon to display to left of label
@@ -80,6 +80,7 @@ function NavMenu({
     },
     menuTitle: {
       height: 50,
+      flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
       backgroundColor: primaryColor,
@@ -90,6 +91,13 @@ function NavMenu({
     menuTitleText: {
       fontFamily: fontBold,
       fontSize: 24,
+      color: navMenuTitleTextColor,
+    },
+    menuVersionText: {
+      marginLeft: 15,
+      marginTop: 5,
+      fontFamily: fontRegular,
+      fontSize: 18,
       color: navMenuTitleTextColor,
     },
     menuButton: {
@@ -187,6 +195,7 @@ function NavMenu({
       <View style={styles.container}>
         <View style={styles.menuTitle}>
           <Text style={styles.menuTitleText}>TrekLog</Text>
+          <Text style={styles.menuVersionText}>{'v' + CURRENT_TREKLOG_VERSION }</Text>
         </View>
         <ScrollView>
           <View style={styles.menuArea}>

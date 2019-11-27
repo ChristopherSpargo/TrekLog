@@ -20,8 +20,10 @@ function TrekTypeSelect({
   }
 
   // call onChange with toggle param 'false'
-  function setType(value: string) {
-    onChangeFn(value, false);
+  function setType(value: string, active = true) {
+    if(active) {
+      onChangeFn(value, false);
+    }
   }
 
   const typeIconAreaSize = size;

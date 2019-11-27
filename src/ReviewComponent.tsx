@@ -306,18 +306,8 @@ class ReviewTreks extends Component<
         case "Home":
           this.props.navigation.dispatch(StackActions.popToTop());
           break;
-        case "Courses":
-        case "Goals":
-        case "Settings":
-        case "Conditions":
-        const resetAction = StackActions.reset({
-                index: 1,
-                actions: [
-                  NavigationActions.navigate({ routeName: 'Log', key: 'Home' }),
-                  NavigationActions.navigate({ routeName: val, key: 'Key-' + val }),
-                ],
-              });
-          this.props.navigation.dispatch(resetAction);          
+        case 'Help':
+          this.tInfo.showCurrentHelp();
           break;
         default:
       }
@@ -554,11 +544,9 @@ class ReviewTreks extends Component<
           {icon: extraFilters ? 'FilterRemove' : 'Filter', label: 'Edit Filters', value: 'Filter'},
         ]},
         {icon: 'Home', label: 'Home', value: 'Home'},
-        {icon: 'Pie', label: 'Activity', value: 'GoBack'},
-        {icon: 'Course', label: 'Courses', value: 'Courses'},
-        {icon: 'Target', label: 'Goals', value: 'Goals'},
-        {icon: 'Settings', label: 'Settings', value: 'Settings'},
-        {icon: 'PartCloudyDay', label: 'Conditions', value: 'Conditions'}]  
+        {icon: 'ArrowBack', label: 'Activity', value: 'GoBack'},
+        {icon: 'InfoCircleOutline', label: 'Help', value: 'Help'}  
+    ]  
 
     if(gotTreks && hasNoCourse){ 
       navMenuItems[0].submenu.push({icon: 'Course', label: 'Link to Course', value: 'Course'});

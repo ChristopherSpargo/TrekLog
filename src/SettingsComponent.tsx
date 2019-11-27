@@ -643,6 +643,9 @@ class Settings extends Component<{
               });
           this.props.navigation.dispatch(resetAction);          
           break;
+        case 'Help':
+          this.props.trekInfo.showCurrentHelp();
+          break;
         default:
       }
     })
@@ -668,7 +671,9 @@ class Settings extends Component<{
         {icon: 'Pie', label: 'Activity', value: 'Summary'},
         {icon: 'Course', label: 'Courses', value: 'Courses'},
         {icon: 'Target', label: 'Goals', value: 'Goals'},
-        {icon: 'PartCloudyDay', label: 'Conditions', value: 'Conditions'}]  
+        {icon: 'PartCloudyDay', label: 'Conditions', value: 'Conditions'},
+        {icon: 'InfoCircleOutline', label: 'Help', value: 'Help'}  
+    ]  
     
 
     const styles=StyleSheet.create({

@@ -10,6 +10,7 @@ import { TrekInfo } from './TrekInfoModel';
 class TextInputField extends React.Component<{   
   inputHeight       ?: number,
   inputWidth        ?: number,
+  editable          ?: boolean,     // can't edit text if false
   textColor         ?: string,
   kbType            ?: string,
   itemTest          ?: RegExp,      // RegExp to use to validate input  
@@ -60,7 +61,7 @@ class TextInputField extends React.Component<{
 
   render() {
 
-    const { highTextColor, mediumTextColor
+    const { highTextColor, mediumTextColor, disabledTextColor
           } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
     const { formTextInput, formNumberInput } = this.props.uiTheme;
     const kbType = this.props.kbType || "numeric";
@@ -68,13 +69,15 @@ class TextInputField extends React.Component<{
     const inputH = this.props.inputHeight || 45;
     const inputW = this.props.inputWidth || propStyle.width || formNumberInput.width;
     const topAdj = this.props.topAdjust === undefined ? -10 : this.props.topAdjust;
+    const canEdit = this.props.editable !== undefined ? this.props.editable : true;
+    const textColor = canEdit ? highTextColor : disabledTextColor;
 
     const styles = StyleSheet.create({
       textInputItem: {
         ...formTextInput,
         height: inputH,
         width: inputW,
-        color: highTextColor,
+        color: textColor,
       },      
     })
 
@@ -84,13 +87,13 @@ class TextInputField extends React.Component<{
             style={[styles.textInputItem, propStyle]}
             onChangeText={(text) => this.setValue(text)}
             placeholder={this.props.placeholderValue}
-            placeholderTextColor={highTextColor}
+            placeholderTextColor={textColor}
             value={this.value}
             onBlur={this.setValueInput}
             onKeyPress={(key) => this.checkForEnter(key)}
             keyboardType={kbType as KeyboardTypeOptions}
-            // underlineColorAndroid={mediumTextColor}
             autoFocus={this.props.autoFocus ? true : false}
+            editable={canEdit}
         /> 
         <View style={{flex: 1, marginTop: -10,
                       borderBottomColor: mediumTextColor, borderBottomWidth: 1, borderStyle: "solid"}}/>

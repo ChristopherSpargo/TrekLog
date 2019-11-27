@@ -13,7 +13,7 @@ import TrekDisplay, { mapDisplayModeType } from './TrekDisplayComponent';
 import NumbersBar from './NumbersBarComponent'
 import { TrekInfo, DIST_UNIT_LONG_NAMES, TrekObj, TrekPoint } from './TrekInfoModel';
 import { SHORT_CONTROLS_HEIGHT, INVISIBLE_Z_INDEX, INTERVAL_GRAPH_Z_INDEX, 
-         HEADER_HEIGHT
+         HEADER_HEIGHT, TREK_TYPE_COLORS_OBJ
         } from './App';
 import Waiting from './WaitingComponent';
 import TrekLimitsForm, {LimitsObj} from './TrekLimitsComponent';
@@ -25,12 +25,13 @@ import BarDisplay from './BarDisplayComponent';
 import TrekLogHeader from './TreklogHeaderComponent';
 import { ModalModel } from './ModalModel';
 import { IntervalSvc, INTERVALS_UNITS, SAVED_UNITS, RateRangePathsObj, RangeDataType,
-         INTERVAL_AREA_HEIGHT, INTERVAL_GRAPH_HEIGHT } from './IntervalSvc';
-import { LoggingSvc, TREK_LIMIT_TYPE_DIST, PointAtLimitInfo } from './LoggingService';
+         INTERVAL_AREA_HEIGHT, INTERVAL_GRAPH_HEIGHT, IntervalAdjustInfo, SegmentAndPoint } from './IntervalSvc';
+import { LoggingSvc, TREK_LIMIT_TYPE_DIST, PointAtLimitInfo, TREK_LIMIT_TYPE_TIME } from './LoggingService';
 import { CourseTrackingSnapshot, CourseSvc } from './CourseService';
 import IncDecComponent from './IncDecComponent';
 import HorizontalSlideView from './HorizontalSlideComponent';
 import NavMenu from './NavMenuComponent';
+import IntervalEditor from './IntervalEditorComponent';
 
 const goBack = NavigationActions.back() ;
 const INTERVAL_CATS  = ['Distance', 'Time', 'Speed', 'Calories', 'Elevation'];
@@ -75,8 +76,13 @@ class SelectedTrek extends Component<{
   @observable replayRate : number;
   @observable mapShapshotFn : Function;
   @observable openNavMenu : boolean;
+  @observable intervalEditorOpen : boolean;
 
-
+  firstIntervalInfo : IntervalAdjustInfo;
+  secondIntervalInfo : IntervalAdjustInfo;
+  firstIntervalLoc : number;      // distance to first interval for adjustment op
+  secondIntervalLoc : number;     // distance to second interval for adjustment op
+  intervalAdjustUnits : string;
 
   tInfo = this.props.trekInfo;
   iSvc = this.props.intervalSvc;
@@ -132,6 +138,7 @@ class SelectedTrek extends Component<{
     this.setReplayRate(1);
     this.setMapSnapshotFn(undefined);
     this.setOpenNavMenu(false);
+    this.setIntervalEditorOpen(false);
   }
 
   componentWillMount() {
@@ -152,6 +159,7 @@ class SelectedTrek extends Component<{
     this.setRateRangeObj(this.mapDisplayMode.includes('noSpeeds') ? undefined : this.currRangeData);
     this.iSvc.intervalData = undefined;
     this.setIntervalCatIndex(this.iSvc.show);
+    this.tInfo.updateShowSpeedStat('speedAvg');
   }
 
   componentDidMount() {
@@ -202,6 +210,11 @@ class SelectedTrek extends Component<{
 
   toggleOpenItems = () => {
     this.setOpenItems(!this.openItems);
+  }
+
+  @action
+  setIntervalEditorOpen = (status: boolean) => {
+    this.intervalEditorOpen = status;
   }
 
   // set observable that will cause the bar graph to scroll to the given bar
@@ -346,7 +359,13 @@ class SelectedTrek extends Component<{
 
   // call the markerToPath function then forceUpdate
   callMarkerToPath = (index: number, pt: LatLng, path: LatLng[], pointList: TrekPoint[]) => {
+
     this.iSvc.markerToPath(index, pt, path, pointList);
+    if (this.intervalEditorOpen){
+      let units = this.iSvc.intervalData.labelUnits === 'time' ? 'time' : 'dist';
+      this.firstIntervalInfo = this.iSvc.getIntervalAdjustInfo(this.selectedIntervalIndex - 1, units);
+      this.secondIntervalInfo = this.iSvc.getIntervalAdjustInfo(this.selectedIntervalIndex, units);
+    }
     this.forceUpdate();
   }
 
@@ -367,7 +386,7 @@ class SelectedTrek extends Component<{
       })
     } else {
       t.intervals = this.iSvc.intervalData.iDists.slice();
-      t.intervalDisplayUnits = this.iSvc.intervalData.displayUnits;
+      t.intervalDisplayUnits = this.iSvc.intervalData.labelUnits;
       this.finishIntervalsSave(t, del);
     }
   }
@@ -430,8 +449,8 @@ class SelectedTrek extends Component<{
         case 'kilometers':
           tempDist = this.iSvc.intervalValue * 1000;
           break;
-        case 'minutes':
-          tempDist = this.iSvc.intervalValue * 60;     // convert minutes to seconds
+        case 'time':
+          tempDist = this.iSvc.intervalValue;     // time is given in seconds
           change = true;
           saved = true;
           break;
@@ -488,12 +507,14 @@ class SelectedTrek extends Component<{
   // Open the Trek Intervals form using DISTANCE parameters
   openIntervalForm = () => {
     if(this.intervalsActive || !this.tInfo.intervals) {
-      let units = [INTERVALS_UNITS, 'meters', DIST_UNIT_LONG_NAMES[this.tInfo.measurementSystem], 'minutes'];
+      let units = [INTERVALS_UNITS, 'meters', DIST_UNIT_LONG_NAMES[this.tInfo.measurementSystem], 'time'];
       this.limitProps = {heading: "Intervals", headingIcon: "RayStartEnd",     
           onChangeFn: this.iSvc.setIntervalValue,    
-          label: 'Set interval distance, time or count:', 
+          label: 'Define intervals by count, distance or time:', 
           placeholderValue: (this.tInfo.intervals || this.iSvc.lastIntervalValue < 0) ? '0' : this.iSvc.lastIntervalValue.toString(),
-          units: units, defaultUnits: units[0]};
+          units: units, defaultUnits: units[0],
+          limitType: 'Interval'
+        };
           this.tInfo.limitsCloseFn = this.showIntervals;
           this.setIntervalFormOpen(true);
     }
@@ -504,10 +525,30 @@ class SelectedTrek extends Component<{
     }
   }
 
-  // Set the property that keeps trak of whick Interval is currently in focus
+  // Set the property that keeps trak of which Interval is currently in focus
+  // If user is currently adjusting intervals, restore values for current interval and continue
   @action
-  setSelectedIntervalIndex = (val: number) => {
-    this.selectedIntervalIndex = val;
+  setSelectedIntervalIndex = (val: number, fromBar = false) => {
+    if(val !== this.selectedIntervalIndex){
+      if (this.intervalEditorOpen){
+        if (fromBar){
+        this.finishAdjustCurrentInterval(this.iSvc.intervalChange ? 'CANCEL' : 'DONE', false);
+        this.selectedIntervalIndex = val;
+        this.adjustCurrentInterval();
+        }
+      } else {
+        this.selectedIntervalIndex = val;
+      }
+    } else {
+      if (fromBar){
+        this.toggleSpeedDialZoom(this.speedDialZoomedIn ? 'All' : 'Interval');
+      }
+    }
+  }
+
+  // call setSelectedIntervalIndex and toggle interval zoom if same as current interval
+  selectIntervalFromBarDisplay = (val: number) => {
+    this.setSelectedIntervalIndex(val, true);
   }
 
   // set the value of the speedDialZoomedIn property
@@ -798,6 +839,50 @@ class SelectedTrek extends Component<{
     this.setIntervalCatIndex(sType);
   }
 
+  // allow user to adjust the length of the current interval
+  adjustCurrentInterval = () => {
+    let units = this.iSvc.intervalData.labelUnits === 'time' ? 'time' : 'dist';
+    this.firstIntervalInfo = this.iSvc.getIntervalAdjustInfo(this.selectedIntervalIndex - 1, units);
+    this.secondIntervalInfo = this.iSvc.getIntervalAdjustInfo(this.selectedIntervalIndex, units);
+    this.firstIntervalLoc = this.iSvc.getIntervalAdjustLoc(this.selectedIntervalIndex - 1, units);
+    this.secondIntervalLoc = this.iSvc.getIntervalAdjustLoc(this.selectedIntervalIndex, units);
+    this.intervalAdjustUnits = this.iSvc.intervalData.labelUnits;
+    this.setIntervalEditorOpen(true);
+  }
+
+  // move the specified interval marker to the given ending distance.
+  makeIntervalAdjustment = (iNum: number, eValue: number) => {
+    if (iNum >= 0 && iNum < this.iSvc.intervalData.markers.length -1){      
+      let moveType = this.iSvc.intervalData.labelUnits === 'time' ? TREK_LIMIT_TYPE_TIME : TREK_LIMIT_TYPE_DIST;
+      let path = this.snapshotTrekPath ? this.snapshotTrekPath : this.tInfo.pointList;
+      let ptInfo = this.lSvc.getPointAtLimit(path, eValue, path[path.length-1].d, moveType);
+      let pt = this.props.utilsSvc.cvtLaLoToLatLng(ptInfo.pt.l);
+      let segAndPt : SegmentAndPoint = {segIndex: ptInfo.index, point: pt};
+      this.iSvc.finishMarkerToPath(iNum, segAndPt, path)
+      this.forceUpdate();
+    }
+  }
+
+  // stop displaying the IntervalEditor component
+  finishAdjustCurrentInterval = (save: 'SAVE' | 'DONE' | 'CANCEL', closeEditor: boolean) => {
+    switch(save){
+      case 'CANCEL':
+        this.makeIntervalAdjustment(this.firstIntervalInfo.iNum, this.firstIntervalLoc);
+        this.makeIntervalAdjustment(this.secondIntervalInfo.iNum, this.secondIntervalLoc);
+        this.adjustCurrentInterval();
+        this.iSvc.setIntervalChange(false);
+        break;
+      case 'SAVE':
+        this.saveCurrentIntervals();
+        this.adjustCurrentInterval();
+        break;
+      case 'DONE':
+      default:
+    }
+    if (closeEditor) {
+      this.setIntervalEditorOpen(false);
+    }
+  }
 
   // respond to touch in navigation bar
   setActiveNav = (val) => {
@@ -824,7 +909,8 @@ class SelectedTrek extends Component<{
                 this.setTrackingTime(this.cS.trackingSnapshot.courseDuration);
               }
               if (this.intervalsActive) { this.cancelIntervalsActive(); }
-              this.props.navigation.setParams({ title: title, icon: this.tInfo.type });
+              this.props.navigation.setParams({ title: title, icon: this.tInfo.type,
+                                                iconColor: TREK_TYPE_COLORS_OBJ[this.tInfo.type] });
               this.tInfo.setWaitingForSomething();
               // set to show full path on map
               this.setSpeedDialZoomedIn(false);
@@ -850,6 +936,9 @@ class SelectedTrek extends Component<{
         case 'IntervalsSave':
           this.saveCurrentIntervals();
           break;
+        case 'AdjustOne':
+          this.adjustCurrentInterval();
+          break;
         case 'calories':
         case 'speed':
           if(this.rateRangeObj){
@@ -874,19 +963,8 @@ class SelectedTrek extends Component<{
         case "Home":
           this.props.navigation.dispatch(StackActions.popToTop());
           break;
-        case "Summary":
-        case "Courses":
-        case "Goals":
-        case "Settings":
-        case "Conditions":
-          const resetAction = StackActions.reset({
-                index: 1,
-                actions: [
-                  NavigationActions.navigate({ routeName: 'Log', key: 'Home' }),
-                  NavigationActions.navigate({ routeName: val, key: 'Key-' + val }),
-                ],
-              });
-          this.props.navigation.dispatch(resetAction);          
+        case 'Help':
+          this.tInfo.showCurrentHelp();
           break;
         default:
       }
@@ -896,8 +974,7 @@ class SelectedTrek extends Component<{
   render () {
 
     const {width} = Dimensions.get('window');
-    const { fontRegular, fontLight
-          } = this.props.uiTheme;
+    const { fontRegular, fontLight } = this.props.uiTheme;
     const { highTextColor, highlightColor, lowTextColor, matchingMask_7, textOnTheme,
             pageBackground, dividerColor, matchingMask_8,
             trackingStatsBackgroundHeader } = this.props.uiTheme.palette[this.tInfo.colorTheme];
@@ -910,10 +987,12 @@ class SelectedTrek extends Component<{
     const sdValue = iMarkers ? (this.speedDialZoomedIn ? "All" : "Interval")
                              : (this.speedDialZoomedIn ? "All" : "Current");
     const interval = ((iMarkers !== undefined) && this.speedDialZoomedIn) ? this.selectedIntervalIndex : undefined;
+    const maxINum = interval !== undefined ? iMarkers.length - 1 : undefined;
     const showButtonHeight = 20;
     const caHt = SHORT_CONTROLS_HEIGHT;
     const graphAndControlsHt = INTERVAL_AREA_HEIGHT;
-    const bottomHeight = (ints && this.graphOpen) ? graphAndControlsHt : 0;
+    const intervalEditorHT = this.intervalEditorOpen ? INTERVAL_AREA_HEIGHT : 0;
+    const bottomHeight = (ints && this.graphOpen) ? graphAndControlsHt + intervalEditorHT : 0;
     const prevOk = (this.checkTrekChangeFn !== undefined) && (this.checkTrekChangeFn('Prev') !== -1);
     const nextOk = (this.checkTrekChangeFn !== undefined) && (this.checkTrekChangeFn('Next') !== -1);
     const showControls = this.tInfo.showMapControls;
@@ -924,8 +1003,8 @@ class SelectedTrek extends Component<{
     const maxBarHeight = 70;
     this.statLabelWidth = (width - 10) / (haveElevs ? 5 : 4);
 
-    const intervalsIcon = ints ? "Edit" : "RayStartEnd";
-    const intervalsLabel = ints ? "Edit Intervals" 
+    const intervalsIcon = ints ? "History" : "RayStartEnd";
+    const intervalsLabel = ints ? "Reset Intervals" 
                                 : (this.tInfo.intervals ? "Show Intervals" : "Set Intervals");
     const showSave = ints && this.iSvc.intervalChange;
     const statsIcon = this.statsOpen ? 'ChevronDown' : 'ChevronUp';
@@ -947,18 +1026,15 @@ class SelectedTrek extends Component<{
         ]} :
         {label: 'Map Options', 
          submenu: [
-          {icon: 'Close', label: 'Close Intervals', value: 'IntervalsDone'},
           {icon: intervalsIcon, label: intervalsLabel, value: 'Intervals'},
+          {icon: 'Close', label: 'Close Intervals', value: 'IntervalsDone'},
           {icon: 'Resistor', label: 'Speed Ranges', value: this.currRangeData},
           {icon: statsIcon, label: statsLabel, value: 'Stats'},
         ]},
-    {icon: 'ArrowBack', label: 'Go Back', value: 'GoBack'},
-    {icon: 'Home', label: 'Home', value: 'Home'},
-    {icon: 'Pie', label: 'Activity', value: 'Summary'},
-    {icon: 'Course', label: 'Courses', value: 'Courses'},
-    {icon: 'Target', label: 'Goals', value: 'Goals'},
-    {icon: 'Settings', label: 'Settings', value: 'Settings'},
-    {icon: 'PartCloudyDay', label: 'Conditions', value: 'Conditions'}]  
+      {icon: 'Home', label: 'Home', value: 'Home'},
+      {icon: 'ArrowBack', label: 'Back', value: 'GoBack'},
+      {icon: 'InfoCircleOutline', label: 'Help', value: 'Help'}  
+    ]  
     if (!ints && !replayOn){
       navMenuItems[0].submenu.unshift(
         {icon: intervalsIcon, label: intervalsLabel, value: 'Intervals'}
@@ -967,6 +1043,11 @@ class SelectedTrek extends Component<{
     if (showSave) {
       navMenuItems[0].submenu.unshift(
         {icon: 'CheckMark', label: 'Save Intervals', value: 'IntervalsSave'},
+      )
+    }
+    if (ints && interval !== undefined){
+      navMenuItems[0].submenu.unshift(
+        {icon: 'Edit', label: 'Adjust Interval ' + (interval + 1), value: 'AdjustOne'},
       )
     }
     if (ints){
@@ -1059,6 +1140,12 @@ class SelectedTrek extends Component<{
         width: 60,
         backgroundColor: "transparent",
       },
+      intervalEditor: {
+        position: "absolute",
+        left: 0,
+        right: 0,
+        bottom: graphAndControlsHt,
+      }
     })
 
 
@@ -1083,6 +1170,8 @@ class SelectedTrek extends Component<{
             />        
           }
           <TrekDisplay 
+            showControls={this.tInfo.showMapControls}
+            bottom={bottomHeight} 
             displayMode={this.mapDisplayMode}
             pathToCurrent={this.snapshotTrekPath ? this.snapshotTrekPath : this.tInfo.pointList}
             pathLength={this.snapshotTrekPath ? this.snapshotTrekPath.length : this.tInfo.trekPointCount}
@@ -1103,7 +1192,6 @@ class SelectedTrek extends Component<{
             selectedInterval={this.selectedIntervalIndex}
             selectedPath={ints ? this.iSvc.intervalData.segPaths[this.selectedIntervalIndex] : undefined}
             selectFn={this.setSelectedIntervalIndex} 
-            bottom={bottomHeight} 
             speedDialIcon={sdIcon}
             speedDialValue={sdValue}
             markerDragFn={this.callMarkerToPath}
@@ -1132,92 +1220,106 @@ class SelectedTrek extends Component<{
           {this.tInfo.waitingForSomething && 
             <Waiting msg={this.tInfo.waitingMsg}/>
           }
-            <View style={styles.graphAndControls}>
-              <SlideUpView 
-                bgColor={pageBackground}
-                startValue={graphAndControlsHt}
-                endValue={0}
-                open={this.graphOpen}
-                beforeOpenFn={this.setVisible}
-                afterCloseFn={this.setNotVisible}
-              >
-                <View style={{height: graphAndControlsHt, backgroundColor: pageBackground}}>
-                  {ints &&
-                    <View style={styles.showControls}>
+          {(ints && this.intervalEditorOpen) &&
+            <IntervalEditor
+              firstIntervalInfo={this.firstIntervalInfo}
+              secondIntervalInfo={this.secondIntervalInfo}
+              firstIntervalLoc={this.firstIntervalLoc}
+              secondIntervalLoc={this.secondIntervalLoc}
+              units={this.intervalAdjustUnits}
+              onChangeFn={this.makeIntervalAdjustment}
+              onSaveFn={this.finishAdjustCurrentInterval}
+              showSave={showSave}
+              style={styles.intervalEditor}
+              maxINum={maxINum}
+            />
+          }        
+          <View style={styles.graphAndControls}>
+            <SlideUpView 
+              bgColor={pageBackground}
+              startValue={graphAndControlsHt}
+              endValue={0}
+              open={this.graphOpen}
+              beforeOpenFn={this.setVisible}
+              afterCloseFn={this.setNotVisible}
+            >
+              <View style={{height: graphAndControlsHt, backgroundColor: pageBackground}}>
+                {(ints) &&
+                  <View style={styles.showControls}>
+                    <IconButton
+                      label="DIST"
+                      horizontal
+                      onPressFn={this.changeIntervalStatType}
+                      onPressArg={'Distance'}
+                      style={styles.showButton}
+                      labelStyle={this.iSvc.show === "Distance" ? styles.buttonTextSelected : styles.buttonText}
+                    />
+                    <IconButton
+                      label="TIME"
+                      horizontal
+                      onPressFn={this.changeIntervalStatType}
+                      onPressArg={'Time'}
+                      style={styles.showButton}
+                      labelStyle={this.iSvc.show === "Time" ? styles.buttonTextSelected : styles.buttonText}
+                    />
+                    <IconButton
+                      label="SPEED"
+                      horizontal
+                      onPressFn={this.changeIntervalStatType}
+                      onPressArg={'Speed'}
+                      style={styles.showButton}
+                      labelStyle={this.iSvc.show === "Speed" ? styles.buttonTextSelected : styles.buttonText}
+                    />
+                    <IconButton
+                      label="CALS"
+                      horizontal
+                      onPressFn={this.changeIntervalStatType}
+                      onPressArg={'Calories'}
+                      style={styles.showButton}
+                      labelStyle={this.iSvc.show === "Calories" ? styles.buttonTextSelected : styles.buttonText}
+                    />
+                    {haveElevs && 
                       <IconButton
-                        label="DIST"
+                        label="ELEV"
                         horizontal
                         onPressFn={this.changeIntervalStatType}
-                        onPressArg={'Distance'}
+                        onPressArg={'Elevation'}
                         style={styles.showButton}
-                        labelStyle={this.iSvc.show === "Distance" ? styles.buttonTextSelected : styles.buttonText}
+                        labelStyle={this.iSvc.show === "Elevation" ? styles.buttonTextSelected : styles.buttonText}
                       />
-                      <IconButton
-                        label="TIME"
-                        horizontal
-                        onPressFn={this.changeIntervalStatType}
-                        onPressArg={'Time'}
-                        style={styles.showButton}
-                        labelStyle={this.iSvc.show === "Time" ? styles.buttonTextSelected : styles.buttonText}
+                    }
+                  </View>
+                }
+                {(ints) && 
+                  <HorizontalSlideView 
+                    index={this.intervalCatIndex}
+                    width={this.statLabelWidth}
+                    underlineMarginTop={labelMarginTop}
+                    underlineWidth={statUnderlineWidth}
+                    color={highlightColor}
+                    offset={5}
+                    duration={400}/>
+                } 
+                {(ints) && 
+                  <View style={styles.graphArea}>
+                    <View style={styles.graph}>
+                      <BarDisplay 
+                        data={this.iSvc.intervalGraphData.items} 
+                        dataRange={this.iSvc.intervalGraphData.range}
+                        selected={this.selectedIntervalIndex}
+                        selectFn={this.selectIntervalFromBarDisplay} 
+                        openFlag={this.openItems}
+                        maxBarHeight={maxBarHeight}
+                        style={styles.intervalGraphStyle}
+                        barStyle={styles.intervalBarStyle}
+                        scrollToBar={this.scrollToBar}
                       />
-                      <IconButton
-                        label="SPEED"
-                        horizontal
-                        onPressFn={this.changeIntervalStatType}
-                        onPressArg={'Speed'}
-                        style={styles.showButton}
-                        labelStyle={this.iSvc.show === "Speed" ? styles.buttonTextSelected : styles.buttonText}
-                      />
-                      <IconButton
-                        label="CALS"
-                        horizontal
-                        onPressFn={this.changeIntervalStatType}
-                        onPressArg={'Calories'}
-                        style={styles.showButton}
-                        labelStyle={this.iSvc.show === "Calories" ? styles.buttonTextSelected : styles.buttonText}
-                      />
-                      {haveElevs && 
-                        <IconButton
-                          label="ELEV"
-                          horizontal
-                          onPressFn={this.changeIntervalStatType}
-                          onPressArg={'Elevation'}
-                          style={styles.showButton}
-                          labelStyle={this.iSvc.show === "Elevation" ? styles.buttonTextSelected : styles.buttonText}
-                        />
-                      }
                     </View>
-                  }
-                  {ints && 
-                    <HorizontalSlideView 
-                      index={this.intervalCatIndex}
-                      width={this.statLabelWidth}
-                      underlineMarginTop={labelMarginTop}
-                      underlineWidth={statUnderlineWidth}
-                      color={highlightColor}
-                      offset={5}
-                      duration={400}/>
-                  } 
-                  {ints && 
-                    <View style={styles.graphArea}>
-                      <View style={styles.graph}>
-                        <BarDisplay 
-                          data={this.iSvc.intervalGraphData.items} 
-                          dataRange={this.iSvc.intervalGraphData.range}
-                          selected={this.selectedIntervalIndex}
-                          selectFn={this.setSelectedIntervalIndex} 
-                          openFlag={this.openItems}
-                          maxBarHeight={maxBarHeight}
-                          style={styles.intervalGraphStyle}
-                          barStyle={styles.intervalBarStyle}
-                          scrollToBar={this.scrollToBar}
-                        />
-                      </View>
-                    </View>
-                  }             
-                </View>
-              </SlideUpView>
-            </View>
+                  </View>
+                }     
+              </View>
+            </SlideUpView>
+          </View>
           <NumbersBar 
             bottom={0} 
             open={this.statsOpen}

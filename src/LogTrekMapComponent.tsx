@@ -209,6 +209,7 @@ class LogTrekMap extends Component<{
       <View style={[styles.container]}>
         <TrekDisplay 
           displayMode="normal"
+          showControls={this.trekInfo.showMapControls}
           pathToCurrent={this.trekInfo.pointList}
           pathLength={this.trekInfo.trekPointCount}
           bottom={mapBottom} 

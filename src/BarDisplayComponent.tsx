@@ -60,7 +60,8 @@ function BarItem({
 
     const { highTextColor, dividerColor, itemSelectedColor, itemMeetsGoal, itemMissesGoal,
             itemNotSelected, rippleColor, mediumTextColor, gradientEndColor, gradientEndSelected,
-            itemMissesGoalEnd, itemMeetsGoalEnd, itemMissesGoalText, itemMeetsGoalText
+            itemMissesGoalEnd, itemMeetsGoalEnd, itemMissesGoalText, itemMeetsGoalText,
+            barGraphValueColor
           } = uiTheme.palette[trekInfo.colorTheme];
     const { fontRegular, fontBold } = uiTheme
     const iconPaths = item.icon ? APP_ICONS[item.icon] : undefined;
@@ -82,7 +83,7 @@ function BarItem({
     } else {
       barGradientStart = selItem ? itemSelectedColor : itemNotSelected;
       barGradientEnd = selItem ? gradientEndSelected : gradientEndColor;
-      valueColor = highTextColor;
+      valueColor = barGraphValueColor;
     }
     const useDimColor = item.typeSelected !== undefined && item.typeSelected === false;
     const barPad = style.paddingHorizontal || 0;
@@ -132,15 +133,15 @@ function BarItem({
         justifyContent: "center",
       },
       indicatorText: {
-        fontSize: selItem ? 13 : 12,
+        fontSize: 13,
         fontFamily: selItem ? fontBold : fontRegular,
         color: selItem ? highTextColor : mediumTextColor
       },
       value: {
         marginTop: item.showEmpty ? -3 : 0,
-        fontSize: selItem ? 13 : 12,
         color: valueColor,
-        fontFamily: selItem ? fontBold : fontRegular,
+        fontSize: 13,
+        fontFamily: fontBold,
       },
       smallImages: {
         justifyContent: "flex-end",

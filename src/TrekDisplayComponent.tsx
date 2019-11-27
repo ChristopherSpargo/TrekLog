@@ -144,6 +144,7 @@ class TrekDisplay extends Component<{
   selectedPath ?: LatLng[],   // path to the selected marker from the prior marker
   selectFn ?: Function,       // function to call when interval marker is selected
   layoutOpts : string,
+  showControls : boolean,     // show title and controls overlay on map if true
   mapType : MapType,          // current map type (Sat/Terrain/Std)
   changeMapFn : Function,     // function to call to switch map type
   changeZoomFn : Function,    // switch between zoomed-in or out
@@ -226,17 +227,24 @@ class TrekDisplay extends Component<{
         this.mode = this.props.layoutOpts;
       this.setLayout();
     }
-    if ((this.props.selectedInterval !== undefined) && (this.selectedMarker !== this.props.selectedInterval)) {
+
+    // this next section is for when intervals are being dispalyed
+    if (((this.props.selectedInterval !== undefined) && 
+         (this.selectedMarker !== this.props.selectedInterval)) || 
+        prevProps.showControls !== this.props.showControls) {
       this.selectedMarker = this.props.selectedInterval;
       if (this.selectedMarker >= 0) {
         if (this.markerRefs) { this.markerRefs[this.selectedMarker].showCallout(); }
+        // mode will be 'Interval' if user is zoomed-in on this interval path
         if (this.mode === 'Interval') {
           if (this.mapViewRef) { 
-            let topPadding = this.props.rateRangeObj ? 325 : 200;
+            let topPad = this.props.showControls ? 200 : 50;
+            let bottomPad = (this.props.rateRangeObj && this.props.showControls) ? 200 : 50;
             this.mapViewRef.fitToCoordinates(this.props.selectedPath,
-                    {edgePadding: {top: topPadding, right: 50, bottom: 50, left: 50}, animated: true});
+                    {edgePadding: {top: topPad, right: 50, bottom: bottomPad, left: 50}, animated: true});
           }
         } 
+        // otherwise just center map at interval marker
         else {
           if (this.mapViewRef) { 
             this.mapViewRef.animateCamera({center: this.props.intervalMarkers[this.selectedMarker]}, 
@@ -434,12 +442,13 @@ class TrekDisplay extends Component<{
     const showNext = this.props.nextFn !== undefined;
     const showPrev = this.props.prevFn !== undefined;
     const minSDOffset = (this.props.bottom !== 0) ? 5 : SHORT_CONTROLS_HEIGHT;
-    const showControls = tInfo.showMapControls && !this.props.takeSnapshotFn;
+    const showControls = this.props.showControls && !this.props.takeSnapshotFn;
     const rangesObj = this.props.rateRangeObj;
     const trackingMarker = this.props.trackingMarker;
     const logOn = this.props.timerType === 'Log';
     const replayOn = (this.props.timerType === 'Play');
-    const cmBackground = (logOn || replayOn) ? trekLogYellow : "red";
+    const startMarkerColor = 'green';
+    const currMarkerColor = (logOn || replayOn) ? trekLogYellow : "red";
     const [okPrompt, okCourse] = this.props.snapshotPrompt ? this.props.snapshotPrompt.split('\n') 
                                                            : ['',''];
     const canTxt = 'CANCEL';
@@ -476,7 +485,7 @@ class TrekDisplay extends Component<{
         borderWidth: 2,
         borderRadius: 7,
         borderColor: "white",
-        backgroundColor: "green",
+        backgroundColor: startMarkerColor,
         overflow: "hidden"
       },
       currMarker: {
@@ -485,7 +494,7 @@ class TrekDisplay extends Component<{
         borderWidth: 2,
         borderRadius: 7,
         borderColor: "white",
-        backgroundColor: cmBackground,
+        backgroundColor: currMarkerColor,
         overflow: "hidden"
       },
       trackingMarker: {
@@ -772,10 +781,9 @@ class TrekDisplay extends Component<{
                 anchor={{x: 0.5, y: 0.5}}
                 tracksViewChanges={false}
                 coordinate={{latitude: trackingMarker.l.a, longitude: trackingMarker.l.o}}
-                // draggable
                 draggable={(trackingMarker && this.props.courseMarkerDragFn) ? true : undefined}
                 onDragEnd={(event) => this.props.courseMarkerDragFn(event.nativeEvent.coordinate)}
-              >
+                >
                 <View style={styles.trackingMarkerRadius}>
                   <View style={styles.trackingMarker}/>
                 </View>
@@ -806,7 +814,6 @@ class TrekDisplay extends Component<{
                 anchor={{x: 0.5, y: 0.5}}
                 tracksViewChanges={false}
                 coordinate={path[numPts-1]}
-                // draggable
                 draggable={(trackingMarker && this.props.trekMarkerDragFn) ? true : undefined}
                 onDragEnd={(event) => this.props.trekMarkerDragFn(event.nativeEvent.coordinate)}
               >

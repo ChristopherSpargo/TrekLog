@@ -334,7 +334,7 @@ export class LoggingSvc {
           }
           if (this.pointsSinceSmooth >= SMOOTH_INTERVAL) {
             this.smoothTrek();
-            tInfo.updateCalculatedValues();
+            tInfo.updateCalculatedValues(true);
           } else {
             this.updateDist(newDist);
             tInfo.updateAverageSpeed();

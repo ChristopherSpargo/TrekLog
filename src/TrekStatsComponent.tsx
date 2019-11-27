@@ -112,6 +112,7 @@ function TrekStats({
     if (interval !== undefined && interval >= 0) {
       let totalCals = uSvc.computeCalories(
         intervalData.segPoints[interval],
+        0,
         tInfo.type,
         tInfo.hills,
         tInfo.weight,
@@ -426,18 +427,10 @@ function TrekStats({
           item={formattedDist()}
           switchFn={switchSys}
         />
-        {/* {logging && 
-          <StatItem 
-            item={formattedCurrentSpeed()} 
-            switchFn={toggleShowSpeedNowDisplay}
-          />
-        }
-        {!logging && ( */}
-          <StatItem
-            item={displaySpeedStat()}
-            switchFn={toggleSpeedStatDisplay}
-          />
-        {/* )} */}
+        <StatItem
+          item={displaySpeedStat()}
+          switchFn={toggleSpeedStatDisplay}
+        />
       </View>
       <View style={[styles.bigStatPair, {marginTop: calsMarginTop}]}>
         <StatItem
@@ -453,7 +446,7 @@ function TrekStats({
         )}
       </View>
       {(haveElevs && !logging && !noSteps) && (
-        <View style={styles.bigStatPair}>
+        <View style={[styles.bigStatPair, {marginTop: calsMarginTop}]}>
           <StatItem item={elevationDisplayValue()} switchFn={toggleElevDisplay} />
         </View>
       )}

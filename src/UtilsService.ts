@@ -1332,8 +1332,9 @@ export class UtilsSvc {
   //  pointList - array of TrekPoint objects
   //  tType -     type of trek (Walk, Run, Bike or Hike)
   //  weight -    user's weight in kg
+  //  duration -  total trek duration
   //  bpWeight -  weight of backpack in kg if tType is Hike, default: 0
-  computeCalories = (pointList: TrekPoint[],
+  computeCalories = (pointList: TrekPoint[], duration: number,
     tType: TrekType, hills: string, weight: number, bpweight = 0): number => {
     let cals = 0;
     let hIndex = this.getHillsIndex(hills);
@@ -1363,7 +1364,8 @@ export class UtilsSvc {
             cals += currMET * tWt * (currDurationSum / 3600);
             currMET = newMET;
             startTime = currPt.t;
-            currDurationSum = 0;  // if this is the last point, the time has already been counted 
+            // if duration is given, account for time since last point
+            currDurationSum = (duration !== 0) ? duration - startTime : 0;  
           }
         }
       }

@@ -48,7 +48,7 @@ export interface ActivityStatsInterval {
   data: AllActivityStats        // the statistics for the interval
 }
 
-export class SummaryModel {
+export class SummarySvc {
 
   @observable ftCount;                // count of treks encountered from filterTreks (?)
   @observable dataReady: boolean;

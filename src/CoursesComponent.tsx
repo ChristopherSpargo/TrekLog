@@ -298,6 +298,9 @@ class Courses extends Component<{
               });
           this.props.navigation.dispatch(resetAction);          
           break;
+        case 'Help':
+          this.props.trekInfo.showCurrentHelp();
+          break;
         default:
       }
     })
@@ -319,7 +322,8 @@ class Courses extends Component<{
         {icon: 'Pie', label: 'Activity', value: 'Summary'},
         {icon: 'Target', label: 'Goals', value: 'Goals'},
         {icon: 'Settings', label: 'Settings', value: 'Settings'},
-        {icon: 'PartCloudyDay', label: 'Conditions', value: 'Conditions'}
+        {icon: 'PartCloudyDay', label: 'Conditions', value: 'Conditions'},
+        {icon: 'InfoCircleOutline', label: 'Help', value: 'Help'}  
       ]; 
     
     const styles=StyleSheet.create({

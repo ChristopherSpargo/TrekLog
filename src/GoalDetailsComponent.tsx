@@ -28,6 +28,7 @@ import { ToastModel } from './ToastModel';
 import RadioPicker from "./RadioPickerComponent";
 import { FilterSvc } from './FilterService';
 
+const pageTitleFormat = {marginBottom: 10};
 const goBack = NavigationActions.back() ;
 
 @inject('trekInfo', 'utilsSvc', 'uiTheme', 'goalsSvc', 'courseSvc', 'toastSvc', 'filterSvc')
@@ -494,23 +495,12 @@ class GoalDetails extends Component<{
       case "GoBack":
         this.props.navigation.dispatch(goBack);
         break;
+      case 'Help':
+        this.tInfo.showCurrentHelp();
+        break;
       case "Home":
         this.tInfo.clearTrek();
         this.props.navigation.dispatch(StackActions.popToTop());
-        break;
-      case "Summary":
-      case "Courses":
-      case "Settings":
-      case "Conditions":
-        this.tInfo.clearTrek();
-        let resetAction = StackActions.reset({
-              index: 1,
-              actions: [
-                NavigationActions.navigate({ routeName: 'Log', key: 'Home' }),
-                NavigationActions.navigate({ routeName: val, key: 'Key-' + val }),
-              ],
-            });
-        this.props.navigation.dispatch(resetAction);          
         break;
       case 'Course':
         this.addCourseOrEffort();
@@ -661,12 +651,10 @@ class GoalDetails extends Component<{
     const hasNoCourse = !this.tInfo.course || !this.cS.isCourse(this.tInfo.course);
     let navMenuItems : NavMenuItem[] = 
     [ 
-        {icon: 'ArrowBack', label: 'Go Back', value: 'GoBack'},
         {icon: 'Home', label: 'Home', value: 'Home'},
-        {icon: 'Pie', label: 'Activity', value: 'Summary'},
-        {icon: 'Course', label: 'Courses', value: 'Courses'},
-        {icon: 'Settings', label: 'Settings', value: 'Settings'},
-        {icon: 'PartCloudyDay', label: 'Conditions', value: 'Conditions'}]  
+        {icon: 'ArrowBack', label: 'Back', value: 'GoBack'},
+        {icon: 'InfoCircleOutline', label: 'Help', value: 'Help'}  
+      ]  
     if (validDisplayObj && !showLegend) {
       navMenuItems.unshift(
         {label: 'Detail Options', 
@@ -814,7 +802,9 @@ class GoalDetails extends Component<{
             />        
             <RadioPicker pickerOpen={this.coursePickerOpen} />
             <View style={styles.listArea}>
-              <PageTitle titleText={pTitle} colorTheme={this.tInfo.colorTheme}/>
+              <PageTitle titleText={pTitle} 
+                  style={pageTitleFormat}
+                  colorTheme={this.tInfo.colorTheme}/>
               {(validDisplayObj) && 
                 <View style={styles.scrollArea}>
                   <ScrollView>

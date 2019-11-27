@@ -20,7 +20,7 @@ import { ModalModel } from './ModalModel';
 import TrekLogHeader from './TreklogHeaderComponent';
 import { ToastModel } from './ToastModel';
 import Waiting from './WaitingComponent';
-import { semitransBlack_2, semitransWhite_8, semitransBlack_5, 
+import { semitransBlack_2, semitransWhite_8, semitransBlack_5,
        } from './App';
 import { StorageSvc } from './StorageService';
 import { GroupSvc } from './GroupService';
@@ -656,7 +656,7 @@ class TrekImages extends Component<{
   render () {
     const { trekLogGreen, trekLogRed, mediumTextColor, pageBackground
           } = this.props.uiTheme.palette[this.tInfo.colorTheme];
-    const { navIcon } = this.props.uiTheme;
+    const { navIcon, fontRegular } = this.props.uiTheme;
     const noPrev = !this.havePrevImage();
     const noNext = !this.haveNextImage();
     const imageSelectorWidth = 50;
@@ -807,6 +807,7 @@ class TrekImages extends Component<{
       },
       sliderText: {
         fontSize: 14,
+        fontFamily: fontRegular,
         color: "white",
       },
     })

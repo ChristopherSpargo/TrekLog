@@ -547,6 +547,7 @@ class LogTrek extends Component<
       .then(resp => {
         this.trekInfo.setSaveDialogOpen(false);
         this.logSvc.stopTrek();
+        this.trekInfo.updateShowSpeedStat('speedAvg');
         this.finalizeTrek();
         if (resp === "SAVE" && this.trekInfo.pointList.length !== 0) {
           this.willSaveTrek();
@@ -719,15 +720,14 @@ class LogTrek extends Component<
 
   // Open the Trek Limits form using TIME parameters
   openTimeLimitsForm = () => {
-    let units = ["minutes", "hours"];
     this.limitProps = {
       heading: "Stop after a Time",
       headingIcon: "TimerSand",
       onChangeFn: this.trekInfo.setTimeLimitInfo,
       label: "Auto stop " + this.trekInfo.type + " after how long?",
       placeholderValue: this.trekInfo.lastTime.toString(),
-      units: units,
-      defaultUnits: this.trekInfo.lastTimeUnits,
+      units: ['time'], defaultUnits: 'time',
+      limitType: 'Time'
     };
     this.trekInfo.limitsCloseFn = this.startTimedLogging;
     this.setLimitFormOpen(true);
@@ -747,6 +747,7 @@ class LogTrek extends Component<
       placeholderValue: this.trekInfo.lastDist.toString(),
       units: units,
       defaultUnits: this.trekInfo.lastDistUnits,
+      limitType: 'Dist'
     };
     this.trekInfo.limitsCloseFn = this.startDistLogging;
     this.setLimitFormOpen(true);
@@ -768,6 +769,7 @@ class LogTrek extends Component<
       placeholderValue: phVal.toString(),
       units: units,
       defaultUnits: units[0],
+      limitType: "PackWeight"
     };
     this.trekInfo.limitsCloseFn = this.startHike;
     this.setLimitFormOpen(true);
@@ -782,7 +784,7 @@ class LogTrek extends Component<
       onChangeFn: this.trekInfo.updateType,
       okText: "Auto",
       label: "Select trek type for new log:",
-      typeSelect: true
+      limitType: 'TrekType'
     };
     this.trekInfo.limitsCloseFn = this.selectTrekType;
     this.setLimitFormOpen(true);
@@ -791,13 +793,9 @@ class LogTrek extends Component<
   // Start the logging process for a TIME limited trek.
   @action
   startTimedLogging = (start: boolean) => {
-    this.trekInfo.lastTimeUnits = this.trekInfo.units;
     if (start) {
       this.trekInfo.setLimitsActive(true);
       this.trekInfo.lastTime = this.trekInfo.timeLimit;
-      this.trekInfo.timeLimit *=
-        this.trekInfo.units === "minutes" ? 60000 : 3600000; // convert to miliseconds
-      alert(this.trekInfo.timeLimit)
       this.startLogging();
     }
     this.closeLimitForm();
@@ -849,7 +847,7 @@ class LogTrek extends Component<
       this.setTrackingMethodFormOpen(false);
       this.logSvc.setLayoutOpts("All");
       this.trekInfo.setSpeedDialZoomedIn(false);
-      this.showMap();
+      // this.showMap();
     } else {
       this.setTrackingMethodFormOpen(false);
       setTimeout(() => {
@@ -858,7 +856,7 @@ class LogTrek extends Component<
     }
   }
 
-  // Vibrate a start warning sequence then a longer single vibration from 2-3 seconds later to indicate START.
+  // Vibrate a device to indicate START.
   giveVibrationStartSignal = () => {
     this.props.toastSvc.toastOpen({
       tType: "Success",
@@ -1091,6 +1089,9 @@ class LogTrek extends Component<
         case 'Upload':
           this.uploadTreks();
           break;
+        case 'Help':
+          this.trekInfo.showCurrentHelp();
+          break;
         default:
       }
     });
@@ -1251,12 +1252,16 @@ class LogTrek extends Component<
       navMenuItems =   
       [ {icon: 'Stop', color: trekLogRed, label: 'Stop', value: 'Stop'},
       {icon: 'Camera', label: 'Use Camera', value: 'UseCamera'},
-      {icon: 'Map', label: 'View Map', value: 'ShowMap'}];
+      {icon: 'Map', label: 'View Map', value: 'ShowMap'},
+      {icon: 'InfoCircleOutline', label: 'Help', value: 'Help'} 
+    ];
     } else {
       if (reviewOk){    
         navMenuItems =   
         [ {icon: 'ArrowBack', label: 'Done', value: 'ReviewDone'},
-        {icon: 'Map', label: 'View Map', value: 'ShowMap'}];
+        {icon: 'Map', label: 'View Map', value: 'ShowMap'},
+        {icon: 'InfoCircleOutline', label: 'Help', value: 'Help'}
+      ];
       } else {
         navMenuItems = 
         [ {label: 'Logging Options', 
@@ -1270,6 +1275,7 @@ class LogTrek extends Component<
           {icon: 'Target', label: 'Goals', value: 'Goals'},
           {icon: 'Settings', label: 'Settings', value: 'Settings'},
           {icon: 'PartCloudyDay', label: 'Conditions', value: 'Conditions'},  
+          {icon: 'InfoCircleOutline', label: 'Help', value: 'Help'},  
           // {icon: 'Download', label: 'Download Treks', value: 'Download'},
           // {icon: 'Upload', label: 'Upload Treks', value: 'Upload'}
         ]
@@ -1292,7 +1298,7 @@ class LogTrek extends Component<
         borderWidth: 0,
       },
       bigTitle: {
-        marginTop: stopOk ? -15 : 25,
+        marginTop: stopOk ? -15 : 0,
         fontSize: startOk ? 60 : 50,
         fontFamily: fontLight,
         color: disabledTextColor
@@ -1399,7 +1405,7 @@ class LogTrek extends Component<
                 groupName={tI.group || "None"}
                 setGroupFn={startOk ? this.getDifferentGroup : undefined}
               />
-              {(startOk || reviewOk) && !trackingMarker &&
+              {(startOk) && !trackingMarker &&
                 <Text style={styles.bigTitle}>{bigTitle}</Text>
               }
               {(numPts > 0 && trackingMarker) &&

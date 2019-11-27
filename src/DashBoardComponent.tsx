@@ -24,7 +24,7 @@ import IconButton from './IconButtonComponent';
 import { ModalModel } from './ModalModel';
 import SvgIcon from './SvgIconComponent';
 import { GoalsSvc, GoalDisplayObj } from './GoalsService';
-import { SummaryModel } from './SummaryModel';
+import { SummarySvc } from './SummarySvc';
 import SummaryIntervals from './SummaryIntervalsComponent';
 import SummaryGoals from './SummaryGoalsComponent';
 
@@ -36,7 +36,7 @@ class DashBoard extends Component<{
   pickerOpenFn ?: Function,       // function to call to open the radioPicker for TimeFrames
   uiTheme ?: any,
   navigation ?: any,
-  summarySvc ?: SummaryModel,
+  summarySvc ?: SummarySvc,
   utilsSvc ?: UtilsSvc,
   filterSvc ?: FilterSvc,
   goalsSvc  ?: GoalsSvc,
@@ -98,7 +98,7 @@ class DashBoard extends Component<{
       this.sumSvc.scanTreks();
       if (this.ftCsum !== cSum){
         this.prepareGoals();
-        this.sumSvc.findStartingInterval();
+        this.sumSvc.findStartingInterval(this.sumSvc.selectedInterval);
       }
       this.ftCsum = cSum;
     } else {
@@ -202,8 +202,10 @@ class DashBoard extends Component<{
     this.sumSvc.findStartingInterval(this.sumSvc.selectedInterval);
   }
 
-  setType = (value: TrekType) => {
+  setType = (value: TrekType, active = true) => {
+    if(active) {
       this.updateTypeSels(value, false);
+    }
   }
 
   toggleType = (value: TrekType) => {

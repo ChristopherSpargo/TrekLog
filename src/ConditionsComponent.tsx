@@ -16,7 +16,7 @@ import {
   TrekInfoContext,
   UtilsSvcContext,
   ToastSvcContext,
-  StorageSvcContext,
+  // StorageSvcContext,
   HEADER_HEIGHT
 } from "./App";
 import { APP_ICONS } from "./SvgImages";
@@ -26,7 +26,7 @@ import { WeatherSvc, WeatherData, WindInfo } from './WeatherSvc';
 import { LocationSvc } from './LocationService';
 import { UtilsSvc } from './UtilsService';
 import { ToastModel } from './ToastModel';
-import { StorageSvc } from './StorageService';
+// import { StorageSvc } from './StorageService';
 import { LatLng } from "react-native-maps";
 import Waiting from './WaitingComponent';
 
@@ -38,11 +38,11 @@ function Conditions() {
   const locationSvc: LocationSvc = useContext(LocationSvcContext);
   const utilsSvc: UtilsSvc = useContext(UtilsSvcContext);
   const toastSvc: ToastModel = useContext(ToastSvcContext);
-  const storageSvc: StorageSvc = useContext(StorageSvcContext);
+  // const storageSvc: StorageSvc = useContext(StorageSvcContext);
 
   const [weatherReady, setWeatherReady] = useState(false);
   const weatherData = useRef<WeatherData>();
-  const [update, setUpdate] = useState(false);
+  // const [update, setUpdate] = useState(false);
   const currLocation = useRef<LatLng>();
   const elevation = useRef(0);
 
@@ -50,10 +50,10 @@ function Conditions() {
     if (!weatherReady){
       getLocation();
     }
-    if (update) {
-      setUpdate(false);
-      storageSvc.reportFilespaceUse();
-    }
+    // if (update) {
+    //   setUpdate(false);
+    //   storageSvc.reportFilespaceUse();
+    // }
     // return function cleanUp() { setWeatherReady(false); }
   });
 
@@ -149,7 +149,7 @@ function Conditions() {
 
   function changeSystem() {
     trekInfo.switchMeasurementSystem();
-    setUpdate(true);
+    // setUpdate(true);
   }
 
   const {

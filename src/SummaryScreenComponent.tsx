@@ -13,7 +13,7 @@ import TrekLogHeader from "./TreklogHeaderComponent";
 import { GroupSvc } from "./GroupService";
 import CheckboxPicker from "./CheckboxPickerComponent";
 import RadioPicker from './RadioPickerComponent';
-import { SummaryModel } from "./SummaryModel";
+import { SummarySvc } from "./SummarySvc";
 import NavMenu from './NavMenuComponent';
 import PageTitle from './PageTitleComponent';
 
@@ -37,7 +37,7 @@ class SummaryScreen extends Component<
     locationSvc?: LocationSvc;
     filterSvc?: FilterSvc;
     trekInfo?: TrekInfo;
-    summarySvc?: SummaryModel;
+    summarySvc?: SummarySvc;
     groupSvc?: GroupSvc;
     uiTheme?: any;
   },
@@ -145,6 +145,9 @@ class SummaryScreen extends Component<
         case "Home":
           this.props.navigation.dispatch(StackActions.popToTop());
           break;
+        case 'Help':
+          this.tInfo.showCurrentHelp();
+          break;
         case "Courses":
         case "Goals":
         case "Settings":
@@ -247,7 +250,9 @@ class SummaryScreen extends Component<
     {icon: 'Course', label: 'Courses', value: 'Courses'},
     {icon: 'Target', label: 'Goals', value: 'Goals'},
     {icon: 'Settings', label: 'Settings', value: 'Settings'},
-    {icon: 'PartCloudyDay', label: 'Conditions', value: 'Conditions'}]  
+    {icon: 'PartCloudyDay', label: 'Conditions', value: 'Conditions'},
+    {icon: 'InfoCircleOutline', label: 'Help', value: 'Help'}  
+  ]  
 
     const styles = StyleSheet.create({
       container: {

@@ -18,6 +18,9 @@ import {
 import SvgIcon from './SvgIconComponent';
 import { TrekInfo, TREK_SELECT_BITS } from './TrekInfoModel';
 import TrekTypeSelect from "./TrekTypeSelectComponent";
+import TimeInput from './TimeInputComponent';
+
+export type LimitType = 'TrekType' | 'Interval' | 'Dist' | 'Time' | 'PackWeight';
 
 export interface LimitsObj {
   headingIcon   ?: string,    // icon for the header
@@ -30,7 +33,9 @@ export interface LimitsObj {
   units         ?: string[],  // array of labels for unit radio buttons
   defaultUnits  ?: string,    // default (last) value for units selection
   unitsVertical ?: boolean,   // layout units radio buttons vertically
-  typeSelect    ?: boolean,   // present a TrekTypeSelect component if true
+  limitType     ?: LimitType,    // present a TrekTypeSelect component if 'type'
+                              // present interval form if 'interval'
+                              // otherwise follow normal formatting
 }
 
 // dialog used for various inputs (time limit, dist limit, interval data)
@@ -40,6 +45,7 @@ function TrekLimitsForm({open=undefined, limits=undefined}) {
   const tInfo: TrekInfo = useContext(TrekInfoContext);
 
   const [value, setValue] = useState('');
+  const [timeValue, setTimeValue] = useState('');
   const [units, setUnits] = useState('');
   const [zValue, setZValue] = useState(-1);
 
@@ -60,7 +66,8 @@ function TrekLimitsForm({open=undefined, limits=undefined}) {
   },[open])
 
   useEffect(() => {     
-    setValue('')                  // componentDidMount
+    setValue('');                         // componentDidMount
+    setTimeValue('');
   },[])
 
   useEffect(() => {                       // DidUpdate
@@ -102,21 +109,35 @@ function TrekLimitsForm({open=undefined, limits=undefined}) {
     close();
   }
 
-    // call the close method, indicate OK
+  // call the close method, indicate OK
+  // return the appropriate value based on the limitType parameter
   function close() {
-    if (!limits.typeSelect) {
-      let v = value;
-      if (v === '') { 
-        // alert(limits.placeholderValue);
-        v = limits.placeholderValue;
-        setValue(v);
-      }
-      setValueInput(v);
+    let v = value;
+    switch(limits.limitType){
+      case 'Time':
+        v = timeValue;
+        setValueInput(v);
+        break;
+      case 'TrekType':
+        break;
+      case 'Interval':
+        if(units === 'time'){
+          v = timeValue;
+          setValueInput(v);
+          break;
+        }
+      default:
+        if (v === '') { 
+          v = limits.placeholderValue;
+          setValue(v);
+        }
+        setValueInput(v);
     }
     Keyboard.dismiss();
     removeListeners();
     tInfo.limitsCloseFn(true);
     setValue('');
+    setTimeValue('');
   }
 
   // call the close method, indicate CANCEL
@@ -125,6 +146,7 @@ function TrekLimitsForm({open=undefined, limits=undefined}) {
       removeListeners();
       tInfo.limitsCloseFn(false);
       setValue('');
+      setTimeValue('');
   }
 
     const { highTextColor, dividerColor, textOnPrimaryColor, footerButtonText,
@@ -134,7 +156,7 @@ function TrekLimitsForm({open=undefined, limits=undefined}) {
           } = uiTheme;
     const footerHeight = FOOTER_HEIGHT;
     const headerHeight = FORMHEADER_HEIGHT;
-    const bodyHeight = 130;
+    const bodyHeight = limits.limitType === 'Interval' ? 180 : 130;
     const pHolder = limits.placeholderValue;
     const formHt = bodyHeight + footerHeight + headerHeight;
     const okTxt = limits.okText || 'CONTINUE';
@@ -181,6 +203,12 @@ function TrekLimitsForm({open=undefined, limits=undefined}) {
         flexDirection: "row",
         alignItems: "center",
       },
+      rowSpread: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        marginHorizontal: 10,
+        marginTop: 5,
+      },
       footer: {
         ...footer,
         ...{borderTopColor: dividerColor, backgroundColor: pageBackground}
@@ -195,6 +223,11 @@ function TrekLimitsForm({open=undefined, limits=undefined}) {
       },      
       rgLabel: {
         fontSize: 20,
+      },
+      inputVal: {
+        marginTop: 50,
+        height: 45,
+        alignSelf: "center",
       },
     })
 
@@ -222,9 +255,10 @@ function TrekLimitsForm({open=undefined, limits=undefined}) {
                   }
                   <Text style={styles.headerText}>{limits.heading}</Text>
                 </View>
-                <View style={styles.body}>
-                  <Text style={styles.labelText}>{limits.label}</Text>
-                    {!limits.typeSelect && 
+                {limits.limitType !== 'Interval' &&
+                  <View style={styles.body}>
+                    <Text style={styles.labelText}>{limits.label}</Text>
+                    {(limits.limitType === 'PackWeight' || limits.limitType === 'Dist' ) && 
                       <View style={limits.unitsVertical ? styles.rowLayout : styles.colLayout}>
                         <View style={{marginBottom: 5}}>
                           <TextInputField
@@ -249,7 +283,7 @@ function TrekLimitsForm({open=undefined, limits=undefined}) {
                         }
                       </View>
                     }
-                    {limits.typeSelect &&
+                    {limits.limitType === 'TrekType' &&
                       <View style={[styles.rowLayout, {marginTop: 5}]}>
                         <TrekTypeSelect
                           style={{justifyContent: "flex-start"}}
@@ -259,7 +293,54 @@ function TrekLimitsForm({open=undefined, limits=undefined}) {
                         />
                       </View>
                     }
-                </View>
+                    {limits.limitType === 'Time' && 
+                      <View style={[styles.inputVal, {marginTop: 10}]}>
+                        <TimeInput
+                          onChangeFn={units === 'time' ? setTimeValue : undefined}
+                          timeVal={timeValue}
+                        />
+                      </View>
+                    }
+                  </View>
+                }
+                {limits.limitType === 'Interval' &&
+                  <View style={{padding: 8}}>
+                    <Text style={styles.labelText}>{limits.label}</Text>
+                    <View style={styles.rowSpread}>
+                      {(limits.units !== undefined) &&
+                        <RadioGroup 
+                          onChangeFn={setUnitsInput}
+                          selected={units}
+                          values={limits.units}
+                          labels={limits.units}
+                          labelStyle={styles.rgLabel}
+                          vertical={true}
+                          inline
+                          itemHeight={30}
+                          radioFirst
+                          align='start'
+                        />
+                      }
+                      <View style={{flexDirection: "column", justifyContent: 'space-between'}}>
+                        <View style={{marginTop: 0}}>
+                          <TextInputField
+                            style={[styles.textInputItem, formNumberInput]}
+                            onChangeFn={(text) => setValue(text)}
+                            placeholderValue={value || pHolder}
+                            topAdjust={0}
+                            editable={units !== 'time'}
+                          />
+                        </View>
+                        <View style={styles.inputVal}>
+                          <TimeInput
+                            onChangeFn={units === 'time' ? setTimeValue : undefined}
+                            timeVal={timeValue}
+                          />
+                        </View>
+                      </View>
+                    </View>
+                  </View>
+                }
                 <View style={styles.footer}>
                   <RectButton
                     rippleColor={rippleColor}

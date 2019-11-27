@@ -11,8 +11,11 @@ import { ModalModel, CONFIRM_INFO } from './ModalModel';
 import { COLOR_THEME_DARK, ThemeType, COLOR_THEME_LIGHT } from './App';
 import { Course } from './CourseService';
 import { CourseTrackingMethod } from './TrackingMethodComponent';
+import { ToastModel } from './ToastModel';
 
 // Class containing information about and service functions for a Trek
+
+export const CURRENT_TREKLOG_VERSION = '1.0';
 
 export const CURR_DATA_VERSION = '5.4';   
   // version 2 added weather conditions data
@@ -207,7 +210,6 @@ export interface RestoreObject {
   lastTime ?:           number,
   lastDist ?:           number,
   units ?:              string,
-  lastTimeUnits ?:      string,
   lastDistUnits ?:      string,
   layoutOpts ?:         string,
   dtMin ?:              string,
@@ -403,7 +405,6 @@ export class TrekInfo {
   lastTime = 15;                                  // used to provide default value for time-limit form
   lastDist = 0;                                   // used to provide default value for distance-limit form   
   units = '';                                     // units specified in limit form (meters, miles, minutes, hours)
-  lastTimeUnits = 'minutes';
   lastDistUnits = 'miles';
   lastPackWeight = undefined;                     // used to provide default value for pack weight form
   limitTrekDone = false;
@@ -428,7 +429,7 @@ export class TrekInfo {
   }
 
   constructor ( private utilsSvc: UtilsSvc, private storageSvc: StorageSvc, private modalSvc: ModalModel,
-    private groupSvc: GroupSvc ) {
+    private groupSvc: GroupSvc, private toastSvc: ToastModel ) {
     this.initializeObservables();
   }
 
@@ -457,7 +458,7 @@ export class TrekInfo {
     this.currentDist = 'N/A';
     this.currentCalories = 'N/A';
     this.currentNetCalories = 'N/A';
-    this.showSpeedStat = 'speedAvg';
+    this.updateShowSpeedStat('speedAvg');
     this.showStepsPerMin = false;
     this.showTotalCalories = true;
     this.layoutOpts = 'Current';
@@ -696,7 +697,6 @@ readAllTreks = (groups: string[]) => {
       lastTime:           this.lastTime,
       lastDist:           this.lastDist,
       units:              this.units,
-      lastTimeUnits:      this.lastTimeUnits,
       lastDistUnits:      this.lastDistUnits,
       layoutOpts:         this.layoutOpts,
       dtMin:              this.dtMin,
@@ -754,7 +754,6 @@ readAllTreks = (groups: string[]) => {
           this.lastTime =           resObj.lastTime;
           this.lastDist =           resObj.lastDist;
           this.units =              resObj.units;
-          this.lastTimeUnits =      resObj.lastTimeUnits;
           this.lastDistUnits =      resObj.lastDistUnits;
           this.dtMin =              resObj.dtMin;
           this.dtMax =              resObj.dtMax;
@@ -1421,7 +1420,7 @@ readAllTreks = (groups: string[]) => {
 
   // compute the value for the calories property
   computeCalories = () => {
-    this.calories = this.utilsSvc.computeCalories(this.pointList, this.type, 
+    this.calories = this.utilsSvc.computeCalories(this.pointList, this.duration, this.type, 
         this.hills, this.weight, this.getPackWeight());
   }
 
@@ -1664,5 +1663,14 @@ readAllTreks = (groups: string[]) => {
   hasWeather = () : boolean => {
     return this.conditions !== undefined;
   }
+
+  // show help screen for current context
+  showCurrentHelp = () => {
+    this.toastSvc.toastOpen({
+      tType: "Warning",
+      content: "TODO list item:\n SHOW HELP",
+    })
+  }
+
 
 }

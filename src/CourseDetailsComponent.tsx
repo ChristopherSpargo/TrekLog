@@ -724,19 +724,8 @@ class CourseDetails extends Component<
           this.tInfo.clearTrek();
           this.props.navigation.dispatch(StackActions.popToTop());
           break;
-        case "Summary":
-        case "Goals":
-        case "Settings":
-        case "Conditions":
-          this.tInfo.clearTrek();
-          const resetAction = StackActions.reset({
-                index: 1,
-                actions: [
-                  NavigationActions.navigate({ routeName: 'Log', key: 'Home' }),
-                  NavigationActions.navigate({ routeName: val, key: 'Key-' + val }),
-                ],
-              });
-          this.props.navigation.dispatch(resetAction);          
+        case 'Help':
+          this.props.trekInfo.showCurrentHelp();
           break;
         default:
       }
@@ -783,11 +772,9 @@ class CourseDetails extends Component<
         {icon: 'Map', label: 'View Map', value: 'Map', disabled: !gotTreks}]
       },
       {icon: 'Home', label: 'Home', value: 'Home'},
-      {icon: 'Pie', label: 'Activity', value: 'Summary'},
-      {icon: 'Course', label: 'Courses', value: 'GoBack'},
-      {icon: 'Target', label: 'Goals', value: 'Goals'},
-      {icon: 'Settings', label: 'Settings', value: 'Settings'},
-      {icon: 'PartCloudyDay', label: 'Conditions', value: 'Conditions'}
+      {icon: 'ArrowBack', label: 'Back', value: 'GoBack'},
+      {icon: 'InfoCircleOutline', label: 'Help', value: 'Help'}  
+
     ]  
 
     const graphLabelType = (this.show === 'Speed' && !this.fS.showAvgSpeed)

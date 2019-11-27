@@ -10,8 +10,8 @@ import { IntervalData } from "./IntervalSvc";
 import {
   NUMBERS_BAR_Z_INDEX,
   INVISIBLE_Z_INDEX,
-  CONTROLS_HEIGHT,
-  HEADER_HEIGHT
+  HEADER_HEIGHT,
+  TREK_TYPE_COLORS_OBJ
 } from "./App";
 import TrekStats from "./TrekStatsComponent";
 import SvgButton from './SvgButtonComponent';
@@ -87,7 +87,7 @@ class NumbersBar extends Component<
       ? tInfo.type + " in progress"
       : "No Label";
     const noLabel = labelText === "No Label";
-    const nHt = small ? 300 : (height - CONTROLS_HEIGHT - HEADER_HEIGHT);
+    const nHt = small ? 320 : (height - this.props.bottom - HEADER_HEIGHT);
     const statsAreaHt = nHt;
     const areaHeight = statsAreaHt;
     const typeIconSize = 20;
@@ -97,7 +97,7 @@ class NumbersBar extends Component<
         position: "absolute",
         left: 0,
         right: 0,
-        bottom: 0
+        bottom: this.props.bottom || 0
       },
       cardCustom: {
         marginTop: 0,
@@ -197,7 +197,7 @@ class NumbersBar extends Component<
                     style={styles.typeIcon}
                     size={typeIconSize}
                     paths={APP_ICONS[tInfo.type]}
-                    fill={mediumTextColor}
+                    fill={TREK_TYPE_COLORS_OBJ[tInfo.type]}
                   />
                   <Text style={styles.trekDate}>
                     {this.uSvc.formatTrekDateAndTime(tInfo.date, tInfo.startTime)}

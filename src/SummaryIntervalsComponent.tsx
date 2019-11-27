@@ -13,7 +13,7 @@ import HorizontalSlideView from './HorizontalSlideComponent';
 import SvgYAxis, { YAXIS_TYPE_MAP } from './SvgYAxisComponent';
 import SvgGrid from './SvgGridComponent';
 import SlideUpView from './SlideUpComponent';
-import { SummaryModel, ActivityStatType, ActivityStatsInterval } from './SummaryModel';
+import { SummarySvc, ActivityStatType, ActivityStatsInterval } from './SummarySvc';
 
 export const INTERVAL_LABELS = {
   daily: 'Day',
@@ -30,7 +30,7 @@ function SummaryIntervals({
   const uiTheme: any = useContext(UiThemeContext);
   const tInfo: TrekInfo = useContext(TrekInfoContext);
   const uSvc: UtilsSvc = useContext(UtilsSvcContext);
-  const sumSvc: SummaryModel = useContext(SummarySvcContext);
+  const sumSvc: SummarySvc = useContext(SummarySvcContext);
 
   const [scrollToBar, setScrollToBar] = useState();
 

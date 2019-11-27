@@ -27,23 +27,50 @@ class SvgButton extends Component<{
   pathXAdj ?: number,       // amount to add to the path x position
   borderWidth ?: number,    // optional border width spec
   rippleColor ?: number,    // color for ripple effect
+  disabled ?: boolean,      // don't respond to press if true
+  repeats ?: number,        // interval to repeat onPressFn call if button longPressed
 }, {} > {
 
+  timerId : number;
 
-  buttonPressed = () => {
-    this.props.onPressFn(this.props.value);
+  buttonPressed = (repeating = false) => {
+    if(this.props.onPressFn && !this.props.disabled){
+      this.props.onPressFn(this.props.value, repeating);
+    }
   }
 
   buttonLongPressed = ({ nativeEvent }) => {
-    if (nativeEvent.state === State.ACTIVE) {
-      if(this.props.onLongPressFn){
-        this.props.onLongPressFn(this.props.value);
+    // alert(nativeEvent.state)
+   if ( nativeEvent.state === State.ACTIVE || 
+        nativeEvent.state === State.END || 
+        nativeEvent.state === State.CANCELLED) {
+      if (this.props.repeats) {
+        this.togglOnPressedRepeater(nativeEvent.state === State.ACTIVE)
+      } else {
+        if(this.props.onLongPressFn){
+          this.props.onLongPressFn(this.props.value, nativeEvent.state === State.ACTIVE);
+        }
+      }
+    }
+   }
+
+  // start/stop repeatedly moving the selected marker
+  togglOnPressedRepeater = (start: boolean) => {
+    if (start && this.timerId === undefined) {
+      this.timerId = window.setInterval(() => {
+        this.buttonPressed(true);
+      }, this.props.repeats)
+    } else {
+      if(!start){
+        window.clearInterval(this.timerId);
+        this.timerId = undefined;
       }
     }
   }
 
+
   render() {
-    const { highlightColor, dividerColor, rippleColor 
+    const { highlightColor, dividerColor, rippleColor, disabledTextColor
           } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
 
     const areaOffset = this.props.areaOffset === undefined ? 10 : this.props.areaOffset;
@@ -56,7 +83,7 @@ class SvgButton extends Component<{
     const ripple = this.props.rippleColor !== undefined ? this.props.rippleColor : rippleColor;
     const fillColor = this.props.highlightColor ? 
                       (this.props.highlight ? this.props.highlightColor : dividerColor) :
-                      this.props.fill;
+                      (!this.props.disabled ? this.props.fill : disabledTextColor);
 
     const styles = StyleSheet.create({
       container: {

@@ -1,6 +1,6 @@
 import React, { Component } from 'react';
 import { View, StyleSheet, Text, ScrollView, Keyboard } from 'react-native';
-import { NavigationActions } from 'react-navigation';
+import { NavigationActions, StackActions } from 'react-navigation';
 import { observable, action } from 'mobx';
 import { observer, inject } from 'mobx-react';
 
@@ -27,6 +27,7 @@ import { SCROLL_DOWN_DURATION, FADE_IN_DURATION } from './App';
 import RadioPicker from './RadioPickerComponent';
 import { CourseSvc } from './CourseService';
 import PageTitle from './PageTitleComponent';
+import NavMenu, { NavMenuItem } from './NavMenuComponent';
 
 const goBack = NavigationActions.back() ;
 
@@ -52,6 +53,7 @@ class GoalEditor extends Component<{
   @observable editObj: GoalObj;
   @observable openItems;
   @observable openMetricValue;
+  @observable openNavMenu : boolean;
   @observable radioPickerOpen;
 
   tInfo = this.props.trekInfo;
@@ -72,6 +74,7 @@ class GoalEditor extends Component<{
     this.setOpenItems(false);
     this.setOpenMetricValue(false);    
     this.setRadioPickerOpen(false);    
+    this.setOpenNavMenu(false);
   }
 
   componentWillMount() {
@@ -111,6 +114,16 @@ class GoalEditor extends Component<{
   @action
   setOpenItems = (status: boolean) => {
     this.openItems = status;
+  }
+
+  // set the openNavMenu property
+  @action
+  setOpenNavMenu = (status: boolean) => {
+    this.openNavMenu = status;
+  }
+
+  openMenu = () => {
+    this.setOpenNavMenu(true);
   }
 
   @action
@@ -287,6 +300,24 @@ getCourse = () => {
 })
 }
 
+setActiveNav = val => {
+  requestAnimationFrame(() => {
+    switch (val) {
+      case "GoBack":
+        this.props.navigation.dispatch(goBack);
+        break;
+      case 'Help':
+        this.tInfo.showCurrentHelp();
+        break;
+      case "Home":
+        this.tInfo.clearTrek();
+        this.props.navigation.dispatch(StackActions.popToTop());
+        break;
+      default:
+    }
+  })
+}
+
   render() {
 
     const { mediumTextColor, pageBackground, trekLogBlue, highTextColor, dividerColor, secondaryColor,
@@ -306,7 +337,13 @@ getCourse = () => {
     const haveCourse = this.gS.goalCourse;
     const validCat = this.gS.goalCategory !== '';
     const metricUnitsAreSteps = this.gS.goalMetricUnits === 'steps';
-
+    let navMenuItems : NavMenuItem[] = 
+    [ 
+      {icon: 'Home', label: 'Home', value: 'Home'},
+      {icon: 'ArrowBack', label: 'Back', value: 'GoBack'},
+      {icon: 'InfoCircleOutline', label: 'Help', value: 'Help'}  
+    ]  
+  
     const styles=StyleSheet.create({
       container: { ... StyleSheet.absoluteFillObject, backgroundColor: pageBackground },
       rowStart: {
@@ -455,391 +492,398 @@ getCourse = () => {
     }
 
     return(
-      <View style={styles.container}>
-        <RadioPicker pickerOpen={this.radioPickerOpen}/>
+      <NavMenu
+        selectFn={this.setActiveNav}
+        items={navMenuItems}
+        setOpenFn={this.setOpenNavMenu}
+        open={this.openNavMenu}> 
         <View style={styles.container}>
-          <TrekLogHeader titleText={this.props.navigation.getParam('title','')}
-                              icon="*"
-                              backButtonFn={() =>  this.props.navigation.dispatch(goBack)}
-          />        
-          <View style={[cardLayout, {paddingBottom: 0}]}>
-            <PageTitle titleText={this.getGoalPrompt()} style={{paddingLeft: 0}}
-                        colorTheme={this.tInfo.colorTheme}/>
-          </View>
-            {validCat &&
-              <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
-                    duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
-                <SlideDownView startValue={-110} endValue={0} open={this.openItems} 
-                      duration={SCROLL_DOWN_DURATION} style={{overflow: "hidden"}}>
-                  <View style={[styles.rowCenter, styles.goalArea]}>
-                    <Text style={styles.goalText}>
-                      {'"' + this.gS.formatGoalStatement(this.gS.getGoalObj()) + '"'}
-                    </Text>
-                  </View>
-                </SlideDownView>
-              </FadeInView>
-            }
-          <ScrollView>
-            <View>
-              {(editNew && !validCat) &&
-                <View >
-                  <View style={styles.sortButtonCol}>
-                    <SettingHeader icon={APP_ICONS.Target} label="Type" 
-                            description="What type of goal will this be?"
-                    />
-                    <RadioGroup 
-                      onChangeFn={this.setGoalCategory}
-                      selected={this.gS.goalCategory}
-                      labels={GoalLabelsArray}
-                      itemStyle={styles.rgItem}
-                      comments={GoalCommentsArray}
-                      justify="start"
-                      align="start"
-                      values={GoalTypesArray}
-                      itemHeight={30}
-                      labelStyle={styles.rgLabel}
-                      inline
-                      vertical
-                      radioFirst
-                    />
-                  </View>
-                </View>
-              }
-              {validCat && 
-                <View>
-                  {!validCat && 
-                    <View style={styles.divider}/>
-                  }
-                  <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
-                        duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
-                    <SlideDownView startValue={-130} endValue={0} open={this.openItems} 
-                          duration={SCROLL_DOWN_DURATION} style={{overflow: "hidden"}}>
-                      <View style={styles.sortButtonCol}>
-                        <SettingHeader icon={APP_ICONS.CalendarCheck} label="Effective Date" 
-                                description="Begin checking this goal as of"
-                        />
-                        <RectButton
-                          rippleColor={rippleColor}
-                          onPress={this.callGetGoalDate}
-                        >
-                          <View style={[styles.rowStart, styles.inputVal, styles.dateInputArea]}>
-                            <Text style={styles.dateInputText}>{this.uSvc.dateFromSortDateYY(this.gS.goalDateSet)}</Text>
-                          </View>
-                        </RectButton>
-                      </View>
+          <RadioPicker pickerOpen={this.radioPickerOpen}/>
+          <View style={styles.container}>
+            <TrekLogHeader titleText={this.props.navigation.getParam('title','')}
+                                icon="*"
+                                backButtonFn={() =>  this.props.navigation.dispatch(goBack)}
+                                openMenuFn={this.openMenu}
+                                />        
+            <View style={[cardLayout, {paddingBottom: 0}]}>
+              <PageTitle titleText={this.getGoalPrompt()} style={{paddingLeft: 0}}
+                          colorTheme={this.tInfo.colorTheme}/>
+            </View>
+              {validCat &&
+                <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                      duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                  <SlideDownView startValue={-110} endValue={0} open={this.openItems} 
+                        duration={SCROLL_DOWN_DURATION} style={{overflow: "hidden"}}>
+                    <View style={[styles.rowCenter, styles.goalArea]}>
+                      <Text style={styles.goalText}>
+                        {'"' + this.gS.formatGoalStatement(this.gS.getGoalObj()) + '"'}
+                      </Text>
+                    </View>
                   </SlideDownView>
-                  </FadeInView>
+                </FadeInView>
+              }
+            <ScrollView>
+              <View>
+                {(editNew && !validCat) &&
+                  <View >
+                    <View style={styles.sortButtonCol}>
+                      <SettingHeader icon={APP_ICONS.Target} label="Type" 
+                              description="What type of goal will this be?"
+                      />
+                      <RadioGroup 
+                        onChangeFn={this.setGoalCategory}
+                        selected={this.gS.goalCategory}
+                        labels={GoalLabelsArray}
+                        itemStyle={styles.rgItem}
+                        comments={GoalCommentsArray}
+                        justify="start"
+                        align="start"
+                        values={GoalTypesArray}
+                        itemHeight={30}
+                        labelStyle={styles.rgLabel}
+                        inline
+                        vertical
+                        radioFirst
+                      />
+                    </View>
+                  </View>
+                }
+                {validCat && 
+                  <View>
+                    {!validCat && 
+                      <View style={styles.divider}/>
+                    }
+                    <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                          duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                      <SlideDownView startValue={-130} endValue={0} open={this.openItems} 
+                            duration={SCROLL_DOWN_DURATION} style={{overflow: "hidden"}}>
+                        <View style={styles.sortButtonCol}>
+                          <SettingHeader icon={APP_ICONS.CalendarCheck} label="Effective Date" 
+                                  description="Begin checking this goal as of"
+                          />
+                          <RectButton
+                            rippleColor={rippleColor}
+                            onPress={this.callGetGoalDate}
+                          >
+                            <View style={[styles.rowStart, styles.inputVal, styles.dateInputArea]}>
+                              <Text style={styles.dateInputText}>{this.uSvc.dateFromSortDateYY(this.gS.goalDateSet)}</Text>
+                            </View>
+                          </RectButton>
+                        </View>
+                    </SlideDownView>
+                    </FadeInView>
 
-                                            {/* DISTANCE IN TIME GOAL */}
-                  {this.gS.goalCategory === DIT_GOAL_CAT && 
-                    <View>
-                      <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
-                            duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
-                        <SlideDownView startValue={-110} endValue={0} open={this.openItems} 
-                              duration={SCROLL_DOWN_DURATION} style={{overflow: "hidden"}}>
-                          <View style={styles.divider}/>
-                          <View style={styles.sortButtonCol}>
-                            <SettingHeader icon={APP_ICONS.BulletedList} label="Activity" 
-                                description="This goal is for which activity"
-                            />
-                            <View style={styles.radioGrp}>
-                              <RadioGroup 
-                                onChangeFn={this.setGoalActivity}
-                                selected={this.gS.goalActivity}
-                                labels={DITActivityTypesArray}
-                                values={DITActivityTypesArray}
-                                justify="start"
-                                itemHeight={30}
-                                labelStyle={{color: highTextColor, fontSize: 16}}
-                                inline
-                                radioFirst
-                              />
-                            </View>
-                          </View>
-                        </SlideDownView>
-                      </FadeInView>
-                      <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
-                            duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
-                        <SlideDownView startValue={-110} endValue={0} open={this.openItems} 
-                              duration={SCROLL_DOWN_DURATION} style={{overflow: "hidden"}}>
-                          <View style={styles.divider}/>
-                          <View style={styles.sortButtonCol}>
-                            <SettingHeader icon={APP_ICONS.CompassMath} label="Distance Units/Course" 
-                                description={"Select measurement units or \'course\'"}
-                            />
-                            <View style={styles.radioGrp}>
-                              <RadioGroup 
-                                onChangeFn={this.setGoalMetricUnits}
-                                selected={this.gS.goalMetricUnits}
-                                labels={DITGoalMetricUnitsArray}
-                                values={DITGoalMetricUnitsArray}
-                                justify="start"
-                                itemHeight={30}
-                                labelStyle={{color: highTextColor, fontSize: 16}}
-                                inline
-                                radioFirst
-                              />
-                            </View>
-                          </View>
-                          <View style={styles.divider}/>
-                        </SlideDownView>
-                      </FadeInView>
-                      {this.gS.goalMetricUnits !== 'course' &&
-                        <FadeInView startValue={0.1} endValue={1} open={this.openMetricValue} 
-                            duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
-                          <SlideDownView startValue={-110} endValue={0} open={this.openMetricValue} 
-                              duration={SCROLL_DOWN_DURATION} style={{overflow: "hidden"}}>
+                                              {/* DISTANCE IN TIME GOAL */}
+                    {this.gS.goalCategory === DIT_GOAL_CAT && 
+                      <View>
+                        <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                              duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                          <SlideDownView startValue={-110} endValue={0} open={this.openItems} 
+                                duration={SCROLL_DOWN_DURATION} style={{overflow: "hidden"}}>
+                            <View style={styles.divider}/>
                             <View style={styles.sortButtonCol}>
-                              <SettingHeader icon={APP_ICONS.Distance} 
-                                            label="Distance" 
-                                description={this.gS.goalActivity + ' at least how many ' + this.gS.goalMetricUnits + '?'}
+                              <SettingHeader icon={APP_ICONS.BulletedList} label="Activity" 
+                                  description="This goal is for which activity"
                               />
-                              <View style={[styles.textInputItem, styles.inputVal]}>
-                                <TextInputField
-                                  onChangeFn={this.setGoalMetricValue}
-                                  placeholderValue={this.gS.goalMetricValue}
+                              <View style={styles.radioGrp}>
+                                <RadioGroup 
+                                  onChangeFn={this.setGoalActivity}
+                                  selected={this.gS.goalActivity}
+                                  labels={DITActivityTypesArray}
+                                  values={DITActivityTypesArray}
+                                  justify="start"
+                                  itemHeight={30}
+                                  labelStyle={{color: highTextColor, fontSize: 16}}
+                                  inline
+                                  radioFirst
                                 />
                               </View>
                             </View>
                           </SlideDownView>
                         </FadeInView>
-                      }
-                      {this.gS.goalMetricUnits === 'course' &&
-                        <FadeInView startValue={0.1} endValue={1} open={this.openMetricValue} 
-                            duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
-                          <SlideDownView startValue={-110} endValue={0} open={this.openMetricValue} 
-                              duration={SCROLL_DOWN_DURATION} style={{overflow: "hidden"}}>
+                        <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                              duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                          <SlideDownView startValue={-110} endValue={0} open={this.openItems} 
+                                duration={SCROLL_DOWN_DURATION} style={{overflow: "hidden"}}>
+                            <View style={styles.divider}/>
                             <View style={styles.sortButtonCol}>
-                              <SettingHeader icon={APP_ICONS.Course} label="Select Course" 
-                                description={"Select the course to " + this.gS.goalActivity}
+                              <SettingHeader icon={APP_ICONS.CompassMath} label="Distance Units/Course" 
+                                  description={"Select measurement units or \'course\'"}
+                              />
+                              <View style={styles.radioGrp}>
+                                <RadioGroup 
+                                  onChangeFn={this.setGoalMetricUnits}
+                                  selected={this.gS.goalMetricUnits}
+                                  labels={DITGoalMetricUnitsArray}
+                                  values={DITGoalMetricUnitsArray}
+                                  justify="start"
+                                  itemHeight={30}
+                                  labelStyle={{color: highTextColor, fontSize: 16}}
+                                  inline
+                                  radioFirst
                                 />
-                              <View style={styles.inputRow}>     
-                                <IconButton 
-                                  iconSize={courseSelectIconSize}
-                                  icon="ListChoice"
-                                  style={{...navItem, ...styles.courseSelectButtonStyle}}
-                                  raised
-                                  borderColor={navItemBorderColor}
-                                  iconStyle={navIcon}
-                                  color={secondaryColor}
-                                  onPressFn={this.getCourse}
-                                />
-                                <RectButton
-                                  rippleColor={rippleColor}
-                                  onPress={this.getCourse}
-                                >
-                                  <Text style={styles.courseName}>
-                                    {!this.gS.goalCourse ? "None" : this.gS.goalCourse}</Text>
-                                </RectButton>
                               </View>
                             </View>
+                            <View style={styles.divider}/>
                           </SlideDownView>
                         </FadeInView>
-                      }
-                      <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
-                          duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
-                        <SlideDownView startValue={-110} endValue={0} open={this.openItems} 
-                            duration={SCROLL_DOWN_DURATION} style={{overflow: "hidden"}}>
-                          <View style={styles.divider}/>
-                          <View style={styles.sortButtonCol}>
-                            <SettingHeader icon={APP_ICONS.TimerSand} label="Time Limit" 
-                                description={'Finish in under what time?'}
-                            />
-                            <View style={{marginLeft: 30}}>
-                              <TimeInput
-                                  onChangeFn={this.setGoalTestValue}
-                                  timeVal={!this.gS.goalTestValue ? 0 : 
-                                  this.props.utilsSvc.convertToSeconds(parseInt(this.gS.goalTestValue), 
-                                                                                this.gS.goalTestUnits)}
-                              />
-                            </View>
-                          </View>
-                          <View style={styles.divider}/>
-                        </SlideDownView>
-                      </FadeInView>
-                    </View>    
-                  }      
-
-                                            {/* CONSISTENCY GOAL */}
-                  {this.gS.goalCategory === CA_GOAL_CAT && 
-                    <View>
-                      <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
-                          duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
-                        <SlideDownView startValue={-110} endValue={0} open={this.openItems} 
-                            duration={SCROLL_DOWN_DURATION} style={{overflow: "hidden"}}>
-                          <View style={styles.divider}/>
-                          <View style={styles.sortButtonCol}>
-                            <SettingHeader icon={APP_ICONS.BulletedList} label="Activity" 
-                                description="This goal is for which activity"
-                            />
-                            <View style={styles.radioGrp}>
-                              <RadioGroup 
-                                onChangeFn={this.setGoalActivity}
-                                selected={this.gS.goalActivity}
-                                labels={metricUnitsAreSteps ? CAActivityTypesWithStepsArray : CAActivityTypesArray}
-                                values={CAActivityTypesArray}
-                                justify="start"
-                                itemHeight={30}
-                                labelStyle={{color: highTextColor, fontSize: 16}}
-                                inline
-                                radioFirst
-                              />
-                            </View>
-                          </View>
-                        </SlideDownView>
-                      </FadeInView>
-                      <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                        {this.gS.goalMetricUnits !== 'course' &&
+                          <FadeInView startValue={0.1} endValue={1} open={this.openMetricValue} 
+                              duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                            <SlideDownView startValue={-110} endValue={0} open={this.openMetricValue} 
+                                duration={SCROLL_DOWN_DURATION} style={{overflow: "hidden"}}>
+                              <View style={styles.sortButtonCol}>
+                                <SettingHeader icon={APP_ICONS.Distance} 
+                                              label="Distance" 
+                                  description={this.gS.goalActivity + ' at least how many ' + this.gS.goalMetricUnits + '?'}
+                                />
+                                <View style={[styles.textInputItem, styles.inputVal]}>
+                                  <TextInputField
+                                    onChangeFn={this.setGoalMetricValue}
+                                    placeholderValue={this.gS.goalMetricValue}
+                                  />
+                                </View>
+                              </View>
+                            </SlideDownView>
+                          </FadeInView>
+                        }
+                        {this.gS.goalMetricUnits === 'course' &&
+                          <FadeInView startValue={0.1} endValue={1} open={this.openMetricValue} 
+                              duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                            <SlideDownView startValue={-110} endValue={0} open={this.openMetricValue} 
+                                duration={SCROLL_DOWN_DURATION} style={{overflow: "hidden"}}>
+                              <View style={styles.sortButtonCol}>
+                                <SettingHeader icon={APP_ICONS.Course} label="Select Course" 
+                                  description={"Select the course to " + this.gS.goalActivity}
+                                  />
+                                <View style={styles.inputRow}>     
+                                  <IconButton 
+                                    iconSize={courseSelectIconSize}
+                                    icon="ListChoice"
+                                    style={{...navItem, ...styles.courseSelectButtonStyle}}
+                                    raised
+                                    borderColor={navItemBorderColor}
+                                    iconStyle={navIcon}
+                                    color={secondaryColor}
+                                    onPressFn={this.getCourse}
+                                  />
+                                  <RectButton
+                                    rippleColor={rippleColor}
+                                    onPress={this.getCourse}
+                                  >
+                                    <Text style={styles.courseName}>
+                                      {!this.gS.goalCourse ? "None" : this.gS.goalCourse}</Text>
+                                  </RectButton>
+                                </View>
+                              </View>
+                            </SlideDownView>
+                          </FadeInView>
+                        }
+                        <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
                             duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
-                        <SlideDownView startValue={-110} endValue={0} open={this.openItems} 
-                            duration={SCROLL_DOWN_DURATION} style={{overflow: "hidden"}}>
-                          <View style={styles.divider}/>
-                          <View style={styles.sortButtonCol}>
-                            <SettingHeader icon={APP_ICONS.CompassMath} label="Activity Units/Course" 
-                                description={"Select measurement units or \'course\'"}
-                            />
-                            <View style={styles.radioGrp}>
-                              <RadioGroup 
-                                onChangeFn={this.setGoalMetricUnits}
-                                selected={this.gS.goalMetricUnits}
-                                labels={CAMetricUnits}
-                                values={CAMetricUnits}
-                                justify="start"
-                                itemHeight={30}
-                                labelStyle={{color: highTextColor, fontSize: 16}}
-                                inline
-                                radioFirst
-                              />
-                            </View>
-                          </View>
-                        </SlideDownView>
-                      </FadeInView>
-                      {this.gS.goalMetricUnits === 'course' &&
-                        <FadeInView startValue={0.1} endValue={1} open={this.openMetricValue} 
-                            duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
-                          <SlideDownView startValue={-110} endValue={0} open={this.openMetricValue} 
+                          <SlideDownView startValue={-110} endValue={0} open={this.openItems} 
                               duration={SCROLL_DOWN_DURATION} style={{overflow: "hidden"}}>
                             <View style={styles.divider}/>
                             <View style={styles.sortButtonCol}>
-                              <SettingHeader icon={APP_ICONS.Course} label="Select Course" 
-                                description={"Select the course to " + this.gS.goalActivity}
+                              <SettingHeader icon={APP_ICONS.TimerSand} label="Time Limit" 
+                                  description={'Finish in under what time?'}
                               />
-                              <View style={styles.inputRow}>     
-                                <IconButton 
-                                  iconSize={courseSelectIconSize}
-                                  icon="ListChoice"
-                                  style={{...navItem, ...styles.courseSelectButtonStyle}}
-                                  raised
-                                  borderColor={navItemBorderColor}
-                                  iconStyle={navIcon}
-                                  color={secondaryColor}
-                                  onPressFn={this.getCourse}
+                              <View style={{marginLeft: 30}}>
+                                <TimeInput
+                                    onChangeFn={this.setGoalTestValue}
+                                    timeVal={!this.gS.goalTestValue ? 0 : 
+                                    this.props.utilsSvc.convertToSeconds(parseInt(this.gS.goalTestValue), 
+                                                                                  this.gS.goalTestUnits)}
                                 />
-                                <RectButton
-                                  rippleColor={rippleColor}
-                                  onPress={this.getCourse}
-                                >
-                                  <Text style={styles.courseName}>
-                                    {!this.gS.goalCourse ? "None" : this.gS.goalCourse}</Text>
-                                </RectButton>
+                              </View>
+                            </View>
+                            <View style={styles.divider}/>
+                          </SlideDownView>
+                        </FadeInView>
+                      </View>    
+                    }      
+
+                                              {/* CONSISTENCY GOAL */}
+                    {this.gS.goalCategory === CA_GOAL_CAT && 
+                      <View>
+                        <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                            duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                          <SlideDownView startValue={-110} endValue={0} open={this.openItems} 
+                              duration={SCROLL_DOWN_DURATION} style={{overflow: "hidden"}}>
+                            <View style={styles.divider}/>
+                            <View style={styles.sortButtonCol}>
+                              <SettingHeader icon={APP_ICONS.BulletedList} label="Activity" 
+                                  description="This goal is for which activity"
+                              />
+                              <View style={styles.radioGrp}>
+                                <RadioGroup 
+                                  onChangeFn={this.setGoalActivity}
+                                  selected={this.gS.goalActivity}
+                                  labels={metricUnitsAreSteps ? CAActivityTypesWithStepsArray : CAActivityTypesArray}
+                                  values={CAActivityTypesArray}
+                                  justify="start"
+                                  itemHeight={30}
+                                  labelStyle={{color: highTextColor, fontSize: 16}}
+                                  inline
+                                  radioFirst
+                                />
                               </View>
                             </View>
                           </SlideDownView>
                         </FadeInView>
-                      }
-                      <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                        <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                              duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                          <SlideDownView startValue={-110} endValue={0} open={this.openItems} 
+                              duration={SCROLL_DOWN_DURATION} style={{overflow: "hidden"}}>
+                            <View style={styles.divider}/>
+                            <View style={styles.sortButtonCol}>
+                              <SettingHeader icon={APP_ICONS.CompassMath} label="Activity Units/Course" 
+                                  description={"Select measurement units or \'course\'"}
+                              />
+                              <View style={styles.radioGrp}>
+                                <RadioGroup 
+                                  onChangeFn={this.setGoalMetricUnits}
+                                  selected={this.gS.goalMetricUnits}
+                                  labels={CAMetricUnits}
+                                  values={CAMetricUnits}
+                                  justify="start"
+                                  itemHeight={30}
+                                  labelStyle={{color: highTextColor, fontSize: 16}}
+                                  inline
+                                  radioFirst
+                                />
+                              </View>
+                            </View>
+                          </SlideDownView>
+                        </FadeInView>
+                        {this.gS.goalMetricUnits === 'course' &&
+                          <FadeInView startValue={0.1} endValue={1} open={this.openMetricValue} 
+                              duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                            <SlideDownView startValue={-110} endValue={0} open={this.openMetricValue} 
+                                duration={SCROLL_DOWN_DURATION} style={{overflow: "hidden"}}>
+                              <View style={styles.divider}/>
+                              <View style={styles.sortButtonCol}>
+                                <SettingHeader icon={APP_ICONS.Course} label="Select Course" 
+                                  description={"Select the course to " + this.gS.goalActivity}
+                                />
+                                <View style={styles.inputRow}>     
+                                  <IconButton 
+                                    iconSize={courseSelectIconSize}
+                                    icon="ListChoice"
+                                    style={{...navItem, ...styles.courseSelectButtonStyle}}
+                                    raised
+                                    borderColor={navItemBorderColor}
+                                    iconStyle={navIcon}
+                                    color={secondaryColor}
+                                    onPressFn={this.getCourse}
+                                  />
+                                  <RectButton
+                                    rippleColor={rippleColor}
+                                    onPress={this.getCourse}
+                                  >
+                                    <Text style={styles.courseName}>
+                                      {!this.gS.goalCourse ? "None" : this.gS.goalCourse}</Text>
+                                  </RectButton>
+                                </View>
+                              </View>
+                            </SlideDownView>
+                          </FadeInView>
+                        }
+                        <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                              duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                          <SlideDownView startValue={-110} endValue={0} open={this.openItems} 
+                              duration={SCROLL_DOWN_DURATION} style={{overflow: "hidden"}}>
+                            <View style={styles.divider}/>
+                            <View style={styles.sortButtonCol}>
+                              <SettingHeader icon={APP_ICONS.CalendarRange} label="Frequency" 
+                                  description="How often should you acheive this goal?"
+                              />
+                              <View style={styles.radioGrp}>
+                                <RadioGroup 
+                                  onChangeFn={this.setGoalTestUnits}
+                                  selected={this.gS.goalTestUnits}
+                                  labels={CATestUnitsArray}
+                                  values={CATestUnitsArray}
+                                  justify="start"
+                                  itemHeight={30}
+                                  labelStyle={{color: highTextColor, fontSize: 16}}
+                                  inline
+                                  radioFirst
+                                />
+                              </View>
+                            </View>
+                            <View style={styles.divider}/>
+                          </SlideDownView>
+                        </FadeInView>
+                        <FadeInView startValue={0.1} endValue={1} open={this.openMetricValue} 
                             duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
-                        <SlideDownView startValue={-110} endValue={0} open={this.openItems} 
-                            duration={SCROLL_DOWN_DURATION} style={{overflow: "hidden"}}>
-                          <View style={styles.divider}/>
-                          <View style={styles.sortButtonCol}>
-                            <SettingHeader icon={APP_ICONS.CalendarRange} label="Frequency" 
-                                description="How often should you acheive this goal?"
-                            />
-                            <View style={styles.radioGrp}>
-                              <RadioGroup 
-                                onChangeFn={this.setGoalTestUnits}
-                                selected={this.gS.goalTestUnits}
-                                labels={CATestUnitsArray}
-                                values={CATestUnitsArray}
-                                justify="start"
-                                itemHeight={30}
-                                labelStyle={{color: highTextColor, fontSize: 16}}
-                                inline
-                                radioFirst
-                              />
-                            </View>
-                          </View>
-                          <View style={styles.divider}/>
-                        </SlideDownView>
-                      </FadeInView>
-                      <FadeInView startValue={0.1} endValue={1} open={this.openMetricValue} 
-                          duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
-                        <SlideDownView startValue={-110} endValue={0} open={this.openMetricValue} 
-                            duration={SCROLL_DOWN_DURATION} style={{overflow: "hidden"}}>
-                          {this.gS.goalMetricUnits !== 'time' &&
-                            <View style={styles.sortButtonCol}>
-                              <SettingHeader icon={APP_ICONS.Sigma} label="Minimum Activity" 
-                                  description={this.gS.goalActivity + 
-                                    (this.gS.goalMetricUnits === 'course' ? ' course' : '') +
-                                    ' how many ' + 
-                                  ('occurrences|course'.includes(this.gS.goalMetricUnits) ? 'times' : this.gS.goalMetricUnits) +
-                                  ' per ' + CATestUnitsToTime[this.gS.goalTestUnits] + '?'}
-                              />
-                              <View style={[styles.textInputItem, styles.inputVal]}>
-                                <TextInputField
-                                  onChangeFn={this.setGoalMetricValue}
-                                  placeholderValue={this.gS.goalMetricValue}
+                          <SlideDownView startValue={-110} endValue={0} open={this.openMetricValue} 
+                              duration={SCROLL_DOWN_DURATION} style={{overflow: "hidden"}}>
+                            {this.gS.goalMetricUnits !== 'time' &&
+                              <View style={styles.sortButtonCol}>
+                                <SettingHeader icon={APP_ICONS.Sigma} label="Minimum Activity" 
+                                    description={this.gS.goalActivity + 
+                                      (this.gS.goalMetricUnits === 'course' ? ' course' : '') +
+                                      ' how many ' + 
+                                    ('occurrences|course'.includes(this.gS.goalMetricUnits) ? 'times' : this.gS.goalMetricUnits) +
+                                    ' per ' + CATestUnitsToTime[this.gS.goalTestUnits] + '?'}
                                 />
+                                <View style={[styles.textInputItem, styles.inputVal]}>
+                                  <TextInputField
+                                    onChangeFn={this.setGoalMetricValue}
+                                    placeholderValue={this.gS.goalMetricValue}
+                                  />
+                                </View>
                               </View>
-                            </View>
-                          }
-                          {this.gS.goalMetricUnits === 'time' &&
-                            <View style={styles.sortButtonCol}>
-                              <SettingHeader icon={APP_ICONS.TimerSand} label="Minimum Activity" 
-                                  description={this.gS.goalActivity + ' how much time per ' +
-                                      CATestUnitsToTime[this.gS.goalTestUnits] + '?'}
-                              />
-                              <View style={{marginLeft: 30}}>
-                                <TimeInput
-                                    onChangeFn={this.setGoalMetricValueTime}
-                                    timeVal={this.gS.goalMetricValue ? parseInt(this.gS.goalMetricValue) : 0}
+                            }
+                            {this.gS.goalMetricUnits === 'time' &&
+                              <View style={styles.sortButtonCol}>
+                                <SettingHeader icon={APP_ICONS.TimerSand} label="Minimum Activity" 
+                                    description={this.gS.goalActivity + ' how much time per ' +
+                                        CATestUnitsToTime[this.gS.goalTestUnits] + '?'}
                                 />
+                                <View style={{marginLeft: 30}}>
+                                  <TimeInput
+                                      onChangeFn={this.setGoalMetricValueTime}
+                                      timeVal={this.gS.goalMetricValue ? parseInt(this.gS.goalMetricValue) : 0}
+                                  />
+                                </View>
                               </View>
-                            </View>
-                          }
-                        </SlideDownView>
-                      </FadeInView>
-                      <View style={styles.divider}/>
-                    </View>   
-                  }     
-                </View>
-              }
-            </View> 
-          </ScrollView>
-          {!this.keyboardOpen && 
-            <View style={[styles.footer]}>
-              <RectButton
-                rippleColor={rippleColor}
-                style={{flex: 1}}
-                onPress={this.cancelGoalEdit}>
-                <View style={footerButton}>
-                  <Text style={footerButtonText}>CANCEL</Text>
-                </View>
-              </RectButton>
-              {validGoal &&
+                            }
+                          </SlideDownView>
+                        </FadeInView>
+                        <View style={styles.divider}/>
+                      </View>   
+                    }     
+                  </View>
+                }
+              </View> 
+            </ScrollView>
+            {!this.keyboardOpen && 
+              <View style={[styles.footer]}>
                 <RectButton
                   rippleColor={rippleColor}
                   style={{flex: 1}}
-                  onPress={validGoal ? this.saveGoalEdit : undefined}>
+                  onPress={this.cancelGoalEdit}>
                   <View style={footerButton}>
-                    <Text style={footerButtonText}>SAVE</Text>
+                    <Text style={footerButtonText}>CANCEL</Text>
                   </View>
                 </RectButton>
-              }
-            </View>
-          }
-        </View>    
-      </View>
+                {validGoal &&
+                  <RectButton
+                    rippleColor={rippleColor}
+                    style={{flex: 1}}
+                    onPress={validGoal ? this.saveGoalEdit : undefined}>
+                    <View style={footerButton}>
+                      <Text style={footerButtonText}>SAVE</Text>
+                    </View>
+                  </RectButton>
+                }
+              </View>
+            }
+          </View>    
+        </View>
+      </NavMenu>
     )
   }
   

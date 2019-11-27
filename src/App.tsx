@@ -33,7 +33,7 @@ import { LocationSvc } from './LocationService';
 import { GroupSvc } from './GroupService';
 import { IntervalSvc } from './IntervalSvc';
 import { CourseSvc } from './CourseService';
-import { SummaryModel } from './SummaryModel';
+import { SummarySvc } from './SummarySvc';
 import Courses from './CoursesComponent';
 import CourseDetails from './CourseDetailsComponent';
 
@@ -248,6 +248,7 @@ export const uiTheme = {
       navMenuRippleColor:  "rgba(0,0,0,.2)",
       navMenuDividerColor: "gray",
       menuItemDisabledColor: "gray",
+      barGraphValueColor: "rgba(0,0,0,.87)",
       footerTextColor: "rgb(156, 39, 176)",
       footerButtonText: {
         color: "rgb(156, 39, 176)",
@@ -358,6 +359,7 @@ export const uiTheme = {
       navMenuRippleColor:  "rgba(0,0,0,.2)",
       navMenuDividerColor: "gray",
       menuItemDisabledColor: "gray",
+      barGraphValueColor: "rgba(0,0,0,.87)",
       footerTextColor: "#ffff00",
       footerButtonText: {
         color: "#ffff00",
@@ -483,7 +485,7 @@ export const uiTheme = {
     flexDirection: "row",
     alignItems: "center",
     borderStyle: "solid",
-    borderTopColor: semitransBlack_12,
+    borderColor: semitransBlack_12,
     borderTopWidth: 1,
     backgroundColor: "transparent"
   },
@@ -577,7 +579,7 @@ export const StorageSvcContext = React.createContext(storageSvc);
 const groupSvc = new GroupSvc(modalSvc, storageSvc);
 // export const SettingsSvcContext = React.createContext(groupSvc);
 
-const trekInfo = new TrekInfo(utilsSvc, storageSvc, modalSvc, groupSvc);
+const trekInfo = new TrekInfo(utilsSvc, storageSvc, modalSvc, groupSvc, toastSvc);
 export const TrekInfoContext = React.createContext(trekInfo);
 
 const intervalSvc = new IntervalSvc(utilsSvc, trekInfo);
@@ -601,7 +603,7 @@ export const GoalsSvcContext = React.createContext(goalsSvc);
 const filterSvc = new FilterSvc(utilsSvc, trekInfo, toastSvc);
 // export const FilterSvcContext = React.createContext(filterSvc);
 
-const summarySvc = new SummaryModel(utilsSvc, trekInfo, filterSvc);
+const summarySvc = new SummarySvc(utilsSvc, trekInfo, filterSvc);
 export const SummarySvcContext = React.createContext(summarySvc);
 
 @observer

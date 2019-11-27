@@ -50,7 +50,8 @@ export const INTERVALS_UNITS = "intervals";
 
 export interface IntervalData {
   markers     ?: LatLng[],        // location on map for marker
-  displayUnits ?: string,         // units used to display interval distances
+  distUnits   ?: string,          // units used to display interval distances
+  labelUnits  ?: string,          // units used to display interval labels (callouts)
   intDist     ?: number,          // interval distance (meters)
   segIndicies ?: number[],        // trek path segment that contains each marker
   segPaths    ?: LatLng[][],      // path from this marker to the next
@@ -67,6 +68,13 @@ export interface IntervalData {
   speedRange  ?: NumericRange,    // range for interval speeds
   cals        ?: number[]         // calories for each segment
   calsRange   ?: NumericRange,    // range for interval calories
+}
+
+export interface IntervalAdjustInfo {
+  min: number,
+  max: number,
+  curr: number,
+  iNum: number
 }
 
 export const INTERVAL_AREA_HEIGHT = 120;
@@ -133,6 +141,59 @@ export class IntervalSvc {
     return {dist: this.dist2(p, nearestPt), point: nearestPt};
   }
   
+  // return an IntervalAdjustInfo object for the given interval.
+  // the first interval is interval 0.
+  getIntervalAdjustInfo = (iNum: number, units: string) : IntervalAdjustInfo => {
+    let info : IntervalAdjustInfo = {} as IntervalAdjustInfo;
+    let maxInt = this.intervalData.markers.length - 1;
+    let iData = this.intervalData;
+
+    if (iNum >= 0 && iNum < maxInt) {
+      info.iNum = iNum;
+      switch(units) {
+        case 'time':
+          info.min = iNum === 0 ? 0 : iData.startTimes[iNum - 1] + iData.times[iNum - 1];
+          info.curr = iData.startTimes[iNum] + iData.times[iNum];
+          info.max = iData.startTimes[iNum + 1] + iData.times[iNum + 1];
+          break;
+        default:        
+          info.min = iNum === 0 ? 0 : this.intervalData.endDists[iNum - 1];
+          info.curr = this.intervalData.endDists[iNum];
+          info.max = this.intervalData.endDists[iNum + 1];
+      }
+    } else {
+      if (iNum < 0) {
+        info.iNum = -1;
+        info.min = info.max = info.curr = 0;
+      } else {
+        info.iNum = maxInt;
+        switch(units) {
+          case 'time':
+            info.min = info.max = info.curr = iData.startTimes[maxInt] + iData.times[maxInt];
+            break;
+          default:
+            info.min = info.max = info.curr = this.intervalData.endDists[maxInt];
+        }
+      }
+    }
+    return info;
+  }
+
+  // return the distance from start of trek for the given interval
+  getIntervalAdjustLoc = (iNum: number, units: string) : number => {
+    let iData = this.intervalData;
+
+    if(iNum >= 0) {
+      switch(units) {
+        case 'time':
+          return iData.startTimes[iNum] + iData.times[iNum];
+        default:
+          return iData.endDists[iNum];
+      }
+    }
+    return 0;
+  }
+
   // find the nearest segment of a given path to a given point
   findNearestPoint = (point: LatLng, path: LatLng[]) : SegmentAndPoint => {
     let segAndPt = {segIndex: -1, point: undefined};
@@ -168,14 +229,26 @@ export class IntervalSvc {
     validPath = iData.segPaths[index].concat(iData.segPaths[index+1]);
     segAndPt = this.findNearestPoint(pt, validPath);    // restrict search to validPath
     segAndPt = this.findNearestPoint(segAndPt.point, path); // get segAndPt.segIndex relative to full path
+    this.finishMarkerToPath(index, segAndPt, pointList);
+  }
+
+  // call moveIntervalMarker for given marker index and point information
+  finishMarkerToPath = (index: number, segAndPt: SegmentAndPoint, pointList: TrekPoint[]) => {  
     this.moveIntervalMarker(index, segAndPt, pointList);
     this.buildGraphData(this.intervalData);
     this.setIntervalChange(true);
   } 
 
+  // format text for a label to display as marker callout
   intervalLabel = (index: number) : string => {
-    let lUnits = this.intervalData.displayUnits;
-    return this.utilsSvc.formatDist(this.intervalData.endDists[index], lUnits);
+    let lUnits = this.intervalData.labelUnits;
+    switch(lUnits){
+      case 'time':
+        return this.utilsSvc.timeFromSeconds(this.intervalData.startTimes[index] + 
+                                      this.intervalData.times[index])
+      default:
+        return this.utilsSvc.formatDist(this.intervalData.endDists[index], lUnits);
+    }
   }
   
   // The interval marker at 'index' has moved to 'newLoc'.
@@ -261,12 +334,12 @@ export class IntervalSvc {
     iData.speeds[index + 1] = 
       uSvc.computeRoundedAvgSpeed(tInfo.measurementSystem, iData.iDists[index + 1], iData.times[index + 1]);
 
-    // update the average speed for the interval
-    iData.cals[index] =  uSvc.computeCalories(iData.segPoints[index],
+    // update the calories for the interval
+    iData.cals[index] =  uSvc.computeCalories(iData.segPoints[index], 0,
                           tInfo.type, tInfo.hills, tInfo.weight, tInfo.getPackWeight());
 
-    // update the average speed for the next interval
-    iData.cals[index + 1] = uSvc.computeCalories(iData.segPoints[index + 1],
+    // update the calories for the next interval
+    iData.cals[index + 1] = uSvc.computeCalories(iData.segPoints[index + 1], 0,
                           tInfo.type, tInfo.hills, tInfo.weight, tInfo.getPackWeight());
 
     // recompute the interval data ranges
@@ -319,13 +392,14 @@ export class IntervalSvc {
   intervalDistOK = (val = this.intervalDist) => {
     if (this.intervalValue === -1) { return true; }
     if (this.intervalValue === 0) { return false; }
-    if (this.units === 'minutes'){
+    if (this.units === 'time'){
       return (this.trekInfo.duration / val ) < 100;
     }
     return (this.trekInfo.trekDist / val) < 100;
   }
 
-  getIntervalDisplayUnits = (units: string) => {
+  // return the units selector for labels or bars for the given units
+  getIntervalDisplayUnits = (units: string, forLabels: boolean) => {
     let val = '';
     
     switch(units){
@@ -338,14 +412,21 @@ export class IntervalSvc {
       case 'miles':
         val = 'mi';
         break;
-      case 'minutes':
+      case 'time':
+        val = forLabels ? 'time' : this.trekInfo.distUnits();
+        break;
       case INTERVALS_UNITS:
         val = this.trekInfo.distUnits();
         break;
       case SAVED_UNITS:
         val = this.trekInfo.intervalDisplayUnits || this.trekInfo.distUnits();
+        if(val === 'time' && !forLabels) {
+          val = this.trekInfo.distUnits();
+        }
         break;
       default:
+        val = this.trekInfo.distUnits();
+        break;
     }
     return val;
   }
@@ -368,10 +449,11 @@ export class IntervalSvc {
     this.intervalData = { markers: [], segIndicies: [], iDists: [], segPaths: [], segPoints: [], 
                           startTimes: [], endDists: [], elevs: [], times: [], speeds: [], cals: [] };
     iData = this.intervalData;
-    if(this.units === 'minutes'){
+    if(this.units === 'time'){
       timeInts = this.utilsSvc.getTrekTimeIntervals(tempPts, iDist );
     }
-    iData.displayUnits = this.getIntervalDisplayUnits(this.units);
+    iData.distUnits = this.getIntervalDisplayUnits(this.units, false);
+    iData.labelUnits = this.getIntervalDisplayUnits(this.units, true);
     if (tempPts.length > 0) {
       intervalStartTime = tempPts[0].t || 0;
       for(let i=1; i<nPts; i++){
@@ -379,7 +461,7 @@ export class IntervalSvc {
           finalPt = .01; 
         };
         if (dist === 0) {                                // new interval?
-          if (this.units === 'minutes'){
+          if (this.units === 'time'){
             // use distance from timeIntervals array
             testDist = timeInts[intIndex].distance;
           } else {
@@ -418,7 +500,7 @@ export class IntervalSvc {
           iData.markers.push(uSvc.cvtLaLoToLatLng(newP.l));    // we'll put a marker here at the end of the segment
           iData.segPaths[intIndex].push(uSvc.cvtLaLoToLatLng(newP.l));  // push end GPS point of this segment
           iData.segPoints[intIndex].push(newP);
-          iData.cals.push(uSvc.computeCalories(iData.segPoints[intIndex],
+          iData.cals.push(uSvc.computeCalories(iData.segPoints[intIndex], 0,
                             this.trekInfo.type, this.trekInfo.hills, this.trekInfo.weight, this.trekInfo.getPackWeight()));
           iData.iDists.push(testDist);        // save length of this interval
           i--;                                // set to do this point over
@@ -442,7 +524,7 @@ export class IntervalSvc {
         iData.iDists.push(dist);
         iData.times.push(intervalTime);
         iData.speeds.push(this.utilsSvc.computeRoundedAvgSpeed(this.trekInfo.measurementSystem, dist, intervalTime));
-        iData.cals.push(uSvc.computeCalories(iData.segPoints[intIndex], 
+        iData.cals.push(uSvc.computeCalories(iData.segPoints[intIndex], 0,
                           this.trekInfo.type, this.trekInfo.hills, this.trekInfo.weight, this.trekInfo.getPackWeight()));
 }
       this.getDataRanges();
@@ -529,7 +611,7 @@ export class IntervalSvc {
           break;
         case "Distance":
           barItem.value = intData.iDists[i];
-          barItem.label1 = this.utilsSvc.formatDist(intData.iDists[i], intData.displayUnits);
+          barItem.label1 = this.utilsSvc.formatDist(intData.iDists[i], intData.distUnits);
           break;
         case "Calories":
           barItem.value = intData.cals[i];
