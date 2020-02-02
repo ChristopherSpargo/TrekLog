@@ -8,18 +8,18 @@ import { BACKDROP_Z_INDEX, LABEL_FORM_Z_INDEX } from './App';
 import { APP_ICONS } from './SvgImages';
 import SvgIcon from './SvgIconComponent';
 import { ModalModel } from './ModalModel'
-import { TrekInfo } from './TrekInfoModel';
+import { MainSvc } from './MainSvc';
 
 const MAX_LABEL_LENGTH = 35;
 const MAX_NOTE_LENGTH = 300;
 
 // dialog used for trek label
 
-@inject('uiTheme', 'modalSvc', 'trekInfo')
+@inject('modalSvc', 'mainSvc', 'uiTheme')
 @observer
 class TrekLabelForm extends React.Component<{   
   modalSvc    ?: ModalModel,
-  trekInfo    ?: TrekInfo,
+  mainSvc     ?: MainSvc,
   uiTheme     ?: any,
 }, {} > {
 
@@ -102,13 +102,14 @@ class TrekLabelForm extends React.Component<{
         this.needDefaults = true;
         this.props.modalSvc.lfData.resolve(result);
       })
-      .catch(() => {})
+      .catch((err) => {alert(err)})
     }, 200);
   }
 
   // call the reject method
   dismiss = () => {
     Keyboard.dismiss();
+    // alert("Dismiss")
     setTimeout(() => {
       this.props.modalSvc.closeLabelForm(400)
       .then(() => {
@@ -131,7 +132,7 @@ class TrekLabelForm extends React.Component<{
             formTextInput, formHeader, formHeaderText } = this.props.uiTheme;
     const { highTextColor, dividerColor, mediumTextColor, pageBackground,
             trekLogBlue, contrastingMask_3, textOnPrimaryColor, rippleColor, footerButtonText,
-          } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
+          } = this.props.uiTheme.palette[this.props.mainSvc.colorTheme];
     const defHIcon = mData.headingIcon || "Edit";
     const labelPrompt = "Label:"
     const labelChars = (MAX_LABEL_LENGTH - this.labelValue.length) + " characters left";
@@ -268,7 +269,7 @@ class TrekLabelForm extends React.Component<{
                       rippleColor={rippleColor}
                       style={{flex: 1}}
                       onPress={this.dismiss}>
-                      <View style={footerButton}>
+                      <View style={[footerButton, {flex:0}]}>
                         <Text
                           style={footerButtonText}
                         >
@@ -279,8 +280,8 @@ class TrekLabelForm extends React.Component<{
                     <RectButton
                       rippleColor={rippleColor}
                       style={{flex: 1}}
-                      onPress={() => this.close()}>
-                      <View style={footerButton}>
+                      onPress={this.close}>
+                      <View style={[footerButton, {flex:0}]}>
                         <Text
                           style={footerButtonText}
                         >

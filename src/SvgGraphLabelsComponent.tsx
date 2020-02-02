@@ -14,7 +14,6 @@ function SvgGraphLabel({
 }) {
     let xOff, yOff;
     let anchor : TextAnchor = "middle";
-    // alert('rendering graphLabels')
 
     switch(labelAngle){   // now for a little weirdness (trial-and-error)
       case 0:

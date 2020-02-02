@@ -19,20 +19,23 @@ import SlideDownView from './SlideDownComponent';
 import { SCROLL_DOWN_DURATION, FADE_IN_DURATION } from './App';
 import NavMenu, { NavMenuItem } from './NavMenuComponent';
 import PageTitle from './PageTitleComponent';
+import { MainSvc, TREK_TYPE_HIKE } from './MainSvc';
+import { TrekSvc } from './TrekSvc';
 
 const pageTitleFormat = {marginBottom: 10};
 const goBack = NavigationActions.back() ;
 
-@inject('trekInfo', 'toastSvc', 'uiTheme', 'utilsSvc', 'modalSvc', 'courseSvc')
+@inject('utilsSvc', 'mainSvc', 'courseSvc', 'uiTheme', 'modalSvc', 'toastSvc', 'trekSvc')
 @observer
 class Courses extends Component<{ 
   utilsSvc ?: UtilsSvc,
+  mainSvc ?: MainSvc,
   courseSvc ?: CourseSvc,
-  navigation ?: any
   uiTheme ?: any,
   modalSvc ?: ModalModel,
   toastSvc ?: ToastModel,
-  trekInfo ?: TrekInfo         // object with all information about the Trek
+  trekSvc ?: TrekSvc,    
+  navigation ?: any,
 }, {} > {
 
   @observable openItems;
@@ -42,11 +45,13 @@ class Courses extends Component<{
 
   selectedCourse = -1;             // index of currently selected course list item (-1 if none)
   
-  tI = this.props.trekInfo;
+  mainSvc = this.props.mainSvc;
+  tS = this.props.trekSvc;
   cS = this.props.courseSvc;
   uSvc = this.props.utilsSvc;
   APCIndex = -1;
   mapViewRefs : any[];
+  headerActions = [];
 
   renderCount = 0;
   msgTxt = '';
@@ -56,7 +61,7 @@ class Courses extends Component<{
 
   constructor(props) {
     super(props);
-    this.setHeaderTitle("Scanning...");
+    this.setHeaderActions();
     this._didFocusSubscription = props.navigation.addListener(
       "didFocus",
       () => {
@@ -85,9 +90,9 @@ class Courses extends Component<{
       if (this.cS.courseList.length){
         // sort courses by lastEffort date (most recent first)
         this.cS.courseList.sort((a,b) => {
-          return parseInt(b.lastEffort.subject.date) - parseInt(a.lastEffort.subject.date);
+          return parseInt(b.lastEffort.date) - parseInt(a.lastEffort.date);
         })
-        this.cS.setCourseListDisplayItems(this.tI.measurementSystem);
+        this.cS.setCourseListDisplayItems(this.mainSvc.measurementSystem);
       }
       else {
         // Course List is there but empty
@@ -107,7 +112,6 @@ class Courses extends Component<{
 
   componentWillUnmount() {
     this.setOpenItems(false);   
-    this.tI.clearTrek();
     this._didFocusSubscription && this._didFocusSubscription.remove();
     this._willBlurSubscription && this._willBlurSubscription.remove();
     this.setDataReady(false);
@@ -116,6 +120,7 @@ class Courses extends Component<{
   initializeObservables = () => {
     this.setOpenNavMenu(false);
     this.setDataReady(false);
+    this.setHeaderTitle("Scanning...");
   }
 
   @action
@@ -219,16 +224,20 @@ class Courses extends Component<{
 
   // display the map for the defining event for the selected course
   showCourseMap = (index: number) => {
+    let tInfo = new TrekInfo();
     requestAnimationFrame(() => { 
       this.setSelectedCourse(index);
       this.cS.getDefiningTrek(index)
       .then((trek) => {
-        this.tI.setTrekProperties(trek);
-        this.tI.setShowMapControls(true);
+        this.tS.setTrekProperties(tInfo, trek, false);
+        this.mainSvc.setCurrentMapType(trek.type === TREK_TYPE_HIKE ? 'terrain' 
+              : this.mainSvc.defaultMapType)
+        this.mainSvc.setShowMapControls(true);
         this.props.navigation.navigate("SelectedTrek", {
+          trek: tInfo,
           title: this.cS.courseList[index].name,
           icon: 'Course',
-          switchSysFn: this.tI.switchMeasurementSystem,
+          switchSysFn: this.mainSvc.switchMeasurementSystem,
           mapDisplayMode: 'noSpeeds'
         })
       })
@@ -285,44 +294,30 @@ class Courses extends Component<{
         case "Home":
           this.props.navigation.dispatch(StackActions.popToTop());
           break;
-        case "Summary":
-        case "Goals":
-        case "Settings":
-        case "Conditions":
-        const resetAction = StackActions.reset({
-                index: 1,
-                actions: [
-                  NavigationActions.navigate({ routeName: 'Log', key: 'Home' }),
-                  NavigationActions.navigate({ routeName: val, key: 'Key-' + val }),
-                ],
-              });
-          this.props.navigation.dispatch(resetAction);          
-          break;
         case 'Help':
-          this.props.trekInfo.showCurrentHelp();
+          this.props.navigation.navigate({routeName: 'ShowHelp', key: 'Key-ShowHelp'});
           break;
         default:
       }
     })
   }
 
+  setHeaderActions = () => {
+    this.headerActions.push(
+      {icon: 'YinYang', style: {marginTop: 0}, actionFn: this.mainSvc.swapColorTheme});
+  }
+
   render() {
 
     const { mediumTextColor, disabledTextColor, dividerColor, highlightedItemColor, cardItemTitleColor,
-            pageBackground, highTextColor, rippleColor, primaryColor, altCardBackground,
-          } = this.props.uiTheme.palette[this.tI.colorTheme];
+            pageBackground, highTextColor, rippleColor, primaryColor, altCardBackground, shadow2
+          } = this.props.uiTheme.palette[this.mainSvc.colorTheme];
     const { cardLayout, fontRegular } = this.props.uiTheme;
     const displayList = this.cS.courseList && this.cS.courseList.length > 0;
-    // this.msgTxt += "rendering " + ++this.renderCount + '\n' + this.dataReady + '\n' + displayList + '\n';
-    // alert(this.msgTxt)
-    const courseCardHeight = 220 + 15;
+    const courseCardHeight = 219 + 2;
     const courseImageHt = 165;
     const navMenuItems : NavMenuItem[] = 
       [ {icon: 'Home', label: 'Home', value: 'Home'},
-        {icon: 'Pie', label: 'Activity', value: 'Summary'},
-        {icon: 'Target', label: 'Goals', value: 'Goals'},
-        {icon: 'Settings', label: 'Settings', value: 'Settings'},
-        {icon: 'PartCloudyDay', label: 'Conditions', value: 'Conditions'},
         {icon: 'InfoCircleOutline', label: 'Help', value: 'Help'}  
       ]; 
     
@@ -334,16 +329,11 @@ class Courses extends Component<{
         paddingLeft: 0,
         paddingTop: 0,
         paddingRight: 0,
-        marginTop: 5,
-        marginBottom: 10,
-        marginLeft: 5,
-        marginRight: 5,
-        borderColor: dividerColor,
-        borderStyle: "solid",
-        borderWidth: 1,
-        borderBottomWidth: 2,
-        borderRadius: 3,
+        marginBottom: 0,
+        marginLeft: 0,
+        marginRight: 0,
         backgroundColor: altCardBackground,
+        ...shadow2
       },
       courseHighlight: {
         backgroundColor: highlightedItemColor,
@@ -376,7 +366,7 @@ class Courses extends Component<{
         fontFamily: fontRegular,
         fontSize: 18,
         color: mediumTextColor,
-        width: 70,
+        width: 65,
       },
       effortTime: {
         fontFamily: fontRegular,
@@ -386,8 +376,8 @@ class Courses extends Component<{
       },
       effortDate: {
         fontFamily: fontRegular,
-        fontSize: 18,
-        color: mediumTextColor,
+        fontSize: 20,
+        color: highTextColor,
       },
       countRow: {
         flexDirection: "row",
@@ -402,7 +392,7 @@ class Courses extends Component<{
       effortCount: {
         fontFamily: fontRegular,
         fontSize: 18,
-        color: mediumTextColor,
+        color: highTextColor,
         marginLeft: 6,
       },
       courseDist: {
@@ -467,14 +457,16 @@ class Courses extends Component<{
           <TrekLogHeader
             titleText={this.headerTitle}
             icon="*"
+            actionButtons={this.headerActions}
             backButtonFn={() => this.props.navigation.dispatch(goBack)}
             openMenuFn={this.openMenu}
           />
-          {this.dataReady &&
-            <View style={styles.listArea}>
-              <PageTitle titleText="Course List" 
-                         style={pageTitleFormat}
-                         colorTheme={this.tI.colorTheme}/>
+          <View style={styles.listArea}>
+            <PageTitle titleText="Course List" 
+                        style={pageTitleFormat}
+                        colorTheme={this.mainSvc.colorTheme}/>
+            <View style={styles.divider}/>
+            {this.dataReady &&
               <ScrollView snapToInterval={courseCardHeight} decelerationRate={.90}> 
                 {!displayList && 
                   <View style={styles.centered}>
@@ -482,13 +474,14 @@ class Courses extends Component<{
                   </View>
                 }
                 {displayList && 
-                  <View style={{paddingBottom: 85}}>
+                  <View style={{paddingBottom: 89, marginBottom: 2}}>
                     {this.cS.courseList.map((dlItem, index) => (
                         <FadeInView startValue={0} key={index} endValue={1} open={this.openItems} 
                           duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
                           <SlideDownView startValue={-180} endValue={0} open={this.openItems} 
                               duration={SCROLL_DOWN_DURATION} style={{overflow: "hidden"}}>
-                            <View style={[cardLayout, styles.cardCustom, {overflow: "hidden"},
+                            <View style={[cardLayout, styles.cardCustom, 
+                                        {overflow: "hidden"},
                                         this.selectedCourse === index ? styles.courseHighlight : {}]}>
                               <RectButton
                                 rippleColor={rippleColor}
@@ -514,12 +507,13 @@ class Courses extends Component<{
                                         onPress={() => this.showCourseMap(index)}
                                       >
                                         <View style={styles.courseImageArea}>
-                                            <Text style={{color: disabledTextColor, fontSize: 20, fontStyle: "italic"}}>No Map</Text>
-                                          </View>
+                                            <Text style={{color: disabledTextColor, 
+                                                          fontSize: 20, fontStyle: "italic"}}>No Map</Text>
+                                        </View>
                                       </RectButton>
                                     }
                                     <Text style={styles.courseDist}>
-                                      {this.uSvc.formatDist(dlItem.definingEffort.subject.distance, this.tI.distUnits())}
+                                      {this.uSvc.formatDist(dlItem.definingEffort.distance, this.mainSvc.distUnits())}
                                     </Text>
                                   </View>
                                   <View style={styles.nameAndTimes}>
@@ -527,26 +521,26 @@ class Courses extends Component<{
                                     <View style={styles.effortRow}>
                                       <Text style={styles.effortLabel}>Default:</Text> 
                                       <Text style={styles.effortTime}>
-                                            {this.uSvc.timeFromSeconds(dlItem.definingEffort.subject.duration)}</Text>
+                                            {this.uSvc.timeFromSeconds(dlItem.definingEffort.duration)}</Text>
                                       <Text style={styles.effortDate}>
-                                            {this.uSvc.dateFromSortDateYY(dlItem.definingEffort.subject.date)}</Text>
+                                            {this.uSvc.getTodayOrDate(this.mainSvc.todaySD, dlItem.definingEffort.date)}</Text>
                                     </View>
                                     {dlItem.lastEffort && 
                                       <View style={styles.effortRow}>
                                         <Text style={styles.effortLabel}>Last:</Text> 
                                         <Text style={styles.effortTime}>
-                                              {this.uSvc.timeFromSeconds(dlItem.lastEffort.subject.duration)}</Text>
+                                              {this.uSvc.timeFromSeconds(dlItem.lastEffort.duration)}</Text>
                                         <Text style={styles.effortDate}>
-                                              {this.uSvc.dateFromSortDateYY(dlItem.lastEffort.subject.date)}</Text>
+                                              {this.uSvc.getTodayOrDate(this.mainSvc.todaySD, dlItem.lastEffort.date)}</Text>
                                       </View>
                                     }
                                     {dlItem.bestEffort && 
                                       <View style={styles.effortRow}>
                                         <Text style={styles.effortLabel}>Best:</Text> 
                                         <Text style={styles.effortTime}>
-                                              {this.uSvc.timeFromSeconds(dlItem.bestEffort.subject.duration)}</Text>
+                                              {this.uSvc.timeFromSeconds(dlItem.bestEffort.duration)}</Text>
                                         <Text style={styles.effortDate}>
-                                              {this.uSvc.dateFromSortDateYY(dlItem.bestEffort.subject.date)}</Text>
+                                              {this.uSvc.getTodayOrDate(this.mainSvc.todaySD, dlItem.bestEffort.date)}</Text>
                                       </View>
                                     }
                                       <View style={styles.countRow}>
@@ -559,7 +553,6 @@ class Courses extends Component<{
                                 <SpeedDial
                                   icon="DotsVertical"
                                   bottom={5}
-                                  // right={15}
                                   iconColor={mediumTextColor}
                                   items={courseActions}
                                   sdIndex={index}
@@ -581,10 +574,10 @@ class Courses extends Component<{
                   </View>
                 }
               </ScrollView>
-            </View>
-          }
-          {(!this.dataReady) &&
-          <Waiting/>
+            }
+          </View>
+          {!this.dataReady &&
+            <Waiting/>
           }
         </View>
       </NavMenu>

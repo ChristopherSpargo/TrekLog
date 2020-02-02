@@ -12,19 +12,20 @@ import { INTERVAL_MARKER_Z_INDEX, CURRENT_POS_MARKER_Z_INDEX, INITIAL_POS_MARKER
          semitransWhite_8,
          semitransWhite_5,
          semitransBlack_5,
-         TRACKING_STATUS_BAR_HEIGHT,
         } from './App';
 import SpeedDial, {SpeedDialItem} from './SpeedDialComponent';
-import { TrekInfo, MapType, TrekPoint, TrekImageSet } from './TrekInfoModel';
+import { TrekInfo, TrekPoint } from './TrekInfoModel';
 import { UtilsSvc } from './UtilsService';
 import SvgIcon from './SvgIconComponent';
 import { APP_ICONS } from './SvgImages';
+import { TrekImageSet } from './ImageService';
 import { ModalModel } from './ModalModel'
 import IconButton from './IconButtonComponent';
 import { LoggingSvc } from './LoggingService';
-import { RateRangePathsObj, INTERVAL_AREA_HEIGHT } from './IntervalSvc';
+import { RangeDataPathsObj, INTERVAL_AREA_HEIGHT } from './IntervalSvc';
 import FadeInTemp from './FadeInTempComponent';
 import TrackingStatusBar from './TrackingStatusBar';
+import { MainSvc, MapType } from './MainSvc';
 
 export type mapDisplayModeType = "normal" | "noControls" | "noIntervals" | "noSpeeds";
 
@@ -134,9 +135,10 @@ export const StdMapStyle =
 // const COUNTRY_CENTER_LAT_USA = 41;
 // const COUNTRY_CENTER_LNG_USA = -101;
 
-@inject('trekInfo', 'uiTheme', 'utilsSvc', 'modalSvc', 'loggingSvc')
+@inject('uiTheme', 'utilsSvc', 'modalSvc', 'loggingSvc', 'mainSvc')
 @observer
 class TrekDisplay extends Component<{
+  trek: TrekInfo,             // trek whos map is being displayed
   displayMode : mapDisplayModeType,
   intervalMarkers ?: LatLng[],
   intervalLabelFn ?: Function,
@@ -156,7 +158,7 @@ class TrekDisplay extends Component<{
   showImagesFn ?: Function,   // function to call if user taps an image marker on the map
   nextFn ?: Function,         // if present, display "right" button on map and call this function when pressed
   prevFn ?: Function,         // if present, display "left" button on map and call this function when pressed
-  rateRangeObj ?: RateRangePathsObj,  // if present, show different colored PolyLine segements for path
+  rangeDataObj ?: RangeDataPathsObj,  // if present, show different colored PolyLine segements for path
   toggleRangeDataFn ?: Function, // fucntion to call to change the rateRange data type (speed/calories)
   trackingHeader ?: string,   // heading for tracking display
   trackingPath ?: LatLng[],
@@ -178,12 +180,11 @@ class TrekDisplay extends Component<{
   uiTheme ?: any,
   utilsSvc ?: UtilsSvc,
   modalSvc ?: ModalModel,
-  trekInfo ?: TrekInfo,
+  mainSvc ?: MainSvc,
   loggingSvc ?: LoggingSvc,
   }, {} > {
 
-
-  tInfo = this.props.trekInfo;
+  mS = this.props.mainSvc;
   mapViewRef;
   mode = this.props.layoutOpts;
   markerRefs;
@@ -213,17 +214,12 @@ class TrekDisplay extends Component<{
     super(props);
   }
 
-  // shouldComponentUpdate(){
-  //   alert(this.props.trekInfo.updateMap)
-  //   return this.props.trekInfo.updateMap;
-  // }
-
   componentDidUpdate(prevProps){
     if (prevProps.mapType !== this.props.mapType){ 
       this.forceUpdate();
     }
     if (this.mode !== this.props.layoutOpts ||
-      prevProps.rateRangeObj !== this.props.rateRangeObj){ 
+      prevProps.rateRangeObj !== this.props.rangeDataObj){ 
         this.mode = this.props.layoutOpts;
       this.setLayout();
     }
@@ -239,7 +235,7 @@ class TrekDisplay extends Component<{
         if (this.mode === 'Interval') {
           if (this.mapViewRef) { 
             let topPad = this.props.showControls ? 200 : 50;
-            let bottomPad = (this.props.rateRangeObj && this.props.showControls) ? 200 : 50;
+            let bottomPad = (this.props.rangeDataObj && this.props.showControls) ? 200 : 50;
             this.mapViewRef.fitToCoordinates(this.props.selectedPath,
                     {edgePadding: {top: topPad, right: 50, bottom: bottomPad, left: 50}, animated: true});
           }
@@ -256,7 +252,7 @@ class TrekDisplay extends Component<{
   }
 
   toggleShowMapControls = () => {
-    this.tInfo.setShowMapControls(!this.tInfo.showMapControls);
+    this.mS.setShowMapControls(!this.mS.showMapControls);
   }
 
   // this happens when user moves map or program follows Current position
@@ -303,7 +299,7 @@ class TrekDisplay extends Component<{
   layoutMap = ( path: LatLng[]) => {
     let log = this.props.timerType === 'Log';
     let topPadding = (log && this.props.trackingHeader) ? 455 : 170;
-    let bPadding = (this.props.rateRangeObj ||
+    let bPadding = (this.props.rangeDataObj ||
                     this.props.takeSnapshotFn || 
                     log) ? 175 : 40;
     switch(this.mode){
@@ -418,14 +414,12 @@ class TrekDisplay extends Component<{
   }  
   
   render () {
-    const tInfo = this.tInfo;
-    // alert(++this.renderCount)
     const { trekLogYellow, highTextColor, secondaryColor, matchingMask_8,
             matchingMask_3, contrastingMask_5, pageBackground, pathColor, navItemBorderColor, 
             locationRadiusBorder, intervalMarkerBorderColor, intervalMarkerBackgroundColor,
             trackingMarkerRadiusBorder, trackingMarkerPathColor, dividerColor,
             primaryColor, rippleColor, footerButtonText,
-          } = this.props.uiTheme.palette[tInfo.colorTheme];
+          } = this.props.uiTheme.palette[this.mS.colorTheme];
     const { fontRegular, fontBold, navIcon, footerButton } = this.props.uiTheme;
     const path = this.props.utilsSvc.cvtPointListToLatLng(this.props.pathToCurrent); // copy just the LaLo data
     const numPts = this.props.pathLength;
@@ -435,7 +429,7 @@ class TrekDisplay extends Component<{
     const mType = this.props.mapType;
     const triggerIcon = this.props.speedDialIcon || "Location";
     const radiusBg = "rgba(18, 46, 59, .5)";
-    const trekImages = tInfo.trekImageCount !== 0;
+    const trekImages = this.props.trek.trekImages && (this.props.trek.trekImages.length !== 0);
     const imageMarkerIconSize = 18;
     const imageSelectorWidth = 50;
     const selectedIntervalColor = '#660000';//trekLogOrange; //'rgba(255, 167, 38,.8)';  //"#ff704d";
@@ -443,10 +437,10 @@ class TrekDisplay extends Component<{
     const showPrev = this.props.prevFn !== undefined;
     const minSDOffset = (this.props.bottom !== 0) ? 5 : SHORT_CONTROLS_HEIGHT;
     const showControls = this.props.showControls && !this.props.takeSnapshotFn;
-    const rangesObj = this.props.rateRangeObj;
+    const rangesObj = this.props.rangeDataObj;
     const trackingMarker = this.props.trackingMarker;
     const logOn = this.props.timerType === 'Log';
-    const replayOn = (this.props.timerType === 'Play');
+    const replayOn = this.props.timerType === 'Play';
     const startMarkerColor = 'green';
     const currMarkerColor = (logOn || replayOn) ? trekLogYellow : "red";
     const [okPrompt, okCourse] = this.props.snapshotPrompt ? this.props.snapshotPrompt.split('\n') 
@@ -461,7 +455,7 @@ class TrekDisplay extends Component<{
         width: 32,
         height: 32,
         borderRadius: 16,
-        borderWidth: 2,
+        borderWidth: 1,
         borderColor: locationRadiusBorder,
         backgroundColor: radiusBg,
         overflow: "hidden",
@@ -472,7 +466,7 @@ class TrekDisplay extends Component<{
         width: 42,
         height: 42,
         borderRadius: 21,
-        borderWidth: 2,
+        borderWidth: 1,
         borderColor: trackingMarkerRadiusBorder,
         backgroundColor: radiusBg,
         overflow: "hidden",
@@ -480,28 +474,28 @@ class TrekDisplay extends Component<{
         justifyContent: "center",
       },
       marker: {
-        width: 14,
-        height: 14,
-        borderWidth: 2,
-        borderRadius: 7,
+        width: 10,
+        height: 10,
+        borderWidth: 1,
+        borderRadius: 5,
         borderColor: "white",
         backgroundColor: startMarkerColor,
         overflow: "hidden"
       },
       currMarker: {
-        width: 14,
-        height: 14,
-        borderWidth: 2,
-        borderRadius: 7,
+        width: 10,
+        height: 10,
+        borderWidth: 1,
+        borderRadius: 5,
         borderColor: "white",
         backgroundColor: currMarkerColor,
         overflow: "hidden"
       },
       trackingMarker: {
-        width: 14,
-        height: 14,
-        borderWidth: 2,
-        borderRadius: 7,
+        width: 10,
+        height: 10,
+        borderWidth: 1,
+        borderRadius: 5,
         borderColor: "white",
         backgroundColor: "blue",
         overflow: "hidden"
@@ -509,7 +503,7 @@ class TrekDisplay extends Component<{
       intervalMarker: {
         width: 20,
         height: 20,
-        borderWidth: 2.5,
+        borderWidth: 1,
         borderRadius: 10,
         borderColor: intervalMarkerBorderColor,
         backgroundColor: intervalMarkerBackgroundColor,
@@ -552,11 +546,9 @@ class TrekDisplay extends Component<{
       },
       imageSelectorArea: {
         position: "absolute",
-        top: 0,
-        bottom: 0,
+        top: 150,
         left: 0,
         right: 0,
-        justifyContent: "center",
       },
       imageSelectorPrev: {
         position: "absolute",
@@ -793,7 +785,7 @@ class TrekDisplay extends Component<{
               <Polyline
                 coordinates={this.props.trackingPath}
                 strokeColor={trackingMarkerPathColor}
-                strokeWidth={11}
+                strokeWidth={7}
               />
             }
             {(numPts > 0) &&
@@ -817,7 +809,7 @@ class TrekDisplay extends Component<{
                 draggable={(trackingMarker && this.props.trekMarkerDragFn) ? true : undefined}
                 onDragEnd={(event) => this.props.trekMarkerDragFn(event.nativeEvent.coordinate)}
               >
-                <View style={styles.markerRadius}>
+                <View style={[styles.markerRadius, {borderColor: "#99c2ff"}]}>
                   <View style={styles.currMarker}/>
                 </View>
               </Marker>
@@ -826,7 +818,7 @@ class TrekDisplay extends Component<{
               <Polyline
                 coordinates={this.props.selectedPath}
                 strokeColor={selectedIntervalColor}
-                strokeWidth={11}
+                strokeWidth={7}
               />
             }
             {(numPts > 1 && !rangesObj) &&
@@ -834,7 +826,7 @@ class TrekDisplay extends Component<{
                 zIndex={MAIN_PATH_Z_INDEX}
                 coordinates={path}
                 strokeColor={pathColor}
-                strokeWidth={5}
+                strokeWidth={3}
               />
             }
             {(numPts > 1 && rangesObj) && 
@@ -846,7 +838,7 @@ class TrekDisplay extends Component<{
                   zIndex={MAIN_PATH_Z_INDEX}
                   coordinates={line}
                   strokeColor={pathSeg.fillColor}
-                  strokeWidth={5}
+                  strokeWidth={3}
                 />)
               }
               )
@@ -861,13 +853,14 @@ class TrekDisplay extends Component<{
             }
             {((numPts > 0) && trekImages) &&
               <Images 
-                images={tInfo.trekImages}
+                images={this.props.trek.trekImages}
+                imageCount={this.props.trek.trekImageCount}
               />
             }
           </MapView>
         }
         <View style={styles.menuTouchArea}/>
-        {(showControls && numPts > 0 && this.props.rateRangeObj) &&
+        {(showControls && numPts > 0 && this.props.rangeDataObj) &&
           <View style={styles.legendLocation}>
           <FadeInTemp dimOpacity={0.2} onPressFn={this.props.toggleRangeDataFn} viewTime={5000}>            
             <View style={styles.legendArea}>
@@ -892,6 +885,7 @@ class TrekDisplay extends Component<{
         }
         {(numPts > 0 && this.props.trackingTime) &&
           <TrackingStatusBar
+            colorTheme={this.mS.colorTheme}
             trackingHeader={this.props.trackingHeader}
             headerLeft={!logOn}
             trackingDiffDist={this.props.trackingDiffDist}
@@ -905,7 +899,7 @@ class TrekDisplay extends Component<{
         }
         {(showControls && numPts > 0) &&
           <SpeedDial
-            bottom={this.props.bottom + minSDOffset + 45}
+            bottom={this.props.bottom + minSDOffset + 60}
             // right={10}
             icon={triggerIcon}
             triggerValue={this.props.speedDialValue}
@@ -929,7 +923,7 @@ class TrekDisplay extends Component<{
         }
         {(showControls && numPts > 0) &&
           <SpeedDial
-            top={HEADER_HEIGHT + (trackingMarker ? TRACKING_STATUS_BAR_HEIGHT + 10 : 10)}
+            top={HEADER_HEIGHT + 10}
             items={mapTypes}
             icon="LayersOutline"
             menuColor="transparent"
@@ -943,7 +937,7 @@ class TrekDisplay extends Component<{
             autoClose={5000}
           />
         }
-        {showControls && this.props.pauseFn &&
+        {this.props.pauseFn &&
           <View style={styles.pauseButtonArea}>
             <IconButton 
               style={styles.pauseButtonStyle}

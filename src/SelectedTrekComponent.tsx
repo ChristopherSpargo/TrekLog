@@ -11,9 +11,9 @@ import { NavigationActions, StackActions } from 'react-navigation';
 
 import TrekDisplay, { mapDisplayModeType } from './TrekDisplayComponent';
 import NumbersBar from './NumbersBarComponent'
-import { TrekInfo, DIST_UNIT_LONG_NAMES, TrekObj, TrekPoint } from './TrekInfoModel';
-import { SHORT_CONTROLS_HEIGHT, INVISIBLE_Z_INDEX, INTERVAL_GRAPH_Z_INDEX, 
-         HEADER_HEIGHT, TREK_TYPE_COLORS_OBJ
+import { TrekInfo, TrekPoint } from './TrekInfoModel';
+import { INVISIBLE_Z_INDEX, INTERVAL_GRAPH_Z_INDEX, 
+         HEADER_HEIGHT, TREK_TYPE_COLORS_OBJ, SMALL_IMAGE_HEIGHT, FOCUS_IMAGE_HEIGHT, IMAGE_ROW_Z_INDEX
         } from './App';
 import Waiting from './WaitingComponent';
 import TrekLimitsForm, {LimitsObj} from './TrekLimitsComponent';
@@ -24,31 +24,35 @@ import SlideUpView from './SlideUpComponent';
 import BarDisplay from './BarDisplayComponent';
 import TrekLogHeader from './TreklogHeaderComponent';
 import { ModalModel } from './ModalModel';
-import { IntervalSvc, INTERVALS_UNITS, SAVED_UNITS, RateRangePathsObj, RangeDataType,
-         INTERVAL_AREA_HEIGHT, INTERVAL_GRAPH_HEIGHT, IntervalAdjustInfo, SegmentAndPoint } from './IntervalSvc';
+import { IntervalSvc, INTERVALS_UNITS, SAVED_UNITS, RangeDataPathsObj, RangeDataType,
+         INTERVAL_AREA_HEIGHT, INTERVAL_GRAPH_HEIGHT, IntervalAdjustInfo, SegmentAndPoint, RANGE_TYPE_SWITCH } from './IntervalSvc';
 import { LoggingSvc, TREK_LIMIT_TYPE_DIST, PointAtLimitInfo, TREK_LIMIT_TYPE_TIME } from './LoggingService';
 import { CourseTrackingSnapshot, CourseSvc } from './CourseService';
 import IncDecComponent from './IncDecComponent';
 import HorizontalSlideView from './HorizontalSlideComponent';
 import NavMenu from './NavMenuComponent';
 import IntervalEditor from './IntervalEditorComponent';
+import { MainSvc, DIST_UNIT_LONG_NAMES } from './MainSvc';
+import { TrekSvc } from './TrekSvc';
+import TrekImageListDisplay  from './TrekImageListDisplay';
 
 const goBack = NavigationActions.back() ;
 const INTERVAL_CATS  = ['Distance', 'Time', 'Speed', 'Calories', 'Elevation'];
 
-@inject('trekInfo', 'uiTheme', 'toastSvc', 'utilsSvc', 'modalSvc', 
+@inject('mainSvc', 'trekSvc', 'uiTheme', 'toastSvc', 'utilsSvc', 'modalSvc', 
         'filterSvc', 'intervalSvc', 'loggingSvc', 'courseSvc')
 @observer
 class SelectedTrek extends Component<{
+  mainSvc ?: MainSvc,
+  trekSvc ?: TrekSvc,
   uiTheme ?: any,
-  filterSvc ?: FilterSvc,
-  trekInfo ?: TrekInfo,
   toastSvc ?: ToastModel,
+  utilsSvc ?: UtilsSvc,
   modalSvc ?: ModalModel,
+  filterSvc ?: FilterSvc,
   intervalSvc ?: IntervalSvc,
   loggingSvc ?: LoggingSvc,
   courseSvc ?: CourseSvc,
-  utilsSvc ?: UtilsSvc,
   navigation ?: any
 }, {} > {
 
@@ -64,7 +68,7 @@ class SelectedTrek extends Component<{
   @observable keyboardOpen;
   @observable openItems;
 
-  @observable rateRangeObj : RateRangePathsObj;
+  @observable rangeDataObj : RangeDataPathsObj;
 
   @observable courseMarker : TrekPoint;
   trackingStatsTime :  number;
@@ -77,6 +81,8 @@ class SelectedTrek extends Component<{
   @observable mapShapshotFn : Function;
   @observable openNavMenu : boolean;
   @observable intervalEditorOpen : boolean;
+  @observable currentDisplayImageSet : number;
+  @observable allowImageDisplay : boolean;
 
   firstIntervalInfo : IntervalAdjustInfo;
   secondIntervalInfo : IntervalAdjustInfo;
@@ -84,7 +90,8 @@ class SelectedTrek extends Component<{
   secondIntervalLoc : number;     // distance to second interval for adjustment op
   intervalAdjustUnits : string;
 
-  tInfo = this.props.trekInfo;
+  mS = this.props.mainSvc;
+  tS = this.props.trekSvc;
   iSvc = this.props.intervalSvc;
   fS = this.props.filterSvc;
   cS = this.props.courseSvc;
@@ -110,6 +117,8 @@ class SelectedTrek extends Component<{
 
   replayDisplayTime: number;
   replayTimerId;
+
+  tInfo : TrekInfo;
 
   keyboardDidShowListener;
   keyboardDidHideListener;
@@ -139,9 +148,11 @@ class SelectedTrek extends Component<{
     this.setMapSnapshotFn(undefined);
     this.setOpenNavMenu(false);
     this.setIntervalEditorOpen(false);
+    this.setAllowImageDisplay(true);
   }
 
   componentWillMount() {
+    this.tInfo = this.props.navigation.getParam('trek');
     this.changeTrekFn = this.props.navigation.getParam('changeTrekFn');
     this.checkTrekChangeFn = this.props.navigation.getParam('checkTrekChangeFn');
     this.switchSysFn = this.props.navigation.getParam('switchSysFn');
@@ -159,7 +170,7 @@ class SelectedTrek extends Component<{
     this.setRateRangeObj(this.mapDisplayMode.includes('noSpeeds') ? undefined : this.currRangeData);
     this.iSvc.intervalData = undefined;
     this.setIntervalCatIndex(this.iSvc.show);
-    this.tInfo.updateShowSpeedStat('speedAvg');
+    this.tS.updateShowSpeedStat(this.tInfo, 'speedAvg');
   }
 
   componentDidMount() {
@@ -234,7 +245,8 @@ class SelectedTrek extends Component<{
   // switch measurement systems then reformat the rateRangeObj
   switchMeasurementSys = () => {
     this.switchSysFn();
-    if (this.rateRangeObj){
+    this.tS.updateCalculatedValues(this.tInfo, false, true);
+    if (this.rangeDataObj){
       this.setRateRangeObj(this.currRangeData)
     }
   }
@@ -244,16 +256,18 @@ class SelectedTrek extends Component<{
   @action
   setRateRangeObj = (type?: RangeDataType) => {
     if(type){
-      this.rateRangeObj = this.iSvc.buildRateRangePaths(
+      this.rangeDataObj = this.iSvc.buildRateRangePaths(
         { rangeType: type,
           pointList: this.tInfo.pointList,
+          dist: this.tInfo.trekDist,
           weight: this.tInfo.weight,
           packWeight: this.tInfo.packWeight,
+          elevs: this.tInfo.elevations,
           type: this.tInfo.type,
-          hills: this.tInfo.hills
+          hills: this.tInfo.hills,
         })
     } else {
-      this.rateRangeObj = undefined;
+      this.rangeDataObj = undefined;
     }
   }
 
@@ -298,7 +312,7 @@ class SelectedTrek extends Component<{
   // set the trackingStatsDist property
   setTrackingStatsDist = (dist: number) => {
     this.trackingStatsDist = dist;
-    this.trackingStatsDistStr = this.tInfo.formattedDist(Math.abs(dist));
+    this.trackingStatsDistStr = this.mS.formattedDist(Math.abs(dist));
   }
 
   setTrackingTime = (time: number) => {
@@ -339,7 +353,7 @@ class SelectedTrek extends Component<{
   }
 
   setWaiting = (status: boolean) => {
-    this.tInfo.setWaitingForSomething(status ? "NoMsg" : undefined);
+    this.mS.setWaitingForSomething(status ? "NoMsg" : undefined);
   }
 
   @action
@@ -353,14 +367,17 @@ class SelectedTrek extends Component<{
   }
 
   toggleRangeData = () => {
-    this.currRangeData = this.currRangeData === 'speed' ? 'calories' : 'speed';
+    this.currRangeData = RANGE_TYPE_SWITCH[this.currRangeData] as RangeDataType;
+    if(this.tInfo.elevations === undefined && this.currRangeData === 'elevation'){
+      this.currRangeData = RANGE_TYPE_SWITCH[this.currRangeData] as RangeDataType;
+    }
     this.setRateRangeObj(this.currRangeData)
   }
 
   // call the markerToPath function then forceUpdate
   callMarkerToPath = (index: number, pt: LatLng, path: LatLng[], pointList: TrekPoint[]) => {
 
-    this.iSvc.markerToPath(index, pt, path, pointList);
+    this.iSvc.markerToPath(this.tInfo, index, pt, path, pointList);
     if (this.intervalEditorOpen){
       let units = this.iSvc.intervalData.labelUnits === 'time' ? 'time' : 'dist';
       this.firstIntervalInfo = this.iSvc.getIntervalAdjustInfo(this.selectedIntervalIndex - 1, units);
@@ -371,32 +388,30 @@ class SelectedTrek extends Component<{
 
   // save/delete the current set of intervals with this trek
   saveCurrentIntervals = (del = false) => {
-    let t = this.tInfo.getSaveObj();
+    let intervals = undefined;
 
     if (del) {
       this.props.modalSvc.simpleOpen({heading: 'Delete Intervals', 
             content: "Delete saved intervals?", 
             cancelText: 'CANCEL', okText: 'YES', headingIcon: 'Delete'})
       .then(() => {
-        t.intervals = undefined;
-        t.intervalDisplayUnits = undefined;
-        this.finishIntervalsSave(t, del);
+        this.tInfo.intervalDisplayUnits = undefined;
+        this.finishIntervalsSave(intervals, del);
       })
       .catch(() =>{ // CANCEL, DO NOTHING
       })
     } else {
-      t.intervals = this.iSvc.intervalData.iDists.slice();
-      t.intervalDisplayUnits = this.iSvc.intervalData.labelUnits;
-      this.finishIntervalsSave(t, del);
+      intervals = this.iSvc.intervalData.iDists.slice();
+      this.tInfo.intervalDisplayUnits = this.iSvc.intervalData.labelUnits;
+      this.finishIntervalsSave(intervals, del);
     }
   }
 
   // finish saving or deleteing the current intervals
-  finishIntervalsSave = (t: TrekObj, del : boolean) => {
+  finishIntervalsSave = (intervals: any, del : boolean) => {
 
-    this.tInfo.setIntervals(t.intervals);
-    this.tInfo.intervalDisplayUnits = t.intervalDisplayUnits;
-    this.tInfo.saveTrek(t)
+    this.tS.setIntervals(this.tInfo, intervals);
+    this.mS.saveTrek(this.tInfo)
     .then(() => {
       this.props.toastSvc.toastOpen({tType: 'Success', content: 'Intervals ' + (del ? 'deleted.' : 'saved.')});
       this.iSvc.setIntervalChange(false);
@@ -462,7 +477,7 @@ class SelectedTrek extends Component<{
           break;
         default:
       }
-      if (this.iSvc.intervalDistOK(tempDist)) {
+      if (this.iSvc.intervalDistOK(this.tInfo, tempDist)) {
         this.iSvc.intervalDist = tempDist;
         this.setIntervalsActive(true);
         this.setIntervalFormOpen(false);
@@ -470,7 +485,7 @@ class SelectedTrek extends Component<{
         this.activeIntervalUnits = this.iSvc.units;
         if(change || saved){
           if (!editAbort) {
-            this.iSvc.getIntervalData(this.iSvc.intervalDist, this.tInfo.pointList);
+            this.iSvc.getIntervalData(this.tInfo, this.iSvc.intervalDist, this.tInfo.pointList);
             this.iSvc.buildGraphData(this.iSvc.intervalData)
             this.setSpeedDialZoomedIn(false);
             this.setSelectedIntervalIndex(0)
@@ -507,7 +522,7 @@ class SelectedTrek extends Component<{
   // Open the Trek Intervals form using DISTANCE parameters
   openIntervalForm = () => {
     if(this.intervalsActive || !this.tInfo.intervals) {
-      let units = [INTERVALS_UNITS, 'meters', DIST_UNIT_LONG_NAMES[this.tInfo.measurementSystem], 'time'];
+      let units = [INTERVALS_UNITS, 'meters', DIST_UNIT_LONG_NAMES[this.mS.measurementSystem], 'time'];
       this.limitProps = {heading: "Intervals", headingIcon: "RayStartEnd",     
           onChangeFn: this.iSvc.setIntervalValue,    
           label: 'Define intervals by count, distance or time:', 
@@ -515,7 +530,7 @@ class SelectedTrek extends Component<{
           units: units, defaultUnits: units[0],
           limitType: 'Interval'
         };
-          this.tInfo.limitsCloseFn = this.showIntervals;
+          this.mS.limitsCloseFn = this.showIntervals;
           this.setIntervalFormOpen(true);
     }
     else {
@@ -563,10 +578,37 @@ class SelectedTrek extends Component<{
     this.setLayoutOpts(val);
   }
 
+  // set the value of the allowImageDisplay property
+  // if set to true, show all trek images
+  @action
+  setAllowImageDisplay = (status: boolean) => {
+    // this.currentDisplayImageSet = undefined;
+    if(status){
+      this.mS.setShowMapControls(true);
+    }
+    this.allowImageDisplay = status;
+  }
+  
   // show the images for the selected image marker
-  showCurrentImageSet = (index: number) => {
-    let title = this.tInfo.formatImageTitle(index, 0);
-    this.props.navigation.navigate('Images', {cmd: 'show', setIndex: index, imageIndex: 0, title: title});
+  @action
+  setCurrentDisplayImageSet = (index: number) => {
+    this.currentDisplayImageSet = index;
+    this.allowImageDisplay = true;
+    this.mS.setShowMapControls(true);
+  }
+
+  // show the selected image
+  showTrekImage = (sNum: number, iNum: number) => {
+    let title = this.tS.formatImageTitle(this.tInfo, sNum, iNum);
+    this.props.navigation.navigate({
+      routeName: "Images", 
+      params: {cmd: 'show', 
+               setIndex: sNum, 
+               imageIndex: iNum, 
+               title: title,
+               trek: this.tInfo}, 
+      key: 'Key-Images'
+    });
   }
 
   // create a LatLng[] for the tracking course path
@@ -670,6 +712,7 @@ class SelectedTrek extends Component<{
       this.replayDisplayTime = 1;
     }
     this.setReplayTimerStatus('Play');
+    this.mS.setShowMapControls(false);
     this.replayTimerId = window.setInterval(() => {
 
         if (this.replayTimerStatus === 'Play') {
@@ -813,9 +856,8 @@ class SelectedTrek extends Component<{
   // navigation parameter courseSnapshotMode can be either 'Update' to change a course default or 
   // 'New' to create a new course.
   courseMapSnapshotTaken = (uri?: string) => {
-    let t = this.tInfo.getSaveObj();
 
-    this.cS.saveCourseSnapshot(this.courseSnapshotName, uri, t, this.courseSnapshotMode)
+    this.cS.saveCourseSnapshot(this.courseSnapshotName, uri, this.tInfo, this.courseSnapshotMode)
     .then(() => {
       this.setMapSnapshotFn(undefined);
       this.props.navigation.dispatch(goBack)
@@ -858,7 +900,7 @@ class SelectedTrek extends Component<{
       let ptInfo = this.lSvc.getPointAtLimit(path, eValue, path[path.length-1].d, moveType);
       let pt = this.props.utilsSvc.cvtLaLoToLatLng(ptInfo.pt.l);
       let segAndPt : SegmentAndPoint = {segIndex: ptInfo.index, point: pt};
-      this.iSvc.finishMarkerToPath(iNum, segAndPt, path)
+      this.iSvc.finishMarkerToPath(this.tInfo, iNum, segAndPt, path)
       this.forceUpdate();
     }
   }
@@ -887,7 +929,7 @@ class SelectedTrek extends Component<{
   // respond to touch in navigation bar
   setActiveNav = (val) => {
     if ('PrevNext'.includes(val)) {
-      this.tInfo.setWaitingForSomething('NoMsg');
+      this.mS.setWaitingForSomething('NoMsg');
     }
     requestAnimationFrame(() => {
       this.activeNav = val;
@@ -903,6 +945,7 @@ class SelectedTrek extends Component<{
             if (title !== '') {
               // change was successful 
               this.snapshotChanged = false;
+              this.lSvc.setCurrentDisplayImageSet(undefined);
               this.setTrackingCoursePath(this.cS.trackingSnapshot)
               this.setTrackingShapshotItems(this.cS.trackingSnapshot);
               if(this.cS.trackingSnapshot){
@@ -911,14 +954,14 @@ class SelectedTrek extends Component<{
               if (this.intervalsActive) { this.cancelIntervalsActive(); }
               this.props.navigation.setParams({ title: title, icon: this.tInfo.type,
                                                 iconColor: TREK_TYPE_COLORS_OBJ[this.tInfo.type] });
-              this.tInfo.setWaitingForSomething();
+              this.mS.setWaitingForSomething();
               // set to show full path on map
               this.setSpeedDialZoomedIn(false);
               this.setRateRangeObj(this.currRangeData);
               this.setLayoutOpts("NewAll");    
             }
             else {
-              this.tInfo.setWaitingForSomething();
+              this.mS.setWaitingForSomething();
             }
           })
           .catch((err) => alert(err))
@@ -941,7 +984,7 @@ class SelectedTrek extends Component<{
           break;
         case 'calories':
         case 'speed':
-          if(this.rateRangeObj){
+          if(this.rangeDataObj){
             this.setRateRangeObj();
           } else {
             this.setRateRangeObj(val);
@@ -963,8 +1006,8 @@ class SelectedTrek extends Component<{
         case "Home":
           this.props.navigation.dispatch(StackActions.popToTop());
           break;
-        case 'Help':
-          this.tInfo.showCurrentHelp();
+        case 'ImageDisplay':
+          this.setAllowImageDisplay(!this.allowImageDisplay);
           break;
         default:
       }
@@ -974,10 +1017,10 @@ class SelectedTrek extends Component<{
   render () {
 
     const {width} = Dimensions.get('window');
-    const { fontRegular, fontLight } = this.props.uiTheme;
+    const { fontRegular, fontLight, trekImageRow } = this.props.uiTheme;
     const { highTextColor, highlightColor, lowTextColor, matchingMask_7, textOnTheme,
             pageBackground, dividerColor, matchingMask_8,
-            trackingStatsBackgroundHeader } = this.props.uiTheme.palette[this.tInfo.colorTheme];
+            trackingStatsBackgroundHeader } = this.props.uiTheme.palette[this.mS.colorTheme];
     const displayInts = !this.mapDisplayMode.includes('noIntervals');
     const ints = (displayInts && this.intervalsActive ) ? this.iSvc.intervalDist : undefined;
     const iMarkers = ints ? this.iSvc.intervalData.markers : undefined;
@@ -989,15 +1032,14 @@ class SelectedTrek extends Component<{
     const interval = ((iMarkers !== undefined) && this.speedDialZoomedIn) ? this.selectedIntervalIndex : undefined;
     const maxINum = interval !== undefined ? iMarkers.length - 1 : undefined;
     const showButtonHeight = 20;
-    const caHt = SHORT_CONTROLS_HEIGHT;
     const graphAndControlsHt = INTERVAL_AREA_HEIGHT;
     const intervalEditorHT = this.intervalEditorOpen ? INTERVAL_AREA_HEIGHT : 0;
     const bottomHeight = (ints && this.graphOpen) ? graphAndControlsHt + intervalEditorHT : 0;
     const prevOk = (this.checkTrekChangeFn !== undefined) && (this.checkTrekChangeFn('Prev') !== -1);
     const nextOk = (this.checkTrekChangeFn !== undefined) && (this.checkTrekChangeFn('Next') !== -1);
-    const showControls = this.tInfo.showMapControls;
-    const haveElevs = this.tInfo.hasElevations();
-    const semiTrans = matchingMask_7;
+    const showControls = this.mS.showMapControls;
+    const haveImages = this.tS.getTrekImageSetCount(this.tInfo) > 0;
+    const haveElevs = this.tS.hasElevations(this.tInfo);
     const tracking = this.cS.trackingSnapshot !== undefined;
     const graphHeight = INTERVAL_GRAPH_HEIGHT;
     const maxBarHeight = 70;
@@ -1016,6 +1058,14 @@ class SelectedTrek extends Component<{
     const playPauseAction = this.replayTimerStatus !== "Play" ? "Play" : "Pause";
     const statUnderlineWidth = this.statLabelWidth;
     const labelMarginTop = -1;
+    const speedRangesHt = this.rangeDataObj ? 53 : 0;
+    const trekImageHeight = SMALL_IMAGE_HEIGHT;
+    const trekImageWidth = trekImageHeight * .75;
+    const focusImageHeight = FOCUS_IMAGE_HEIGHT;
+    const focusImageWidth = focusImageHeight * .75;
+    const imageRowBottom = bottomHeight + speedRangesHt + 3;
+    const idLabel = this.allowImageDisplay ? 'Hide Images' : 'Show Images';
+    const idIcon = this.allowImageDisplay ? 'CameraOff' : 'Camera';
   
     let navMenuItems = 
     [ !ints ? 
@@ -1032,9 +1082,14 @@ class SelectedTrek extends Component<{
           {icon: statsIcon, label: statsLabel, value: 'Stats'},
         ]},
       {icon: 'Home', label: 'Home', value: 'Home'},
-      {icon: 'ArrowBack', label: 'Back', value: 'GoBack'},
       {icon: 'InfoCircleOutline', label: 'Help', value: 'Help'}  
     ]  
+    if (haveImages){
+      navMenuItems[0].submenu.push(
+        {icon: idIcon, label: idLabel, value: 'ImageDisplay'},
+      )
+    }
+
     if (!ints && !replayOn){
       navMenuItems[0].submenu.unshift(
         {icon: intervalsIcon, label: intervalsLabel, value: 'Intervals'}
@@ -1062,10 +1117,6 @@ class SelectedTrek extends Component<{
     }
     const styles = StyleSheet.create({
       container: { ... StyleSheet.absoluteFillObject },
-      caAdjust: {
-        height: caHt,
-        backgroundColor: showControls ? semiTrans : 'transparent',
-      },
       rowLayout1: {
         flexDirection: "row",
         alignItems: "center",
@@ -1127,10 +1178,10 @@ class SelectedTrek extends Component<{
       },
       incDecArea: {
         position: "absolute",
-        left: 5,
-        top: HEADER_HEIGHT + 75,
-        width: 50,
-        height: 120,
+        right: 20,
+        top: HEADER_HEIGHT + 15,
+        width: 130,
+        height: 50,
       },
       intervalGraphStyle: {
         height: graphHeight
@@ -1145,7 +1196,28 @@ class SelectedTrek extends Component<{
         left: 0,
         right: 0,
         bottom: graphAndControlsHt,
-      }
+      },
+      imageRowAdj: {
+        bottom: imageRowBottom,
+        zIndex: haveImages ? IMAGE_ROW_Z_INDEX : INVISIBLE_Z_INDEX
+      },
+      trekImage: {
+        width: trekImageWidth+2,
+        height: trekImageHeight+2,
+        justifyContent: "center",
+        alignItems: "center",
+        backgroundColor: matchingMask_7,
+        marginRight: 3,
+        marginTop: 10,
+      },
+      focusImage: {
+        width: focusImageWidth+2,
+        height: focusImageHeight+2,
+        justifyContent: "center",
+        alignItems: "center",
+        backgroundColor: matchingMask_7,
+        marginRight: 3,
+      },
     })
 
 
@@ -1170,11 +1242,12 @@ class SelectedTrek extends Component<{
             />        
           }
           <TrekDisplay 
-            showControls={this.tInfo.showMapControls}
+            trek={this.tInfo}
+            showControls={this.mS.showMapControls}
             bottom={bottomHeight} 
             displayMode={this.mapDisplayMode}
             pathToCurrent={this.snapshotTrekPath ? this.snapshotTrekPath : this.tInfo.pointList}
-            pathLength={this.snapshotTrekPath ? this.snapshotTrekPath.length : this.tInfo.trekPointCount}
+            pathLength={this.snapshotTrekPath ? this.snapshotTrekPath.length : this.tInfo.pointList.length}
             trackingHeader={this.cS.trackingSnapshot ? this.cS.trackingSnapshot.header : undefined}
             trackingMarker={this.courseMarker}
             trackingDiffDist={this.trackingStatsDist}
@@ -1195,13 +1268,13 @@ class SelectedTrek extends Component<{
             speedDialIcon={sdIcon}
             speedDialValue={sdValue}
             markerDragFn={this.callMarkerToPath}
-            mapType={this.tInfo.currentMapType}
-            changeMapFn={this.tInfo.setDefaultMapType}
+            mapType={this.mS.currentMapType}
+            changeMapFn={this.mS.setDefaultMapType}
             changeZoomFn={changeZFn}
-            showImagesFn={this.showCurrentImageSet}
+            showImagesFn={this.setCurrentDisplayImageSet}
             prevFn={prevOk ? (() => this.setActiveNav('Prev')) : undefined}
             nextFn={nextOk ? (() => this.setActiveNav('Next')) : undefined}
-            rateRangeObj={this.rateRangeObj}
+            rangeDataObj={this.rangeDataObj}
             toggleRangeDataFn={this.toggleRangeData}
             takeSnapshotFn={this.mapShapshotFn}
             snapshotPrompt={this.mapSnapshotPrompt}
@@ -1213,12 +1286,13 @@ class SelectedTrek extends Component<{
               <IncDecComponent
                 inVal={this.replayRate.toString()}
                 label="x"
+                horizontal
                 onChangeFn={this.updateReplayRate}
               />
             </View>
           }
-          {this.tInfo.waitingForSomething && 
-            <Waiting msg={this.tInfo.waitingMsg}/>
+          {this.mS.waitingForSomething && 
+            <Waiting msg={this.mS.waitingMsg}/>
           }
           {(ints && this.intervalEditorOpen) &&
             <IntervalEditor
@@ -1320,7 +1394,22 @@ class SelectedTrek extends Component<{
               </View>
             </SlideUpView>
           </View>
+          {showControls && this.allowImageDisplay &&
+            <View style={{...trekImageRow, ...styles.imageRowAdj}}>
+              <TrekImageListDisplay
+                tInfo={this.tInfo}
+                trekId={this.tInfo.sortDate}
+                imageSetIndex={this.currentDisplayImageSet}
+                imageStyle={styles.trekImage}
+                focusImageStyle={styles.focusImage}
+                showImagesFn={this.showTrekImage}
+                showImages={this.allowImageDisplay}
+              />
+            </View>
+          }
           <NumbersBar 
+            trek={this.tInfo}
+            timerOn={false}
             bottom={0} 
             open={this.statsOpen}
             interval={interval}

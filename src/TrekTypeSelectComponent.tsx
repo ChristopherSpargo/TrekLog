@@ -4,7 +4,7 @@ import { useObserver } from "mobx-react-lite";
 
 import SvgButton from './SvgButtonComponent';
 import { APP_ICONS } from './SvgImages';
-import { TREK_SELECT_BITS } from './TrekInfoModel';
+import { TREK_SELECT_BITS } from './MainSvc';
 import { TREK_TYPE_COLORS_OBJ } from './App';
 
 function TrekTypeSelect({
@@ -26,7 +26,7 @@ function TrekTypeSelect({
     }
   }
 
-  const typeIconAreaSize = size;
+  const typeIconAreaSize = size + 8;
 
   const styles = StyleSheet.create({
     typeControls: {
@@ -52,6 +52,7 @@ function TrekTypeSelect({
         style={styles.controlButton}
         path={APP_ICONS.Walk}
         highlight={(selected & TREK_SELECT_BITS.Walk) !== 0}
+        areaOffset={8}
       />
       <SvgButton 
         value="Run"
@@ -62,6 +63,7 @@ function TrekTypeSelect({
         fill={TREK_TYPE_COLORS_OBJ.Run}
         path={APP_ICONS.Run}
         highlight={(selected & TREK_SELECT_BITS.Run) !== 0}
+        areaOffset={8}
       />
       <SvgButton 
         value="Bike"
@@ -72,8 +74,7 @@ function TrekTypeSelect({
         fill={TREK_TYPE_COLORS_OBJ.Bike}
         path={APP_ICONS.Bike}
         highlight={(selected & TREK_SELECT_BITS.Bike) !== 0}
-        svgWidthAdj={4}
-        svgHeightAdj={5}
+        areaOffset={8}
       />
       <SvgButton 
         value="Hike"
@@ -84,6 +85,7 @@ function TrekTypeSelect({
         fill={TREK_TYPE_COLORS_OBJ.Hike}
         path={APP_ICONS.Hike}
         highlight={(selected & TREK_SELECT_BITS.Hike) !== 0}
+        areaOffset={8}
       />
       <SvgButton 
         value="Board"
@@ -94,7 +96,7 @@ function TrekTypeSelect({
         fill={TREK_TYPE_COLORS_OBJ.Board}
         path={APP_ICONS.Board}
         highlight={(selected & TREK_SELECT_BITS.Board) !== 0}
-        svgHeightAdj={5}
+        areaOffset={8}
       />
       <SvgButton 
         value="Drive"
@@ -105,6 +107,7 @@ function TrekTypeSelect({
         fill={TREK_TYPE_COLORS_OBJ.Drive}
         path={APP_ICONS.Drive}
         highlight={(selected & TREK_SELECT_BITS.Drive) !== 0}
+        areaOffset={8}
       />
     </View>
   ))

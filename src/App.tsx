@@ -36,6 +36,13 @@ import { CourseSvc } from './CourseService';
 import { SummarySvc } from './SummarySvc';
 import Courses from './CoursesComponent';
 import CourseDetails from './CourseDetailsComponent';
+import { HelpSvc } from './HelpService';
+import HelpScreen from './HelpScreenComponent';
+import HomeScreen from './HomeScreenComponent';
+import { ImageSvc } from './ImageService';
+import { MainSvc } from './MainSvc';
+import { TrekSvc } from './TrekSvc';
+import { LogState } from './LogStateModel';
 
 configure({
   enforceActions: "always"
@@ -54,6 +61,7 @@ export const COLOR_THEME_LIGHT = 'light';
 export const COLOR_THEME_DARK = 'dark';
 export type ThemeType = "light" | "dark";
 export const BLACKISH = '#222222';
+export const WHITEISH = "#F5F5F5";
 export const REDISH = "rgb(211, 47, 47)";
 export const TL_BLUE    = "rgb(33, 150, 243)";
 export const TL_ORANGE  = "rgb(255, 153, 0)"; //"rgb(255, 167, 38)";
@@ -61,12 +69,12 @@ export const TL_YELLOW  = "rgb(255, 193, 7)";
 export const TL_RED  = "rgb(211, 47, 47)";
 export const TL_GREEN   = "rgb(67, 160, 71)";
 export const TL_PURPLE = "rgb(149, 117, 205)";
-export const TL_BLUE_DIM  = "rgba(33, 150, 243, .35)";
-export const TL_ORANGE_DIM  = "rgba(255, 153, 0, .35)"; //"rgb(255, 167, 38)";
-export const TL_YELLOW_DIM  = "rgba(255, 193, 7, .35)"; 
-export const TL_RED_DIM  = "rgba(211, 47, 47, .35)";
-export const TL_GREEN_DIM   = "rgba(67, 160, 71, .35)";
-export const TL_PURPLE_DIM = "rgba(149, 117, 205, .35)";
+export const TL_BLUE_DIM  = "rgba(33, 150, 243, .4)";
+export const TL_ORANGE_DIM  = "rgba(255, 153, 0, .4)"; //"rgb(255, 167, 38)";
+export const TL_YELLOW_DIM  = "rgba(255, 193, 7, .4)"; 
+export const TL_RED_DIM  = "rgba(211, 47, 47, .4)";
+export const TL_GREEN_DIM   = "rgba(67, 160, 71, .4)";
+export const TL_PURPLE_DIM = "rgba(149, 117, 205, .4)";
 export const TREK_TYPE_COLORS_ARRAY = [ TL_BLUE, TL_YELLOW, TL_RED, TL_GREEN ];
 export const TREK_TYPE_COLORS_OBJ = { Walk: TL_BLUE, Run: TL_YELLOW, Bike: TL_RED, 
                                       Hike: TL_GREEN, Board: TL_ORANGE, Drive: TL_PURPLE };
@@ -75,12 +83,13 @@ export const TREK_TYPE_DIM_COLORS_OBJ = { Walk: TL_BLUE_DIM, Run: TL_YELLOW_DIM,
 export const PROGRESS_COLORS = [TL_RED, TL_YELLOW, TL_GREEN];
 export const primaryColor = "#006845"; //"#388e3c";
 export const primaryDarker = "#003322"; //"#00600f";
-export const primaryLighter = "#009966";
 export const secondaryColor = "#9c27b0";
 export const linkActive = "#0275D8";
 export const semitransWhite_2 = "rgba(255, 255, 255, .2)";
 export const semitransWhite_3 = "rgba(255, 255, 255, .3)";
+export const semitransWhite_4 = "rgba(255,255,255,.40)"
 export const semitransWhite_5 = "rgba(255, 255, 255, .5)";
+export const semitransWhite_6 = "rgba(255,255,255,.60)"
 export const semitransWhite_7 = "rgba(255, 255, 255, .7)";
 export const semitransWhite_8 = "rgba(255, 255, 255, .8)";
 export const semitransWhite_9 = "rgba(255, 255, 255, .95)";
@@ -108,6 +117,9 @@ export const FOOTER_BUTTON_HEIGHT = 50;
 export const MENUTRIGGER_SIZE = 24;
 export const MENUTRIGGER_AREA = 30;
 export const TRACKING_STATUS_BAR_HEIGHT = 85;
+export const SMALL_IMAGE_HEIGHT = 60;
+export const FOCUS_IMAGE_HEIGHT = 80;
+export const LARGE_IMAGE_HEIGHT = 140;
 
 export const TREKLOG_GROUPS_DIRECTORY = 'Groups';
 export const TREKLOG_GROUPS_FILENAME = 'Groups.txt';
@@ -133,7 +145,8 @@ export const MAIN_PATH_Z_INDEX = 3;
 export const INTERVAL_GRAPH_Z_INDEX = 4;
 export const ICON_BUTTON_Z_INDEX = 4;
 export const SPEED_DIAL_Z_INDEX = 5;
-export const NUMBERS_BAR_Z_INDEX = 6;
+export const IMAGE_ROW_Z_INDEX = 6;
+export const NUMBERS_BAR_Z_INDEX = 7;
 export const LIMITS_Z_INDEX = 8;
 export const CONTROLS_Z_INDEX = 10;
 export const HEADER_Z_INDEX = 10;
@@ -153,9 +166,9 @@ export const uiTheme = {
     light: {
       primaryColor: primaryColor,
       primaryDarker: primaryDarker,
-      primaryLighter: primaryLighter,
+      primaryLighter: "#009966",
       secondaryColor: "rgb(156, 39, 176)", 
-      secondaryColorTrans: "rgba(156, 39, 176,.7)",
+      secondaryColorDim: "rgba(156, 39, 176,.5)",
       textOnSecondaryColor: "white",
       tertiaryColor: '#d795e9',
       accentColor: "#00665c",
@@ -165,6 +178,7 @@ export const uiTheme = {
       lowTextColor: "rgba(0,0,0,.48)",
       mediumTextColor: "rgba(0,0,0,.60)",
       highTextColor: "rgba(0,0,0,.87)",
+      boldTextColor: "black",
       disabledTextColor: "rgba(0,0,0,.38)",
       dividerColor: semitransBlack_12,
       headerBackgroundColor: primaryColor,
@@ -172,9 +186,10 @@ export const uiTheme = {
       headerBorderColor: semitransBlack_12,
       headerTextColor: "white",
       disabledHeaderTextColor: "rgba(255,255,255,.42)",
-      headerRippleColor:  "rgba(255,255,255,.4)",
+      headerRippleColor:  semitransWhite_4,
       textOnPrimaryColor: "white",
-      highlightedItemColor: "#eceff1",
+      highlightedItemColor: "#e2e6e9",
+      helpBackgroundColor: "white",
       trekLogBlue: TL_BLUE,
       trekLogOrange: TL_ORANGE,
       trekLogRed: TL_RED,
@@ -189,13 +204,14 @@ export const uiTheme = {
       trekLogAmber: "#ffd54f",
       warningColor: "firebrick",
       pageBackground: "white",
-      pageBackgroundFilm: "rgba(255,255,255,.4)",
+      pageBackgroundFilm: semitransWhite_4,
       selectOnFilm: "#6600cc",
       selectOnTheme: TL_BLUE,
       controlsBackground: "white",
       textOnTheme: "rgba(0,0,0,.60)",
       textOffTheme: "white",
       linkActive: linkActive,
+      helpLink: linkActive,
       navIconColor: "rgba(0,0,0,.60)",
       navItemBorderColor: semitransBlack_12,
       listIconColor: "rgba(0,0,0,.87)",
@@ -210,10 +226,15 @@ export const uiTheme = {
       cancelColor: "gray",
       dangerColor: "rgba(178, 34, 34, 1.0)",
       okChoiceColor: "#2196f3",
-      infoConfirmColor: TL_BLUE, //'#c4e4ed',
-      infoConfirmTextColor: "white",
-      warningConfirmColor: TL_YELLOW, //"#fae89e",
-      warningConfirmTextColor: "rgba(0,0,0,.87)",
+      infoConfirmHeaderBackgroundColor: '#808080',
+      infoConfirmHeaderTextColor: "white",
+      infoConfirmBodyBackgroundColor: "white",
+      infoConfirmBodyTextColor: "rgba(0,0,0,.87)",
+      infoConfirmDividerColor: semitransBlack_12,
+      infoConfirmBackgroundMask: semitransBlack_2,
+      infoConfirmRippleColor:  "rgba(0,0,0,.2)",
+      warningConfirmColor: TL_RED, //"#fae89e",
+      warningConfirmTextColor: "white",
       itemNotSelected: '#d795ea',
       gradientEndColor: '#efd4f7',//"#f2f2f2",
       itemSelectedColor: '#b1dae7',
@@ -240,7 +261,7 @@ export const uiTheme = {
       almostTransparent: "rgba(255,255,255,.01)",
       altCardBackground: "#f2f2f2",
       progressBackground: "rgba(0,0,0,.05)",
-      cardItemTitleColor: primaryLighter,
+      cardItemTitleColor: "#008055",
       navMenuIconColor: "black",
       navMenuTextColor: "black",
       navMenuBackgroundColor: "white",
@@ -260,13 +281,33 @@ export const uiTheme = {
         borderStyle: "solid",
         borderColor: semitransBlack_12,
       },
+      bottomBorder: {
+        borderBottomWidth: 1,
+        borderStyle: "solid",
+        borderColor: semitransBlack_12,
+      },
+      shadow1: {
+        borderStyle: "solid",
+        borderColor: semitransBlack_12,
+        marginTop: 2,
+        borderBottomWidth: 1,
+      },
+      shadow2: {
+        borderStyle: "solid",
+        borderColor: semitransBlack_12,
+        marginTop: 2,
+        borderBottomWidth: 2,
+      },
+      summarySectionTitle: {
+        borderBottomWidth: 1,
+      }
     },
     dark: {
       primaryColor: primaryColor,
       primaryDarker: primaryDarker,
-      primaryLighter: primaryLighter,
+      primaryLighter: "#00b377",
       secondaryColor: "#ffff00", 
-      secondaryColorTrans: "rgba(255,255,0,.7)",
+      secondaryColorDim: "rgba(255,255,0,.5)",
       textOnSecondaryColor: "rgba(0,0,0,.87)",
       tertiaryColor: '#d795e9',
       accentColor: "#00665c",
@@ -274,18 +315,20 @@ export const uiTheme = {
       accentLighter: "#d2f7a4",
       rippleColor:  "rgba(255,255,255,.4)",
       lowTextColor: "rgba(255,255,255,.48)",
-      mediumTextColor: "rgba(255,255,255,.60)",
+      mediumTextColor: semitransWhite_6,
       highTextColor: 'white',
+      boldTextColor: 'white',
       disabledTextColor: "rgba(255,255,255,.42)",
-      dividerColor: "rgba(255,255,255,.20)",
+      dividerColor: semitransWhite_2,
       headerBackgroundColor: primaryColor, //"#262626",
       trackingStatsBackgroundHeader: "black",
-      headerBorderColor: "rgba(255,255,255,.20)",
-      headerTextColor: "rgba(255,255,255,.70)",
+      headerBorderColor: semitransWhite_2,
+      headerTextColor: semitransWhite_7,
       disabledHeaderTextColor: "rgba(255,255,255,.42)",
-      headerRippleColor:  "rgba(255,255,255,.4)",
-      textOnPrimaryColor: "rgba(255,255,255,.80)",
+      headerRippleColor:  semitransWhite_4,
+      textOnPrimaryColor: semitransWhite_8,
       highlightedItemColor: "#595959",
+      helpBackgroundColor: "black",
       trekLogBlue: TL_BLUE,
       trekLogOrange: TL_ORANGE,
       trekLogRed: TL_RED,
@@ -304,10 +347,11 @@ export const uiTheme = {
       selectOnFilm: TL_BLUE,
       selectOnTheme: TL_BLUE,
       controlsBackground: "black",
-      textOnTheme: "rgba(255,255,255,.60)",
+      textOnTheme: semitransWhite_6,
       textOffTheme: "black",
-      linkActive: linkActive,
-      navIconColor: "rgba(255,255,255,.60)",
+      linkActive: "#81c3fd",
+      helpLink: "#81c3fd",
+      navIconColor: semitransWhite_6,
       pathColor: "#0066ff",//"#0040ff",
       trackingMarkerPathColor: "rgba(64,64,64,.7)",
       locationRadiusBorder: "#ffff00",
@@ -321,10 +365,15 @@ export const uiTheme = {
       cancelColor: "gray",
       dangerColor: "rgba(178, 34, 34, 1.0)",
       okChoiceColor: "#2196f3",
-      infoConfirmColor: TL_BLUE, //'#c4e4ed',
-      infoConfirmTextColor: "white",
-      warningConfirmColor: TL_YELLOW, //"#fae89e",
-      warningConfirmTextColor: "rgba(0,0,0,.87)",
+      infoConfirmHeaderBackgroundColor: '#262626',
+      infoConfirmHeaderTextColor: "white",
+      infoConfirmBodyBackgroundColor: "white",
+      infoConfirmBodyTextColor: "rgba(0,0,0,.87)",
+      infoConfirmDividerColor: semitransBlack_12,
+      infoConfirmBackgroundMask: semitransWhite_3,
+      infoConfirmRippleColor:  "rgba(0,0,0,.2)",
+      warningConfirmColor: TL_RED, //"#fae89e",
+      warningConfirmTextColor: "white",
       itemNotSelected: '#d795ea',
       gradientEndColor: "#efd4f7",
       itemSelectedColor: '#b1dae7',
@@ -351,7 +400,7 @@ export const uiTheme = {
       almostTransparent: "rgba(0,0,0,.01)",
       altCardBackground: "#262626",
       progressBackground: "rgba(255,255,255,.15)",
-      cardItemTitleColor: primaryLighter,
+      cardItemTitleColor: "#00b377",
       navMenuIconColor: "black",
       navMenuTextColor: "black",
       navMenuBackgroundColor: "white",
@@ -371,6 +420,26 @@ export const uiTheme = {
         borderStyle: "solid",
         borderColor: semitransWhite_2,
       },
+      bottomBorder: {
+        borderBottomWidth: 1,
+        borderStyle: "solid",
+        borderColor: semitransWhite_2,
+        },
+      shadow1: {
+        borderStyle: "solid",
+        borderColor: semitransWhite_2,
+        marginTop: 2,
+        borderTopWidth: 1,
+      },
+      shadow2: {
+        borderStyle: "solid",
+        borderColor: semitransWhite_2,
+        marginTop: 3,
+        borderTopWidth: 1,
+      },
+      summarySectionTitle: {
+        borderBottomWidth: 0,
+      }
     }
   },
   toolbar: {
@@ -525,6 +594,18 @@ export const uiTheme = {
     zIndex: NAVMENU_TRIGGER_Z_INDEX,
     borderRadius: (MENUTRIGGER_AREA / 2),
   },
+  trekImageRow: {
+    position: "absolute",
+    left: 5,
+    right: 5,
+    bottom: 3,
+    height: FOCUS_IMAGE_HEIGHT + 2,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "transparent",
+    zIndex: IMAGE_ROW_Z_INDEX,
+  },
   fontThin:  fontFamilyThin,
   fontLight: fontFamilyLight,
   fontRegular: fontFamilyLight,
@@ -536,9 +617,8 @@ export const uiTheme = {
 // create the navigation stack
 const NavStack = createStackNavigator(
   {
-    Log: {
-      screen: LogTrek
-    },
+    HomeScreen: HomeScreen,
+    LogTrek: LogTrek,
     Summary:  SummaryScreen,
     LogTrekMap: LogTrekMap,
     Settings: Settings,
@@ -551,24 +631,28 @@ const NavStack = createStackNavigator(
     Images: TrekImages,
     Conditions: ShowConditions,
     Courses: Courses,
-    CourseDetails: CourseDetails
+    CourseDetails: CourseDetails,
+    ShowHelp: HelpScreen
   },
   {
-    initialRouteName: "Log",
-    initialRouteKey: "Key-Home",
+    initialRouteName: "HomeScreen",
+    initialRouteKey: "Key-HomeScreen",
     navigationOptions: {
       header: null //<TrekLogHeader/>
     }
   }
 );
 
+const toastSvc = new ToastModel();
+export const ToastSvcContext = React.createContext(toastSvc);
+
+const helpSvc = new HelpSvc();
+export const HelpSvcContext = React.createContext(helpSvc);
+
 const modalSvc = new ModalModel();
 export const ModalSvcContext = React.createContext(modalSvc);
 
 export const UiThemeContext = React.createContext(uiTheme);
-
-const toastSvc = new ToastModel();
-export const ToastSvcContext = React.createContext(toastSvc);
 
 const utilsSvc = new UtilsSvc();
 export const UtilsSvcContext = React.createContext(utilsSvc);
@@ -576,34 +660,44 @@ export const UtilsSvcContext = React.createContext(utilsSvc);
 const storageSvc = new StorageSvc(utilsSvc);
 export const StorageSvcContext = React.createContext(storageSvc);
 
+const imageSvc = new ImageSvc(utilsSvc, storageSvc);
+export const ImageSvcContext = React.createContext(imageSvc);
+
 const groupSvc = new GroupSvc(modalSvc, storageSvc);
-// export const SettingsSvcContext = React.createContext(groupSvc);
+// export const GroupSvcContext = React.createContext(groupSvc);
 
-const trekInfo = new TrekInfo(utilsSvc, storageSvc, modalSvc, groupSvc, toastSvc);
-export const TrekInfoContext = React.createContext(trekInfo);
+const mainSvc = new MainSvc(utilsSvc, storageSvc, modalSvc, groupSvc, imageSvc);
+export const MainSvcContext = React.createContext(mainSvc);
 
-const intervalSvc = new IntervalSvc(utilsSvc, trekInfo);
-// export const IntervalSvcContext = React.createContext(intervalSvc);
+const trekSvc = new TrekSvc(mainSvc, utilsSvc, storageSvc, imageSvc);
+export const TrekSvcContext = React.createContext(trekSvc);
 
-const locationSvc = new LocationSvc( trekInfo, storageSvc);
+const loggingState = new LogState(new TrekInfo(), mainSvc);
+// export const LogTrekContext = React.createContext(logTrekInfo);
+
+const locationSvc = new LocationSvc(loggingState, storageSvc);
 export const LocationSvcContext = React.createContext(locationSvc);
 
-const courseSvc = new CourseSvc(utilsSvc, trekInfo, locationSvc, intervalSvc, storageSvc, modalSvc, toastSvc);
+const courseSvc = new CourseSvc(mainSvc, trekSvc, utilsSvc, locationSvc, storageSvc, modalSvc, toastSvc);
 // export const CourseSvcContext = React.createContext(courseSvc);
 
 const weatherSvc = new WeatherSvc(toastSvc);
 export const WeatherSvcContext = React.createContext(weatherSvc);
 
-const loggingSvc = new LoggingSvc(utilsSvc, trekInfo, locationSvc, courseSvc, modalSvc, toastSvc);
-// export const LoggingSvcContext = React.createContext(loggingSvc);
+const loggingSvc = new LoggingSvc(loggingState, mainSvc, utilsSvc, trekSvc, locationSvc, courseSvc, 
+                  modalSvc, toastSvc);
+export const LoggingSvcContext = React.createContext(loggingSvc);
 
-const goalsSvc = new GoalsSvc(utilsSvc, trekInfo, toastSvc, storageSvc);
+const intervalSvc = new IntervalSvc(mainSvc, utilsSvc, trekSvc, loggingSvc);
+// export const IntervalSvcContext = React.createContext(intervalSvc);
+
+const goalsSvc = new GoalsSvc(mainSvc, utilsSvc, toastSvc, storageSvc);
 export const GoalsSvcContext = React.createContext(goalsSvc);
 
-const filterSvc = new FilterSvc(utilsSvc, trekInfo, toastSvc);
-// export const FilterSvcContext = React.createContext(filterSvc);
+const filterSvc = new FilterSvc(mainSvc, utilsSvc, trekSvc, toastSvc);
+export const FilterSvcContext = React.createContext(filterSvc);
 
-const summarySvc = new SummarySvc(utilsSvc, trekInfo, filterSvc);
+const summarySvc = new SummarySvc(mainSvc, utilsSvc, filterSvc);
 export const SummarySvcContext = React.createContext(summarySvc);
 
 @observer
@@ -628,8 +722,9 @@ class TrekLog extends React.Component {
 
     return (
         <Provider 
+          mainSvc={mainSvc}
+          trekSvc={trekSvc}
           uiTheme={uiTheme}
-          trekInfo={trekInfo}
           modalSvc={modalSvc}
           toastSvc={toastSvc}
           utilsSvc={utilsSvc}
@@ -643,6 +738,8 @@ class TrekLog extends React.Component {
           intervalSvc={intervalSvc}
           courseSvc={courseSvc}
           summarySvc={summarySvc}
+          helpSvc={helpSvc}
+          imageSvc={imageSvc}
         >
           <View style={styles.container}>
             <NavStack/>

@@ -6,8 +6,11 @@ import { TREKLOG_SETTINGS_FILENAME, TREKLOG_FILE_FORMAT, TREKLOG_GOALS_FILENAME,
           TREKLOG_COURSES_FILENAME } from './App'
 import { GoalObj } from './GoalsService';
 import { SettingsObj, GroupsObj } from './GroupService';
-import { TrekObj, RestoreObject, CURR_DATA_VERSION, TrekImageSet, IMAGE_STORE_FULL } from './TrekInfoModel';
-import { UtilsSvc } from './UtilsService';
+import { TrekObj, CURR_DATA_VERSION } from './TrekInfoModel';
+import { RESP_OK  } from './MainSvc'
+import { UtilsSvc,  } from './UtilsService';
+import { RestoreObject } from './LogStateModel';
+import { IMAGE_STORE_COMPRESSED, TrekImageSet, } from './ImageService';
 import { CourseList, Course } from './CourseService';
 interface TrekData {
   _id             ?: string;   // mongoDB item id
@@ -83,6 +86,11 @@ export class StorageSvc {
     return RNFetchBlob.fs.dirs.PictureDir + '/' + TREKLOG_PICTURES_DIRECTORY;
   }
 
+  // return the path to the Course Map Images directory
+  formatCourseMapImagesPath = () : string => {
+    return this.formatTrekLogPicturesPath();
+  }
+
   // write the given picture to the TrekLog Pictures directory
   // return the new uri
   saveTrekLogPicture = (tempUri : string, imageName: string) : Promise<string> => {
@@ -101,15 +109,15 @@ export class StorageSvc {
     })
   }
 
-  // write the given picture to the TrekLog Pictures directory
+  // write the given picture to the Course Map Images directory
   // return the new uri
   saveCourseMapImage = (courseName: string, tempUri : string) : Promise<string> => {
-    let picDir = this.formatTrekLogPicturesPath();
+    let cmiDir = this.formatCourseMapImagesPath();
 
     return new Promise<any>((resolve, reject) => {
       RNFetchBlob.fs.stat(tempUri)
       .then((stats) => {
-        let uri = picDir + '/' + courseName + '.jpg';
+        let uri = cmiDir + '/' + courseName + '.jpg';
         RNFetchBlob.fs.cp(stats.path, uri)
         .then(() => resolve(uri))
         .catch((err) => reject(err))
@@ -155,7 +163,7 @@ export class StorageSvc {
     let cDir = this.formatCoursesPath();
 
     return new Promise((resolve, reject) => {
-      if(this.directoriesPresent) {resolve('OK')}
+      if(this.directoriesPresent) {resolve(RESP_OK)}
       this.checkStoragePermission()
       .then((perm) => {
         if(perm){
@@ -168,7 +176,7 @@ export class StorageSvc {
               p1a.then(() =>{
                 allDone.push(this.storeGroupListFile({groups: [], lastGroup: '', 
                         measurementSystem: 'US', theme: COLOR_THEME_DARK,
-                        imageStorageMode: IMAGE_STORE_FULL}))  // store empty GroupsObj
+                        imageStorageMode: IMAGE_STORE_COMPRESSED}))  // store empty GroupsObj
               })
             }
           })
@@ -176,7 +184,7 @@ export class StorageSvc {
           allDone.push(p2);                         // Pictures directory?
           p2.then((haveDir) => {
             if(!haveDir) {
-              allDone.push(RNFetchBlob.fs.mkdir(pDir))
+              allDone.push(RNFetchBlob.fs.mkdir(pDir))  // make directory for pictures
             }
           })
           let p3 = RNFetchBlob.fs.isDir(cDir);                         // Courses directory?
@@ -193,7 +201,7 @@ export class StorageSvc {
           Promise.all(allDone)
           .then(() => {
             this.directoriesPresent = true;
-            resolve('OK');
+            resolve(RESP_OK);
           })
           .catch((err) => reject('Error creating directories\n' + err))
         }
@@ -238,13 +246,13 @@ export class StorageSvc {
       .then((pathExists) => {
         if(pathExists){
           this.saveDataItem(this.formatGroupSettingsFilename(group), JSON.stringify(settings))
-          .then(() => { resolve("OK") })
+          .then(() => { resolve(RESP_OK) })
           .catch(() => { reject("ERROR: SAVING_SETTINGS") })
         } else {
           this.makeDirectory(this.formatGroupPath(group))
           .then(() => {
             this.saveDataItem(this.formatGroupSettingsFilename(group), JSON.stringify(settings))
-            .then(() => { resolve("OK") })
+            .then(() => { resolve(RESP_OK) })
             .catch(() => { reject("ERROR: SAVING_SETTINGS") })
           })
         }
@@ -293,7 +301,7 @@ export class StorageSvc {
       .then((data) => {
         let trek = JSON.parse(data) as TrekObj;
         this.removeTrekImageFiles(trek.trekImages);
-        resolve('OK');
+        resolve(RESP_OK);
       })
       .catch(() => resolve('ERROR: TREK_NOT_FOUND'))
     })
@@ -339,13 +347,31 @@ export class StorageSvc {
     return new Promise((resolve, reject) => {
       RNFetchBlob.fs.lstat(this.formatCoursesPath())      // read directory for the courses
       .then((coursesDir : RNFetchBlobStat[]) => resolve(coursesDir))
-      .catch(() => reject('ERROR: READING_GROUP_DIRECTORY'))
+      .catch(() => reject('ERROR: READING_COURSE_DIRECTORY'))
+    })
+  }
+
+  // Read the Pictures directory. Return an RNFetchBlobStat[]
+  readPicturesDirectory = () : Promise<RNFetchBlobStat[]> => {
+    return new Promise((resolve, reject) => {
+      RNFetchBlob.fs.lstat(this.formatTrekLogPicturesPath())      // read directory for the courses
+      .then((picturesDir : RNFetchBlobStat[]) => resolve(picturesDir))
+      .catch(() => reject('ERROR: READING_PICTURES_DIRECTORY'))
     })
   }
 
   // remove the file with the given path from the database
   removeDataItem = (path: string) : Promise<any> => {
     return RNFetchBlob.fs.unlink(path);
+  }
+
+  // use copy and delete to rename the file at oldUri to the given filename
+  renameDataItem = (oldUri: string, newUri: string) => {
+    return new Promise<any>((resolve, reject) => {
+      RNFetchBlob.fs.cp(oldUri, newUri)
+      .then(() => resolve(this.removeDataItem(oldUri)))
+      .catch((err) => reject(err))
+    })
   }
 
   // save the data to a file file at given path in the database
@@ -400,7 +426,7 @@ export class StorageSvc {
             pathList.push(groupDir[i].path);       // add path to Treks
           }
         }
-        resolve('OK');
+        resolve(RESP_OK);
       })
       .catch(() => {
         reject('ERROR: READING_GROUP_DIRECTORY');
@@ -419,7 +445,7 @@ export class StorageSvc {
         let groupList = JSON.parse(result).groups;
         for(let i=0; i<groupList.length; i++){
           // process directory for group (or all)
-          if((groupsToGet.length === 0) || groupsToGet.indexOf(groupList[i]) !== -1 ) {  
+          if(!groupsToGet || (groupsToGet.length === 0) || groupsToGet.indexOf(groupList[i]) !== -1 ) {  
             allDone.push(this.addGroupPaths(groupList[i], pathList));
           }
         }
@@ -503,6 +529,7 @@ export class StorageSvc {
   // bring trek up to date.
   verifyDataVersion = (t: TrekObj, version = CURR_DATA_VERSION) : Promise<any> => {
     let upgraded = false;
+    let imgs: TrekImageSet[] = t.trekImages;
 
     return new Promise<any>((resolve) => {
       if (t.dataVersion < version){
@@ -537,13 +564,34 @@ export class StorageSvc {
           // change to storing cumulative distance with each point
           case '5.3':
             this.utilsSvc.setPointDistances(t.pointList);
+          // add sDate property to TrekImage
+          case '5.4':
+            if (imgs) {
+              for(let i=0; i<imgs.length; i++) {
+                let iSet = imgs[i];
+                for(let j=0; j<iSet.images.length; j++) {
+                  let currImage = iSet.images[j];
+                  if(currImage.time !== undefined) {
+                    currImage.sDate = this.utilsSvc.formatLongSortDate(null, null, currImage.time);
+                  }
+                }
+              }
+            }
+          // remove time property from TrekImage
+          case '5.5':
+            if (imgs) {
+              for(let i=0; i<imgs.length; i++) {
+                let iSet = imgs[i];
+                for(let j=0; j<iSet.images.length; j++) {
+                  iSet.images[j].time = undefined;
+                }
+              }
+            }
             break;
           default:
         }
-        resolve(upgraded);
-      } else {
-        resolve(upgraded);
-      }
+      } 
+      resolve(upgraded);
     })
   }
 
@@ -568,7 +616,7 @@ export class StorageSvc {
         .then(() => {
           result.list += ('\nTotal: ' + result.bytes + ' bytes in ' + result.files + ' files.')
           alert(result.list + '\n\nApp Directory:\n' + JSON.stringify(result.dir, null, 2));
-          resolve("ok");
+          resolve(RESP_OK);
         })
       })
       .catch((err) => reject(err))
@@ -592,7 +640,7 @@ export class StorageSvc {
         result.list += (name + ': ' + sum + ' bytes in ' + dir.length + ' files.\n');
         result.bytes += sum;
         result.files += dir.length;
-        resolve('OK');
+        resolve(RESP_OK);
       })
       .catch(() => {
         result.list += (name + ': Not found.\n');

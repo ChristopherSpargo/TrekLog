@@ -88,9 +88,7 @@ function SvgYAxis({
         l.push(i);
       }
       return l;
-    }
-    // alert('rendering yAxis')
-    
+    }   
 
     const startY = 5;
     const styles = StyleSheet.create({

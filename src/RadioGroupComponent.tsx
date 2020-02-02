@@ -2,11 +2,11 @@ import React, { useContext, useState, useEffect } from "react";
 import { View, Text, StyleSheet, TouchableNativeFeedback } from "react-native";
 import { useObserver } from "mobx-react-lite";
 
-import { UiThemeContext, TrekInfoContext } from "./App";
+import { UiThemeContext, MainSvcContext } from "./App";
 import SvgIcon from "./SvgIconComponent";
 import { APP_ICONS } from "./SvgImages";
-import { TrekInfo } from './TrekInfoModel';
 import TextInputField from './TextInputFieldComponent';
+import { MainSvc } from "./MainSvc";
 
 function RadioGroup({
   onChangeFn = undefined, // call this when value of radio changes
@@ -30,7 +30,7 @@ function RadioGroup({
   autoNew = undefined   // auto focus on new element if true
 }) {
   const uiTheme: any = useContext(UiThemeContext);
-  const trekInfo: TrekInfo = useContext(TrekInfoContext);
+  const mainSvc: MainSvc = useContext(MainSvcContext);
 
   const validProps = values && (labels || icons);
   const [selectedIndex, setSelectedIndex] = useState(values.indexOf(selected));
@@ -45,7 +45,7 @@ function RadioGroup({
   const just = justify === "start" ? "flex-start" : "center";
   const alignDir = align === "start" ? "flex-start" : "center";
   const { secondaryColor, highlightColor, highTextColor, mediumTextColor, okChoiceColor, cancelColor,
-          rippleColor } = uiTheme.palette[trekInfo.colorTheme];
+          rippleColor } = uiTheme.palette[mainSvc.colorTheme];
   const { fontRegular, fontLight, formTextInput } = uiTheme;
   const lStyle = labelStyle || {};
   const iaStyleProp = iconAreaStyle || {};
@@ -136,7 +136,7 @@ function RadioGroup({
     },
   });
 
-  useEffect(() => {
+  useEffect(() => {       // didUpdate
     if (selectedIndex !== values.indexOf(selected)){
       let idx = values.indexOf(selected);
       setSelectedIndex(idx);

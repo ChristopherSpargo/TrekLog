@@ -6,10 +6,10 @@ import { observer, inject } from 'mobx-react';
 import SvgIcon from './SvgIconComponent';
 import { APP_ICONS } from './SvgImages';
 import { ICON_BUTTON_Z_INDEX } from './App';
-import { TrekInfo } from './TrekInfoModel';
+import { MainSvc } from './MainSvc';
 
 
-@inject('uiTheme', 'trekInfo')
+@inject('uiTheme', 'mainSvc')
 @observer
 class IconButton extends Component<{ 
   icon   ?: string,
@@ -27,7 +27,7 @@ class IconButton extends Component<{
   raised ?: boolean,
   horizontal ?: boolean,    // align label to right of icon if true, under icon if false
   rippleColor ?: number,    // optional color for the ripple effect
-  trekInfo ?: TrekInfo,
+  mainSvc ?: MainSvc,
   uiTheme ?: any,
 }, {} > {
 
@@ -44,7 +44,7 @@ class IconButton extends Component<{
   render() {
 
     const { disabledTextColor, pageBackground, dividerColor, rippleColor, navIconColor,
-          } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
+          } = this.props.uiTheme.palette[this.props.mainSvc.colorTheme];
     const iconSize = this.props.iconSize || 30;
     const propStyle = this.props.style || {};
     const bSize = this.props.buttonSize || propStyle.width || iconSize;

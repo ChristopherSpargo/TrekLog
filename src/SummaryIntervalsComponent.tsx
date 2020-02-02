@@ -3,10 +3,8 @@ import { View, Text, StyleSheet } from "react-native";
 import { useObserver } from "mobx-react-lite";
 import { BorderlessButton } from 'react-native-gesture-handler'
 
-import { UiThemeContext, TrekInfoContext, UtilsSvcContext, SummarySvcContext,
-         INVISIBLE_Z_INDEX, NUMBERS_BAR_Z_INDEX } from "./App";
-import { TrekInfo, TREK_TYPE_CHOICES, TREK_SELECT_BITS, DIST_UNIT_CHOICES
-       } from './TrekInfoModel';
+import { UiThemeContext, UtilsSvcContext, SummarySvcContext,
+         INVISIBLE_Z_INDEX, NUMBERS_BAR_Z_INDEX, MainSvcContext, FilterSvcContext } from "./App";
 import { UtilsSvc, DateInterval } from './UtilsService';
 import BarDisplay from "./BarDisplayComponent";
 import HorizontalSlideView from './HorizontalSlideComponent';
@@ -14,6 +12,8 @@ import SvgYAxis, { YAXIS_TYPE_MAP } from './SvgYAxisComponent';
 import SvgGrid from './SvgGridComponent';
 import SlideUpView from './SlideUpComponent';
 import { SummarySvc, ActivityStatType, ActivityStatsInterval } from './SummarySvc';
+import { MainSvc, TREK_TYPE_CHOICES, TREK_SELECT_BITS, DIST_UNIT_CHOICES } from "./MainSvc";
+import { FilterSvc } from "./FilterService";
 
 export const INTERVAL_LABELS = {
   daily: 'Day',
@@ -28,9 +28,10 @@ function SummaryIntervals({
 }) {
 
   const uiTheme: any = useContext(UiThemeContext);
-  const tInfo: TrekInfo = useContext(TrekInfoContext);
+  const mainSvc: MainSvc = useContext(MainSvcContext);
   const uSvc: UtilsSvc = useContext(UtilsSvcContext);
   const sumSvc: SummarySvc = useContext(SummarySvcContext);
+  const fS : FilterSvc = useContext(FilterSvcContext)
 
   const [scrollToBar, setScrollToBar] = useState();
 
@@ -67,8 +68,8 @@ function SummaryIntervals({
 
   // format the TITLE for the total line displayed below the graph
   function getIntervalDisplayTotalTitle() {
-    if ((tInfo.typeSelections & sumSvc.activeTypes) === 0) { return 'No Type Selected'; }
-    if (sumSvc.totalCounts(tInfo.typeSelections)){
+    if ((fS.typeSelections & sumSvc.activeTypes) === 0) { return 'No Type Selected'; }
+    if (sumSvc.totalCounts(fS.typeSelections)){
       return INTERVAL_LABELS[sumSvc.showIntervalType] + ':';
     } else {
       return 'No Data for Selected Types';
@@ -77,7 +78,7 @@ function SummaryIntervals({
 
   // format the TITLE for the total line displayed below the graph
   function getDisplayTotalTitle() {
-    if (!tInfo.typeSelections || !sumSvc.totalCounts(tInfo.typeSelections)) { 
+    if (!fS.typeSelections || !sumSvc.totalCounts(fS.typeSelections)) { 
       return ''; 
     } else {
       return 'Total:';
@@ -86,9 +87,9 @@ function SummaryIntervals({
 
   // compute and format the VALUE for the total line displayed below the graph
   function getDisplayTotal(sType: ActivityStatType) {
-    if (!sumSvc.activityData.length || !tInfo.typeSelections) { return ''; }
-    if (sumSvc.totalCounts(tInfo.typeSelections)){
-      let tData = totalStatForSelectedTypes(sType, tInfo.typeSelections);
+    if (!sumSvc.activityData.length || !fS.typeSelections) { return ''; }
+    if (sumSvc.totalCounts(fS.typeSelections)){
+      let tData = totalStatForSelectedTypes(sType, fS.typeSelections);
       switch(sType){
         case 'dist':
           return formattedDist(tData.stat);
@@ -110,10 +111,10 @@ function SummaryIntervals({
 
   // compute and format the VALUE for the total line displayed below the graph
   function getIntervalDisplayTotal(sType: ActivityStatType) {
-    if (!sumSvc.activityData.length || !tInfo.typeSelections) { return ''; }
-    if (sumSvc.totalCounts(tInfo.typeSelections)){
+    if (!sumSvc.activityData.length || !fS.typeSelections) { return ''; }
+    if (sumSvc.totalCounts(fS.typeSelections)){
       let iData = intervalTotalForSelectedTypes(sumSvc.activityData[sumSvc.selectedInterval], 
-                                                sType, tInfo.typeSelections)
+                                                sType, fS.typeSelections)
       switch(sType){
         case 'dist':
           return formattedDist(iData.stat);
@@ -166,7 +167,7 @@ function SummaryIntervals({
   }
 
   function formattedDist(dist: number) {
-    return uSvc.formatDist(dist, DIST_UNIT_CHOICES[tInfo.measurementSystem]);
+    return uSvc.formatDist(dist, DIST_UNIT_CHOICES[mainSvc.measurementSystem]);
   }
 
   function formattedTime(time: number) {
@@ -185,17 +186,17 @@ function SummaryIntervals({
 
   function formattedSpeed(dist: number, time: number) {
     let val: number, prec: number;
-    let sys = tInfo.measurementSystem;
+    let sys = mainSvc.measurementSystem;
 
     val = sumSvc.showAvgSpeed 
             ? uSvc.computeRoundedAvgSpeed(sys, dist, time)
-            : (time / uSvc.convertDist(dist, tInfo.distUnits()));
+            : (time / uSvc.convertDist(dist, mainSvc.distUnits()));
     prec = val < 10 ? 10 : 1;
     let c = Math.round(val * prec) / prec;
     c = isNaN(c) ? 0 : c;
     return  (sumSvc.showAvgSpeed
-      ? (c.toString() + " " + tInfo.speedUnits()) 
-      : (uSvc.timeFromSeconds(c) + "/" + tInfo.distUnits()));
+      ? (c.toString() + " " + mainSvc.speedUnits()) 
+      : (uSvc.timeFromSeconds(c) + "/" + mainSvc.distUnits()));
   }
 
   function formattedSteps(steps: number, time: number) {
@@ -206,10 +207,10 @@ function SummaryIntervals({
     }
     return steps.toString();
   }
-
   const graphAreaHeight = (summaryHeight - 95);
   const graphHeight = graphAreaHeight;
   const maxBarHeight = graphHeight - 50;
+  const minBarHeight = 20;
   const yAxisWidth = 60;
   const graphWidth = statAreaWidth - yAxisWidth - 10;
   const gBarWidth = 25; 
@@ -225,7 +226,7 @@ function SummaryIntervals({
 
   const { rippleColor, trekLogBlue, highTextColor, secondaryColor,
           mediumTextColor
-        } = uiTheme.palette[tInfo.colorTheme];
+        } = uiTheme.palette[mainSvc.colorTheme];
   const { fontRegular 
         } = uiTheme;
   const styles = StyleSheet.create({
@@ -342,7 +343,7 @@ return useObserver(() => (
       underlineWidth={intervalLabelUnderlineWidth}
       underlineMarginTop={labelMarginTop}
       color={secondaryColor}
-      offset={14}
+      offset={16}
       duration={500}/>
     <View style={{...styles.statLine, ...styles.statLineTitle}}>
       <IntervalButton selectFn={updateShowStatType} value='time' label='Time'/>
@@ -367,7 +368,7 @@ return useObserver(() => (
         <SvgYAxis
           graphHeight={graphHeight}
           axisTop={maxBarHeight}
-          axisBottom={10}
+          axisBottom={minBarHeight}
           axisWidth={yAxisWidth}
           color={mediumTextColor}
           lineWidth={1}
@@ -381,9 +382,9 @@ return useObserver(() => (
             graphHeight={graphHeight}
             gridWidth={graphWidth}
             lineCount={3}
-            colorTheme={tInfo.colorTheme}
+            colorTheme={mainSvc.colorTheme}
             maxBarHeight={maxBarHeight}
-            minBarHeight={10}
+            minBarHeight={minBarHeight}
           />
           <BarDisplay
             data={sumSvc.barGraphData[sumSvc.showStatType].items}
@@ -395,7 +396,7 @@ return useObserver(() => (
             style={styles.graphStyle}
             barStyle={styles.barStyle}
             maxBarHeight={maxBarHeight}
-            minBarHeight={10}
+            minBarHeight={minBarHeight}
             labelAngle={287}
             scrollToBar={scrollToBar}
             allowEmptyBars={sumSvc.allowEmptyIntervals}

@@ -17,11 +17,15 @@ import TrekStats from "./TrekStatsComponent";
 import SvgButton from './SvgButtonComponent';
 import SvgIcon from "./SvgIconComponent";
 import { APP_ICONS } from './SvgImages';
+import { MainSvc } from "./MainSvc";
+import { TrekSvc } from "./TrekSvc";
 
-@inject("trekInfo", "utilsSvc", "uiTheme")
+@inject("trekSvc", "utilsSvc", "uiTheme", "mainSvc")
 @observer
 class NumbersBar extends Component<
   {
+    trek: TrekInfo;
+    timerOn: boolean;
     bottom?: number; // bottom edge of the bar display
     numbersHeight?: number; // height of the display
     open?: boolean; // display is visible if true
@@ -33,7 +37,8 @@ class NumbersBar extends Component<
     closeFn?: Function; // function to call if user presses Close button
     uiTheme?: any;
     utilsSvc?: UtilsSvc;
-    trekInfo?: TrekInfo; // object with all non-gps information about the Trek
+    trekSvc?: TrekSvc; // object with all non-gps information about the Trek
+    mainSvc?: MainSvc;
   },
   {}
 > {
@@ -41,6 +46,7 @@ class NumbersBar extends Component<
   @observable showTotalCalories: boolean;
   @observable zValue: number;
 
+  mS = this.props.mainSvc;
   uSvc = this.props.utilsSvc;
 
   constructor(props) {
@@ -71,19 +77,19 @@ class NumbersBar extends Component<
 
   render() {
     const { height } = Dimensions.get('window');
-    const tInfo = this.props.trekInfo;
+    const tInfo = this.props.trek;
     const {
       highTextColor,
       mediumTextColor,
       disabledTextColor,
       secondaryColor,
       statsBackgroundColor,
-    } = this.props.uiTheme.palette[tInfo.colorTheme];
+    } = this.props.uiTheme.palette[this.mS.colorTheme];
     const { cardLayout, roundedTop, fontRegular, fontItalic, fontLight } = this.props.uiTheme;
     const small = this.props.format === 'small';
     const labelText = tInfo.trekLabel
       ? tInfo.trekLabel
-      : tInfo.timerOn
+      : this.props.timerOn
       ? tInfo.type + " in progress"
       : "No Label";
     const noLabel = labelText === "No Label";
@@ -134,7 +140,7 @@ class NumbersBar extends Component<
         justifyContent: "space-between",
         alignItems: "center",
         paddingRight: 5,
-        paddingLeft: 5,
+        paddingLeft: 15,
       },
       labelText: {
         flex: 1,
@@ -185,8 +191,6 @@ class NumbersBar extends Component<
                   <Text style={styles.labelText}>{labelText}</Text>
                   <SvgButton
                     onPressFn={this.props.closeFn}
-                    borderWidth={0}
-                    areaOffset={0}
                     size={24}
                     fill={highTextColor}
                     path={ APP_ICONS.Close }
@@ -209,7 +213,8 @@ class NumbersBar extends Component<
               </View>
               <View style={{flex: 1, alignItems: "center"}}>
                 <TrekStats
-                  logging={tInfo.timerOn}
+                  trek={this.props.trek}
+                  logging={this.props.timerOn}
                   trekType={tInfo.type}
                   interval={this.props.interval}
                   intervalData={this.props.intervalData}

@@ -1,103 +1,86 @@
 import React from 'react';
 import { Component } from 'react';
-import { View, StyleSheet, Text, Image, Alert, Dimensions, 
-         Slider, TouchableWithoutFeedback, StatusBar } from 'react-native';
+import { View, StyleSheet, Text, Image, Alert,
+         Slider, TouchableWithoutFeedback, BackHandler, StatusBar } from 'react-native';
 import { RNCamera } from 'react-native-camera';
 import { observer, inject } from 'mobx-react';
 import { observable, action } from 'mobx';
-import ImageZoom from 'react-native-image-pan-zoom';
-import Video from 'react-native-video';
 import { NavigationActions } from 'react-navigation';
 import ImageResizer from 'react-native-image-resizer';
 
-import { TrekInfo, TrekPoint, TrekImageSet, TrekImage, TrekImageType,
-         IMAGE_TYPE_INFO, IMAGE_TYPE_PHOTO, IMAGE_TYPE_VIDEO, IMAGE_STORE_COMPRESSED,
-         IMAGE_COMPRESSION_QUALITY 
-        } from './TrekInfoModel';
-import { UtilsSvc } from './UtilsService';
+import { TrekInfo, TrekPoint } from './TrekInfoModel';
+import { UtilsSvc, SortDate } from './UtilsService';
 import IconButton from './IconButtonComponent';
 import { ModalModel } from './ModalModel';
 import TrekLogHeader from './TreklogHeaderComponent';
 import { ToastModel } from './ToastModel';
 import Waiting from './WaitingComponent';
-import { semitransBlack_2, semitransWhite_8, semitransBlack_5,
-       } from './App';
+import { semitransBlack_2, semitransWhite_8, semitransBlack_5, HEADER_HEIGHT, TREK_TYPE_COLORS_OBJ } from './App';
 import { StorageSvc } from './StorageService';
 import { GroupSvc } from './GroupService';
+import ImageView from './ImageViewComponent';
+import { LoggingSvc } from './LoggingService';
+import { TrekImageSet, TrekImage, TrekImageType,
+         IMAGE_TYPE_INFO, IMAGE_TYPE_PHOTO, IMAGE_TYPE_VIDEO, IMAGE_STORE_COMPRESSED,
+         IMAGE_COMPRESSION_QUALITY,
+         ImageSvc, } from './ImageService';
+import { MainSvc, RESP_CANCEL } from './MainSvc';
+import { TrekSvc } from './TrekSvc';
 
 const goBack = NavigationActions.back() ;
 
-@inject('trekInfo', 'uiTheme', 'utilsSvc', 'modalSvc', 'toastSvc', 'storageSvc', 'groupSvc')
+@inject('mainSvc', 'trekSvc', 'uiTheme', 'utilsSvc', 
+        'modalSvc', 'toastSvc', 'storageSvc', 'groupSvc', "loggingSvc", "imageSvc",
+)
 @observer
 class TrekImages extends Component<{
   uiTheme ?: any,
+  mainSvc ?: MainSvc,
   utilsSvc ?: UtilsSvc,
   modalSvc ?: ModalModel,
-  groupSvc ?: GroupSvc,
-  trekInfo ?: TrekInfo,
   toastSvc ?: ToastModel,
+  groupSvc ?: GroupSvc,
+  trekSvc ?: TrekSvc,
+  loggingSvc?: LoggingSvc;
   storageSvc ?: StorageSvc,
+  imageSvc ?: ImageSvc,
   navigation ?: any
 }, {} > {
 
-  static navigationOptions = ({ navigation }) => {
-    const params = navigation.state.params || {};
-    const cmd = params.cmd;
-    const headerActions = [
-      {icon: 'Delete', color: "white", style: {}, actionFn: params.deleteImage}
-    ];
+  _didFocusSubscription;
+  _willBlurSubscription;
 
-    switch (cmd) {
-      case 'show':
-        return {
-          header: <TrekLogHeader titleText={params.title || ' '}
-                                      icon={params.icon || ''}
-                                      actionButtons={headerActions}
-                                      backgroundColor="rgba(0,0,0,.4)"
-                                      textColor="white"
-                                      position="absolute"
-                                      backButtonFn={() =>  navigation.dispatch(goBack)}
-                  />
-        }
-      case 'camera':
-      return {
-        header: <TrekLogHeader titleText={params.title || ' '}
-                                    icon="*"
-                                    backgroundColor="rgba(0,0,0,.4)"
-                                    textColor="white"
-                                    position="absolute"
-                                    backButtonFn={() =>  navigation.dispatch(goBack)}
-                />
-      }
-    case 'hide':
-      default:
-        return {
-          header: null
-        }
-    };
-  }  
-
-  tInfo = this.props.trekInfo;
+  mS = this.props.mainSvc;
   gS = this.props.groupSvc;
+  tS = this.props.trekSvc;
+  iS = this.props.imageSvc;
 
+  // navigation parameters
+  tInfo: TrekInfo;
   currentImageSet       : TrekImageSet;
   currentImageSetIndex  : number;
   backgroundTimeoutID   : number;
-  headerTitle = '';
+  headerIcon            : string;
+  headerIconColor       : string;
+  saveTrekAfterEdit         : boolean;
   
 
   camera            : any;
   cameraData        : any;
+  cameraIsBusy      : boolean = false;
   imageZoomRef      : any;
   videoPlayerRef    : any;
   imageType         : TrekImageType;
   videoDurationStr  : string;
   cameraSwitching   : boolean = false;
-  imageTime         : number;
-  mode              : string;
+  imageTime         : SortDate;
   headerVisible     : boolean = true;
   timeoutID         : number;
+  mode              : string;
 
+
+  @observable headerType              : string;
+  @observable headerTitle             : string;
   @observable cameraIsOpen            : boolean;
   @observable videoRecording          : boolean;
   @observable picturePaused           : boolean;
@@ -114,17 +97,30 @@ class TrekImages extends Component<{
   @observable currentVideoPos         : number;
   @observable videoDuration           : number;
   @observable waitingForSave          : boolean;
+  @observable showNote                : boolean;
+  @observable headerActions           : any[];
 
 
   constructor(props) {
     super(props);
-}
+    this._didFocusSubscription = props.navigation.addListener(
+      "didFocus",
+      () => {
+        BackHandler.addEventListener(
+          "hardwareBackPress",
+          this.onBackButtonPressAndroid
+        );
+      }
+    );
+  }
 
   componentWillMount() {
-    let cmd = this.props.navigation.getParam('cmd');
-
-    this.mode = cmd;
-    // this.hideStatusBar();
+    this.tInfo = this.props.navigation.getParam('trek');
+    this.mode = this.props.navigation.getParam('cmd');
+    this.headerIcon = this.props.navigation.getParam('icon', this.tInfo.type);
+    this.headerIconColor = this.props.navigation.getParam('iconColor' , 
+                                                        TREK_TYPE_COLORS_OBJ[this.tInfo.type]);
+    this.saveTrekAfterEdit = this.props.navigation.getParam('saveAfterEdit', true)
     this.setCameraIsOpen(false);
     this.setVideoRecording(false);
     this.setPicturePaused(false);
@@ -139,8 +135,9 @@ class TrekImages extends Component<{
     this.setCurrentVideoPos(0);
     this.setVideoDuration(0);
     this.setWaitingForSave(false);
+    this.setShowNote(false);
 
-    switch(cmd){
+    switch(this.mode){
       case 'camera':
         this.openCamera();
         break;
@@ -151,11 +148,23 @@ class TrekImages extends Component<{
         break;
       default:
     }
-    this.props.navigation.setParams({ deleteImage: this.deleteCurrentImage });
 
   }
 
+  componentDidMount() {
+    this._willBlurSubscription = this.props.navigation.addListener(
+      "willBlur",
+      () =>
+        BackHandler.removeEventListener(
+          "hardwareBackPress",
+          this.onBackButtonPressAndroid
+        )
+    );
+  }
+
   componentWillUnmount() {
+    this._didFocusSubscription && this._didFocusSubscription.remove();
+    this._willBlurSubscription && this._willBlurSubscription.remove();
     window.clearTimeout(this.backgroundTimeoutID);
     this.setCameraIsOpen(false);
     this.setVideoRecording(false);
@@ -164,7 +173,19 @@ class TrekImages extends Component<{
     this.setVideoPaused(true);
     this.setVideoLoaded(false);
     this.currentImageSet = undefined;
-    // this.showStatusBar();
+  }
+
+  checkBackButton = () => {
+    if (!this.onBackButtonPressAndroid()) {
+      this.props.navigation.dispatch(goBack);
+    }
+  };
+
+  onBackButtonPressAndroid = () => {
+    if(this.mS.trekLabelFormOpen){
+      return true;
+    }
+    return false;
   }
 
   hideStatusBar= () => {
@@ -179,6 +200,15 @@ class TrekImages extends Component<{
     })
   }
   
+  @action
+  setShowNote = (status: boolean) => {
+    this.showNote = status;
+  }
+
+  toggleShowNote = () => {
+    this.setShowNote(!this.showNote);
+  }
+
   cancelHideControlsTimer = () => {
     if (this.timeoutID !== undefined) {
       window.clearTimeout(this.timeoutID);
@@ -193,12 +223,22 @@ class TrekImages extends Component<{
     }, 3000);
   }
 
+  @action
+  setHeaderTitle = (title: string) => {
+    this.headerTitle = title;
+  }
+
+  @action
+  setHeaderType = (type: string) => {
+    this.headerType = type;
+  }
+
   hideHeader= () => {
-    this.props.navigation.setParams({cmd: 'hide'});
+    this.setHeaderType('hide');
   }
   
   showHeader= () => {
-    this.props.navigation.setParams({cmd: this.mode});
+    this.setHeaderType(this.mode);
   }
   
   setHeaderNotVisible = () => {
@@ -223,6 +263,12 @@ class TrekImages extends Component<{
   setWaitingForSave = (status: boolean) => {
     this.waitingForSave = status;
   }
+
+  @action
+  setMode = (value: string) => {
+    this.mode = value;
+  }
+
   // set the value of the openCamera property
   @action
   setCameraIsOpen = (status: boolean) => {
@@ -277,16 +323,19 @@ class TrekImages extends Component<{
   }
 
   // set the value of the currentImage property
-  @action
+  @action 
   setCurrentImage = (image: TrekImage) => {
+    this.setHeaderTitle(this.tS.formatImageTitle(this.tInfo, 
+                                    this.currentImageSetIndex, this.currentImageIndex));
     this.currentImage = image;
+    this.setHeaderActions();
   }
 
   // set the value of the currentImageObject property
   @action
   setCurrentImageSet = (setIndex: number, imageSel: any) => {
     this.currentImageSetIndex = setIndex;
-    if (setIndex >= 0) {
+    if (this.tInfo.trekImages && setIndex >= 0) {
       let n: number;
       this.currentImageSet = this.tInfo.trekImages[setIndex];
       switch(imageSel){
@@ -310,9 +359,9 @@ class TrekImages extends Component<{
     this.currentImageIndex = val;
     if(this.currentImageSet){
       this.setVideoLoaded(false);
-      let title = this.tInfo.formatImageTitle(this.currentImageSetIndex, val);
+      let title = this.tS.formatImageTitle(this.tInfo, this.currentImageSetIndex, val);
       this.props.navigation.setParams({title: title});
-      title = this.tInfo.formatImageTitle(this.currentImageSetIndex, val, true);
+      title = this.tS.formatImageTitle(this.tInfo, this.currentImageSetIndex, val, true);
       this.setImageBackgroundTextTimeout(title + ' is missing');
       let ci : TrekImage = {} as TrekImage;
       Object.assign(ci, this.currentImageSet.images[val]);
@@ -320,6 +369,7 @@ class TrekImages extends Component<{
         ci.uri = 'file://' + ci.uri;
       }
       this.setCurrentImage(ci);
+      //Revisit
       Image.getSize(ci.uri,
         (w, h) => {
           ci.width = w;
@@ -495,7 +545,7 @@ class TrekImages extends Component<{
 
   // return true if there is another image later in the trek
   haveNextImage = () => {
-    if (this.displayingImage && this.tInfo.haveTrekImages()){
+    if (this.displayingImage && this.tS.getTrekImageCount(this.tInfo) > 0){
       return ((this.currentImageIndex < this.currentImageSet.images.length - 1) || 
       (this.currentImageSetIndex < this.tInfo.trekImages.length - 1));
     }
@@ -504,7 +554,7 @@ class TrekImages extends Component<{
 
   // return true if there is another image earlier in the trek
   havePrevImage = () => {
-    if (this.displayingImage && this.tInfo.haveTrekImages()){
+    if (this.displayingImage && this.tS.getTrekImageCount(this.tInfo) > 0){
       return ((this.currentImageIndex > 0) || (this.currentImageSetIndex > 0));
     }
     return false;
@@ -528,7 +578,7 @@ class TrekImages extends Component<{
         this.setHeaderNotVisible();
         const options = {quality: RNCamera.Constants.VideoQuality["1080p"]};
         this.imageType = IMAGE_TYPE_VIDEO;
-        this.imageTime = new Date().getTime();
+        this.imageTime = this.props.utilsSvc.formatLongSortDate(null, null, new Date().getTime());
         this.camera.recordAsync(options)
         .then((data) => {
           this.cameraData = data;
@@ -550,16 +600,19 @@ class TrekImages extends Component<{
   };
     
   takePicture = () => {
-      if (this.camera) {
+      if (!this.cameraIsBusy && this.camera) {
+        this.cameraIsBusy = true;
         const options = {pauseAfterCapture: true, fixOrientation: true };
         this.imageType = IMAGE_TYPE_PHOTO;
         this.camera.takePictureAsync(options)
         .then((data) => {
           this.cameraData = data;
-          this.imageTime = new Date().getTime();
+          this.imageTime = this.props.utilsSvc.formatLongSortDate(null, null, new Date().getTime());
           this.setPicturePaused(true);
+          this.cameraIsBusy = false;
         })
         .catch((err) => {
+          this.cameraIsBusy = false;
           Alert.alert('Camera Error', err);
         })
       }
@@ -594,16 +647,24 @@ class TrekImages extends Component<{
     this.setWaitingForSave(true);
     this.compressImage(data, type)
     .then((compressedUri) => {
-      let imageName = this.props.utilsSvc.formatLongSortDate();
       // store image as longSortDate.extension (jpg, mp4, etc.)
-      this.props.storageSvc.saveTrekLogPicture(compressedUri, imageName)
+      this.props.storageSvc.saveTrekLogPicture(compressedUri, this.imageTime)
       .then((finalUri) => {
-        this.tInfo.addTrekImage(finalUri, data, type, loc.l, this.imageTime);
         this.setWaitingForSave(false);
-        this.props.toastSvc.toastOpen({tType: 'Info', content: IMAGE_TYPE_INFO[type].name + ' saved'});
-        this.resumeCameraPreview();
+        this.updateImageLabel("SKIP", type)
+        .then((resp: any)=> {
+          this.tS.addTrekImage(this.tInfo, finalUri, data, type, loc.l, this.imageTime,
+                                  resp.label, resp.notes);
+          this.props.toastSvc.toastOpen({tType: 'Info', content: IMAGE_TYPE_INFO[type].name + ' saved'});
+          this.resumeCameraPreview();
+        })
+        .catch(() =>{
+          this.tS.addTrekImage(this.tInfo, finalUri, data, type, loc.l, this.imageTime, undefined, undefined);
+          this.props.toastSvc.toastOpen({tType: 'Info', content: IMAGE_TYPE_INFO[type].name + ' saved'});
+          this.resumeCameraPreview();
+        })             // had error saving trek  
       })
-      .catch((error) => {
+      .catch((error) => {           // had error saving image
         this.setWaitingForSave(false);
         this.props.toastSvc.toastOpen({tType: 'Error',content: 'Error saving ' + 
                                               IMAGE_TYPE_INFO[type].name + ': ' + error, time: 3000});
@@ -620,8 +681,8 @@ class TrekImages extends Component<{
 
   keepThisImage = () => {
     // open form for label and note here
-    this.handlePicture(this.cameraData, this.imageType, this.tInfo.lastPoint());
     this.setShowVideoControls(true);
+    this.handlePicture(this.cameraData, this.imageType, this.tS.lastPoint(this.tInfo));
   }
 
   deleteCurrentImage = () => {
@@ -631,15 +692,15 @@ class TrekImages extends Component<{
     content: "Delete this  " + IMAGE_TYPE_INFO[type].name + "?", 
     cancelText: 'CANCEL', okText: 'YES', headingIcon: IMAGE_TYPE_INFO[type].icon})
     .then(() => {
-      let newIndx = this.tInfo.deleteTrekImage(this.currentImageSetIndex, this.currentImageIndex);
+      let newIndx = this.tS.deleteTrekImage(this.tInfo, this.currentImageSetIndex, this.currentImageIndex);
       if (newIndx !== -1) {
         this.setCurrentImageIndex(newIndx);
       } else {
-        if (this.currentImageSetIndex < this.tInfo.getTrekImageSetCount()) {
+        if (this.currentImageSetIndex < this.tS.getTrekImageSetCount(this.tInfo)) {
           this.setCurrentImageSet(this.currentImageSetIndex, "first");
         }
         else {
-          if (this.tInfo.getTrekImageCount() > 0) {
+          if (this.tS.getTrekImageCount(this.tInfo) > 0) {
             this.setCurrentImageSet(this.currentImageSetIndex - 1, "last");
           }
           else {
@@ -653,9 +714,82 @@ class TrekImages extends Component<{
     })
   }
 
+  // Let the user add/edit a label and note for the image
+  updateImageLabel = (cancelText: string, type: number,
+                      oldLabel?: string, oldNote?: string) => {
+    return new Promise((resolve, reject) => {
+      this.mS.setTrekLabelFormOpen(true);
+      this.props.modalSvc
+        .openLabelForm({
+          heading: IMAGE_TYPE_INFO[type].name + " Description",
+          label: oldLabel,
+          notes: oldNote,
+          headingIcon: "NoteText",
+          okText: "SAVE",
+          cancelText: cancelText,
+        })
+        .then((resp: any) => {
+          this.mS.setTrekLabelFormOpen(false);
+          resolve(resp);
+        })
+        .catch(() => {
+          this.mS.setTrekLabelFormOpen(false);
+          reject(RESP_CANCEL);
+        });
+    });
+  }
+
+  // allow user to edit image notes/label for existing trek image
+  editImageLabel = () => {
+    let ci = this.currentImage;
+    this.updateImageLabel("CANCEL", ci.type, ci.label, ci.note)
+    .then((resp: any) => {
+      this.tS.updateTrekImage(this.tInfo, this.currentImageSetIndex, this.currentImageIndex, 
+                {label: resp.label, note: resp.notes});
+      if (this.saveTrekAfterEdit){
+        this.mS
+        .saveTrek(this.tInfo)
+        .then(() => {
+          this.iS.updateAllImagesEntry(ci.sDate, ci.uri, {label: resp.label, note: resp.notes});
+          this.setCurrentImageIndex(this.currentImageIndex)
+          this.props.toastSvc.toastOpen({
+            tType: "Success",
+            content: "Image Description updated."
+          });
+        })
+        .catch(() => {
+          this.props.toastSvc.toastOpen({
+            tType: "Error",
+            content: "Error updating image description."
+          });
+        });
+      } else {        // no save after edit
+        this.setCurrentImageIndex(this.currentImageIndex)
+        this.props.toastSvc.toastOpen({
+          tType: "Success",
+          content: "Image Description updated."
+        });
+      }
+    })
+    .catch(() =>{});    // CANCEL
+  }
+
+  @action
+  setHeaderActions = () => {
+    let headerActions = [];
+    if(this.currentImage){
+      headerActions.push({icon: 'Edit', style: {marginTop: 0}, actionFn: this.editImageLabel});
+      if(this.currentImage.note){
+        headerActions.push({icon: 'NoteText', style: {marginTop: 0}, actionFn: this.toggleShowNote});
+      }
+      headerActions.push({icon: 'Delete', style: {marginTop: 0}, actionFn: this.deleteCurrentImage});
+    }
+    this.headerActions = headerActions;
+  }
+
   render () {
     const { trekLogGreen, trekLogRed, mediumTextColor, pageBackground
-          } = this.props.uiTheme.palette[this.tInfo.colorTheme];
+          } = this.props.uiTheme.palette[this.mS.colorTheme];
     const { navIcon, fontRegular } = this.props.uiTheme;
     const noPrev = !this.havePrevImage();
     const noNext = !this.haveNextImage();
@@ -663,11 +797,6 @@ class TrekImages extends Component<{
     const cameraControlButtonSize = 72;
     const cameraControlIconSize = 48;
     const controlsColor = semitransWhite_8;
-    const cWidth = Dimensions.get('window').width;
-    const cHeight = Dimensions.get('window').height;
-    const iHeight = (this.currentImage && this.currentImage.width)
-                    ? cWidth * (this.currentImage.height / this.currentImage.width)
-                    : cHeight;
     const buttonBorderColor = semitransBlack_5;
     
     const styles = StyleSheet.create({
@@ -828,6 +957,24 @@ class TrekImages extends Component<{
 
     return (
       <View style={styles.container}>
+        {this.headerType === 'show' &&
+          <TrekLogHeader titleText={this.headerTitle}
+                                      icon={this.headerIcon}
+                                      iconColor={this.headerIconColor}
+                                      actionButtons={this.headerActions}
+                                      textColor="white"
+                                      position="absolute"
+                                      backButtonFn={this.checkBackButton}
+          />
+        }
+        {this.headerType === 'camera' &&
+          <TrekLogHeader titleText={this.headerTitle || 'Use Camera'}
+                                      icon="*"
+                                      textColor="white"
+                                      position="absolute"
+                                      backButtonFn={this.checkBackButton}
+          />
+        }
         {(this.waitingForSave) &&
           <Waiting 
             msg={' Saving ' + IMAGE_TYPE_INFO[this.imageType].name + '... '}
@@ -896,73 +1043,18 @@ class TrekImages extends Component<{
               <View style={styles.imageBackground}>
                 <Text style={styles.imageBackgroundMsg}>{this.imageBackgroundText}</Text>
               </View>
-                {this.currentImage &&
-                  <View style={{flex: 1}}>
-                    {(this.currentImage.type === IMAGE_TYPE_PHOTO) &&
-                      <ImageZoom 
-                        ref={ref => { this.imageZoomRef = ref;}}
-                        cropWidth={cWidth}
-                        cropHeight={cHeight}
-                        imageWidth={cWidth}
-                        imageHeight={iHeight}
-                        onClick={this.toggleShowVideoContols}
-                      >
-                        <Image source={{uri: this.currentImage.uri}} 
-                          style={{flex:1}}
-                          onLoad={this.clearImageBackgroundTextTimeout}
-                        />
-                      </ImageZoom>
-                    }
-                    {(this.currentImage.type === IMAGE_TYPE_VIDEO) &&
-  // @ts-ignore
-                      <Video source={{uri: this.currentImage.uri}}      
-                        ref={(ref) => { this.videoPlayerRef = ref }}    // Store reference
-                        onLoad={this.videoLoad} 
-                        onEnd={this.videoEnded}
-                        onProgress={this.newVideoPos}
-                        onSeek={this.newVideoPos}
-                        reportBandwidth={false}
-                        // onError={this.videoError}               // Callback when video cannot be loaded
-                        paused={this.videoPaused}
-                        onTouchEnd={this.toggleShowVideoContols}
-                        muted={this.audioMuted}
-                        resizeMode="cover"
-                        progressUpdateInterval={1500}
-                        style={this.videoLoaded ? {flex: 1} : undefined} 
-                      />
-                    }
-                    {((this.currentImage.type === IMAGE_TYPE_VIDEO && this.videoLoaded) 
-                        && this.showVideoControls) &&
-                      <View style={styles.videoControlsArea}>
-                        <View style={styles.videoControls}>
-                          {this.audioMuted &&
-                            <CameraControl icon={"Speaker"} onPress={this.toggleAudioMuted}/>
-                          }
-                          {!this.audioMuted &&
-                            <CameraControl icon={"SpeakerOff"} onPress={this.toggleAudioMuted}/>
-                          }
-                          {this.videoPaused &&
-                            <CameraControl icon={"Play"} onPress={this.toggleVideoPaused}/>
-                          }
-                          {!this.videoPaused &&
-                            <CameraControl icon={"Pause"} onPress={this.toggleVideoPaused}/>
-                          }
-                        </View>
-                        <View style={styles.sliderArea}>
-                          <Text style={styles.sliderText}>
-                            {this.props.utilsSvc.timeFromSeconds(this.currentVideoPos)}</Text>
-                          <Slider
-                            style={{flex: 1}}
-                            step={1}
-                            maximumTrackTintColor="rgba(255, 255, 102, .8)"
-                            maximumValue={this.videoDuration}
-                            onValueChange={this.setNewVideoPos}
-                            value={this.currentVideoPos}
-                          />                        
-                          <Text style={styles.sliderText}>{this.videoDurationStr}</Text>
-                        </View>
-                      </View>
-                    }
+              {this.currentImage &&
+                <View style={[styles.container,{top: HEADER_HEIGHT, justifyContent: "center", flex: 1}]}>
+                    <ImageView  imageUri={this.currentImage.uri}
+                                imageType={this.currentImage.type}
+                                imageLabel={this.currentImage.label}
+                                imageNote={this.currentImage.note}
+                                showNote={this.showNote}
+                                imageHeight={this.currentImage.height}
+                                imageWidth={this.currentImage.width}
+                                imageDate={this.currentImage.sDate}
+                                clearTimeoutFn={this.clearImageBackgroundTextTimeout}
+                    />
                     {(((this.currentImage.type !== IMAGE_TYPE_VIDEO) || this.videoPaused)
                         && this.showVideoControls) && 
                       <View style={styles.imageSelectorArea}>

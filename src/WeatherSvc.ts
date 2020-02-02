@@ -70,7 +70,6 @@ callWeatherSvc(params: WeatherRequest, tryCount?: number): Promise<void | Weathe
   return fetch(url + queryStr)
   .then(response => response.json())  
   .catch((err) => {
-    // alert("weather API error - " + tryCount + '|' + err)
     if (tryCount < 2){
       this.toastSvc.toastOpen({tType: 'Info', content: 'Retrying Weather Service. ' + (tryCount+1)});
         this.callWeatherSvc(params, tryCount+1);

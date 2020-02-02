@@ -3,13 +3,13 @@ import { View, StyleSheet } from 'react-native';
 import { BorderlessButton, LongPressGestureHandler, State } from 'react-native-gesture-handler'
 import { observer, inject } from 'mobx-react';
 import SvgIcon from './SvgIconComponent';
-import { TrekInfo } from './TrekInfoModel';
+import { MainSvc } from './MainSvc';
 
-@inject('uiTheme', 'trekInfo')
+@inject('uiTheme', 'mainSvc')
 @observer
 class SvgButton extends Component<{
   uiTheme ?: any,
-  trekInfo ?: TrekInfo,
+  mainSvc ?: MainSvc,
   value ?: string,          // value of the current selection
   onPressFn ?:  Function,   // call this when button pressed
   onLongPressFn ?: Function, // call this when botton longPressed
@@ -18,7 +18,7 @@ class SvgButton extends Component<{
   stroke ?:  string,        // color for the svg outline
   path ?:   any[],         // svg path for the imiage
   size ?: number,           // size of the the button the image will be smaller
-  areaOffset ?: number,     // amount to shrink the button image by (10 is default)
+  areaOffset ?: number,     // amount to shrink the button image by (0 is default)
   highlight ?: boolean,     // true if this button is to show a highlight border
   highlightColor ?: string, // color for highlight border (defaults to purple-ish)
   elevWithHighlight ?: boolean,  // true if elevate button with highlight
@@ -40,7 +40,6 @@ class SvgButton extends Component<{
   }
 
   buttonLongPressed = ({ nativeEvent }) => {
-    // alert(nativeEvent.state)
    if ( nativeEvent.state === State.ACTIVE || 
         nativeEvent.state === State.END || 
         nativeEvent.state === State.CANCELLED) {
@@ -71,12 +70,12 @@ class SvgButton extends Component<{
 
   render() {
     const { highlightColor, dividerColor, rippleColor, disabledTextColor
-          } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
+          } = this.props.uiTheme.palette[this.props.mainSvc.colorTheme];
 
-    const areaOffset = this.props.areaOffset === undefined ? 10 : this.props.areaOffset;
+    const areaOffset = this.props.areaOffset === undefined ? 0 : this.props.areaOffset;
     const iconAreaSize = this.props.size || 50;
     const iconSize =  iconAreaSize - areaOffset;
-    const iconOffset = this.props.borderWidth !== undefined ? this.props.borderWidth : 3;
+    const iconOffset = this.props.borderWidth !== undefined ? this.props.borderWidth : 0;
     const propStyle = this.props.style || {};
     const htAdj = this.props.svgHeightAdj || 0;
     const widAdj = this.props.svgWidthAdj || 0;
@@ -93,8 +92,9 @@ class SvgButton extends Component<{
         marginLeft: 6,
         marginRight: 6,
         backgroundColor: "transparent",
-        borderWidth: this.props.borderWidth !== undefined ? this.props.borderWidth : 1,
-        borderBottomWidth: this.props.borderWidth !== undefined ? this.props.borderWidth : 2,
+        alignItems: "center",
+        borderWidth: this.props.borderWidth !== undefined ? this.props.borderWidth : 0,
+        borderBottomWidth: this.props.borderWidth !== undefined ? this.props.borderWidth : 0,
         borderStyle: "solid",
         borderColor: dividerColor,
       },
@@ -103,7 +103,6 @@ class SvgButton extends Component<{
         borderBottomWidth: 2,
       },
       appIcon: {
-        marginRight: 5,
         width: iconSize + widAdj,
         height: iconSize + htAdj,
         backgroundColor: "transparent",

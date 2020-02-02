@@ -6,24 +6,26 @@ import { observer, inject } from "mobx-react";
 
 import TrekLogHeader from './TreklogHeaderComponent'
 import Conditions from './ConditionsComponent';
-import { TrekInfo } from "./TrekInfoModel";
 import NavMenu, { NavMenuItem } from './NavMenuComponent';
 import PageTitle from './PageTitleComponent';
+import { MainSvc } from './MainSvc';
 
 const goBack = NavigationActions.back() ;
 
-@inject("trekInfo", "uiTheme")
+@inject("mainSvc", "uiTheme")
 @observer
 class ShowConditions extends Component<{
   uiTheme?: any;
-  trekInfo?: TrekInfo;
+  mainSvc?: MainSvc;
   navigation?: any}, {} > {
 
   @observable openNavMenu : boolean;
+  headerActions = [];
 
   constructor(props) {
     super(props);
     this.setOpenNavMenu(false);
+    this.setHeaderActions();
   }
 
   @action
@@ -41,27 +43,19 @@ class ShowConditions extends Component<{
         case "Home":
           this.props.navigation.dispatch(StackActions.popToTop());
           break;
-        case "Summary":
-        case "Courses":
-        case "Goals":
-        case "Settings":
-        const resetAction = StackActions.reset({
-                index: 1,
-                actions: [
-                  NavigationActions.navigate({ routeName: 'Log', key: 'Home' }),
-                  NavigationActions.navigate({ routeName: val, key: 'Key-' + val }),
-                ],
-              });
-          this.props.navigation.dispatch(resetAction);          
-          break;
         default:
       }
     })
   }
   
+  setHeaderActions = () => {
+    this.headerActions.push(
+      {icon: 'YinYang', style: {marginTop: 0}, actionFn: this.props.mainSvc.swapColorTheme});
+  }
+
   render() {
     const { pageBackground
-          } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
+          } = this.props.uiTheme.palette[this.props.mainSvc.colorTheme];
     const { cardLayout
           } = this.props.uiTheme;
     const styles = StyleSheet.create({
@@ -70,10 +64,7 @@ class ShowConditions extends Component<{
     let navMenuItems : NavMenuItem[] = 
     [ 
         {icon: 'Home', label: 'Home', value: 'Home'},
-        {icon: 'Pie', label: 'Activity', value: 'Summary'},
-        {icon: 'Course', label: 'Courses', value: 'Courses'},
-        {icon: 'Target', label: 'Goals', value: 'Goals'},
-        {icon: 'Settings', label: 'Settings', value: 'Settings'}]  
+    ]  
     
 
     return (
@@ -87,12 +78,13 @@ class ShowConditions extends Component<{
           <TrekLogHeader
             icon="*"
             titleText="Conditions"
+            actionButtons={this.headerActions}
             backButtonFn={() =>  this.props.navigation.dispatch(goBack)}
             openMenuFn={this.openMenu}
           />
           <View style={[cardLayout, {marginBottom: 0, paddingBottom: 15}]}>
             <PageTitle titleText="At Your Location" style={{paddingLeft: 0}}
-                        colorTheme={this.props.trekInfo.colorTheme}
+                        colorTheme={this.props.mainSvc.colorTheme}
             />
           </View>
           <Conditions/>

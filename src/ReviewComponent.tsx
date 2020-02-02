@@ -1,15 +1,16 @@
 // This component allows the review of past treks.  Treks can be filtered and sorted using various criteria.
 
 import React, { Component } from "react";
-import { View, StyleSheet, Text, ScrollView, Dimensions } from "react-native";
+import { View, StyleSheet, Text, ScrollView, Dimensions, BackHandler } from "react-native";
 import { observer, inject } from "mobx-react";
 import { action, observable } from "mobx";
 import { NavigationActions, StackActions } from "react-navigation";
 
 import { FilterSvc, SORTDIRECTION_ASCEND } from "./FilterService";
-import { TrekInfo, TrekObj, RESP_CANCEL, MSG_HAS_LINK, RESP_OK, MSG_LINK_ADDED,
+import { TrekObj } from './TrekInfoModel';
+import {  MainSvc, RESP_CANCEL, MSG_HAS_LINK, RESP_OK, MSG_LINK_ADDED,
           SortByTypes,
-          MSG_NO_LIST, MSG_NEW_COURSE_RECORD, MSG_NEW_COURSE } from "./TrekInfoModel";
+          MSG_NO_LIST, MSG_NEW_COURSE_RECORD, MSG_NEW_COURSE, MSG_NONE_NEARBY } from "./MainSvc";
 import { UtilsSvc } from "./UtilsService";
 import { ModalModel } from "./ModalModel";
 import { HEADER_HEIGHT, PAGE_TITLE_HEIGHT, TREK_TYPE_COLORS_OBJ } from "./App";
@@ -30,13 +31,15 @@ import SvgYAxis, { YAXIS_TYPE_MAP } from './SvgYAxisComponent';
 import SvgGrid from './SvgGridComponent';
 import NavMenu from './NavMenuComponent';
 import PageTitle from './PageTitleComponent';
+import { TrekSvc } from "./TrekSvc";
 
 const pageTitleFormat = {marginBottom: 5};
 
 const goBack = NavigationActions.back();
 
 @inject(
-  "trekInfo",
+  "mainSvc",
+  "trekSvc",
   "utilsSvc",
   "uiTheme",
   "modalSvc",
@@ -60,7 +63,8 @@ class ReviewTreks extends Component<
     groupSvc?: GroupSvc;
     uiTheme?: any;
     navigation?: any;
-    trekInfo?: TrekInfo; // object with all non-gps information about the Trek
+    trekSvc?: TrekSvc; // object with all non-gps information about the Trek
+    mainSvc?: MainSvc;
   },
   {}
 > {
@@ -72,16 +76,28 @@ class ReviewTreks extends Component<
   @observable updateView;
   @observable openNavMenu : boolean;
 
-  tInfo = this.props.trekInfo;
+  mS = this.props.mainSvc;
+  tS = this.props.trekSvc;
   fS = this.props.filterSvc;
   courseSvc = this.props.courseSvc;
 
   activeNav: string = "";
   AFFIndex: number;
 
+  _didFocusSubscription;
+  _willBlurSubscription;
 
   constructor(props) {
     super(props);
+    this._didFocusSubscription = props.navigation.addListener(
+      "didFocus",
+      () => {
+        BackHandler.addEventListener(
+          "hardwareBackPress",
+          this.onBackButtonPressAndroid
+        );
+      }
+    );
     this.initializeObservables();
   }
 
@@ -89,22 +105,40 @@ class ReviewTreks extends Component<
   componentWillMount() {
     this.setOpenItems(false);
     this.AFFIndex = this.fS.setAfterFilterFn(this.runAfterFilterTreks);
-    this.fS.setDateMax(this.tInfo.dtMax, "None");
-    this.fS.setDateMin(this.tInfo.dtMin, "None");
-    this.fS.setTimeframe(this.tInfo.timeframe);   // 
+    this.fS.setDateMax(this.mS.dtMax, "None");
+    this.fS.setDateMin(this.mS.dtMin, "None");
+    this.fS.setTimeframe(this.fS.timeframe);   // 
     this.fS.buildAfterFilter();
   }
 
   componentDidMount() {
     this.setUpdateView(true);
+    this._willBlurSubscription = this.props.navigation.addListener(
+      "willBlur",
+      () =>
+        BackHandler.removeEventListener(
+          "hardwareBackPress",
+          this.onBackButtonPressAndroid
+        )
+    );
   }
 
+  @action
   componentWillUnmount() {
+    this._didFocusSubscription && this._didFocusSubscription.remove();
+    this._willBlurSubscription && this._willBlurSubscription.remove();
     this.fS.removeAfterFilterFn(this.AFFIndex - 1);
-    this.tInfo.clearTrek();
     this.fS.setSelectedTrekIndex(-1);
-    this.fS.setDataReady(false);
-    this.tInfo.restoreCurrentGroupSettings();
+  }
+
+  checkBackButton = () => {
+    if (!this.onBackButtonPressAndroid()) {
+      this.props.navigation.dispatch(goBack);
+    }
+  };
+
+  onBackButtonPressAndroid = () => {
+    return false;
   }
 
   // initialize all the observable properties in an action for mobx strict mode
@@ -167,15 +201,17 @@ class ReviewTreks extends Component<
   @action
   showTrekMap = (indx: number) => {
     if (this.fS.filteredTreks.length) {
-      let trek = this.tInfo.allTreks[this.fS.filteredTreks[indx]];
-      this.tInfo.setShowMapControls(true);
+      let trek = this.mS.allTreks[this.fS.filteredTreks[indx]];
+      this.mS.setShowMapControls(true);
       this.props.courseSvc.clearTrackingSnapshot();
       this.props.navigation.navigate({ 
           routeName: "SelectedTrek", 
           params: {
-            title: this.props.utilsSvc.formattedLocaleDateAbbrDay(trek.date) + "  " + trek.startTime,
-            icon: this.tInfo.type,
-            iconColor: TREK_TYPE_COLORS_OBJ[this.tInfo.type],
+            trek: this.fS.tInfo,
+            title: this.props.utilsSvc.formattedLocaleDateAbbrDay(trek.date) + 
+                                                                  "  " + trek.startTime.toLowerCase(),
+            icon: this.fS.tInfo.type,
+            iconColor: TREK_TYPE_COLORS_OBJ[this.fS.tInfo.type],
             switchSysFn: this.switchMeasurementSystem,
             changeTrekFn: this.changeTrek,
             checkTrekChangeFn: this.checkTrekChange,
@@ -209,19 +245,21 @@ class ReviewTreks extends Component<
       if (indx === -1) {
         resolve("");
       }
-      trek = this.tInfo.allTreks[this.fS.filteredTreks[indx]];
+      trek = this.mS.allTreks[this.fS.filteredTreks[indx]];
       this.fS.trekSelected(indx);
       resolve(
         this.props.utilsSvc.formattedLocaleDateAbbrDay(trek.date) +
         "  " +
-        trek.startTime
+        trek.startTime.toLowerCase()
       );
     })
   };
 
   // delete the trek (after confirmation) at 'index' in the filteredTreks list
   deleteTrek = (index: number) => {
-    let trek = this.tInfo.allTreks[this.fS.filteredTreks[index]];
+    let trek = this.mS.allTreks[this.fS.filteredTreks[index]];
+    let labelLine = this.tS.trekHasLabel(this.fS.tInfo) ? 
+                                ("\n" + "\"" + this.tS.getTrekLabel(this.fS.tInfo) + "\"") : '';
     let content =
       "Delete " +
       trek.type +
@@ -229,8 +267,7 @@ class ReviewTreks extends Component<
       trek.date +
       " " +
       trek.startTime +
-      "\n" +
-      this.tInfo.getTrekLabel();
+      labelLine;
     this.props.modalSvc
       .simpleOpen({
         heading: "Delete " + trek.type,
@@ -241,20 +278,22 @@ class ReviewTreks extends Component<
         allowOutsideCancel: true
       })
       .then(() => {
-        this.tInfo.setWaitingForSomething("NoMsg");
-        this.tInfo
+        this.mS.setWaitingForSomething("NoMsg");
+        this.mS
           .deleteTrek(trek)
           .then(() => {
-            this.tInfo.setWaitingForSomething();
+            this.mS.setWaitingForSomething();
             this.props.toastSvc.toastOpen({
               tType: "Success",
               content: trek.type + " has been deleted."
             });
             this.callFilterTreks();
-            this.fS.trekSelected(index ? index - 1 : 0)
+            if(!this.fS.filteredTreksEmpty()){
+              this.fS.trekSelected(index ? index - 1 : 0)
+            }
           })
           .catch(() => {
-            this.tInfo.setWaitingForSomething();
+            this.mS.setWaitingForSomething();
             this.props.toastSvc.toastOpen({
               tType: "Error",
               content: "Error: Trek NOT deleted."
@@ -269,13 +308,6 @@ class ReviewTreks extends Component<
     requestAnimationFrame(() => {
       this.activeNav = val;
       switch (val) {
-        case "Filter":
-          this.props.navigation.navigate({routeName: "ExtraFilters", params: {
-            title: this.fS.formatTitleMessage("Filter:"),
-            existingFilter: this.fS.getFilterSettingsObj(false),
-            mode: "Review"
-            }, key: "Key-ExtraFilters"});
-          break;
         case "Delete":
           this.deleteTrek(this.fS.selectedTrekIndex);
           break;
@@ -286,17 +318,17 @@ class ReviewTreks extends Component<
           this.addCourseOrEffort();
           break;
         case 'Upload':
-          this.props.storageSvc.writeTrekToMongoDb(this.tInfo.getSaveObj())
+          this.props.storageSvc.writeTrekToMongoDb(this.fS.tInfo.getSaveObj())
           .then(() => {
             this.props.toastSvc.toastOpen({
               tType: "Success",
-              content: 'Trek uploaded for ' + this.tInfo.group,
+              content: 'Trek uploaded for ' + this.fS.tInfo.group,
             })
           })
           .catch(() => {
             this.props.toastSvc.toastOpen({
               tType: "Error",
-              content: 'Trek not uploaded for ' + this.tInfo.group,
+              content: 'Trek not uploaded for ' + this.fS.tInfo.group,
             });
           })
           break;
@@ -307,7 +339,9 @@ class ReviewTreks extends Component<
           this.props.navigation.dispatch(StackActions.popToTop());
           break;
         case 'Help':
-          this.tInfo.showCurrentHelp();
+        this.props.navigation.navigate({routeName: 'ShowHelp', key: 'Key-ShowHelp'});
+        break;
+        case 'None':
           break;
         default:
       }
@@ -326,13 +360,14 @@ class ReviewTreks extends Component<
   // make this trek an effort of some course or use it to create a new course
   addCourseOrEffort = () => {
     if (this.fS.filteredTreks.length) {
-      let trek = this.tInfo.allTreks[this.fS.filteredTreks[this.fS.selectedTrekIndex]];
-      if(!trek.course || !this.courseSvc.isCourse(trek.course)) {
-        this.courseSvc.newCourseOrEffort(trek, this.setCoursePickerOpen)
+      let tI = this.fS.tInfo
+      if(!tI.course || !this.courseSvc.isCourse(tI.course)) {
+        this.courseSvc.newCourseOrEffort(tI, this.setCoursePickerOpen)
         .then((sel) => {
           switch(sel.resp){
             case RESP_CANCEL:
               break;
+              case MSG_NONE_NEARBY:
               case MSG_NO_LIST:
                 this.props.toastSvc.toastOpen({
                   tType: "Error",
@@ -345,16 +380,17 @@ class ReviewTreks extends Component<
             case RESP_OK:
               this.props.toastSvc.toastOpen({
                 tType: "Success",
-                content: MSG_LINK_ADDED + trek.type + " linked with course\n" + sel.name,
+                content: MSG_LINK_ADDED + tI.type + " linked with course\n" + sel.name,
               });
               break;
             case MSG_NEW_COURSE:
               this.props.navigation.navigate("SelectedTrek", {
+                trek: tI,
                 title:
-                  this.props.utilsSvc.formattedLocaleDateAbbrDay(trek.date) +
+                  this.props.utilsSvc.formattedLocaleDateAbbrDay(tI.date) +
                   "  " +
-                  trek.startTime,
-                icon: this.tInfo.type,
+                  tI.startTime.toLowerCase(),
+                icon: tI.type,
                 mapDisplayMode: 'noSpeeds, noIntervals',
                 takeSnapshotMode: 'New',
                 takeSnapshotName: sel.name,
@@ -373,7 +409,7 @@ class ReviewTreks extends Component<
       } else {
         this.props.toastSvc.toastOpen({
           tType: "Info",
-          content: MSG_HAS_LINK + 'This ' + trek.type + ' is already\nlinked to ' + trek.course,
+          content: MSG_HAS_LINK + 'This ' + tI.type + ' is already\nlinked to ' + tI.course,
         });
       }
     }
@@ -381,7 +417,8 @@ class ReviewTreks extends Component<
 
   // switch measurements system then update the bar graph
   switchMeasurementSystem = () => {
-    this.tInfo.switchMeasurementSystem();
+    this.mS.switchMeasurementSystem();
+    this.tS.updateCalculatedValues(this.fS.tInfo, false, true)
     this.fS.buildGraphData(this.fS.filteredTreks);
     this.fS.getFilterDefaults(this.fS.filteredTreks);
     this.forceUpdate();
@@ -439,11 +476,11 @@ class ReviewTreks extends Component<
         this.setOpenItems(false);
         this.fS.clearGroupList();
         newGroups.forEach((group) => this.fS.addGroupListItem(group));
-        this.tInfo.readAllTreks(this.fS.groupList)
+        this.mS.readAllTreks(this.fS.groupList)
         .then(() => {
           this.fS.setDataReady(false);
-          if(this.tInfo.timeframe !== 'All'){
-            this.fS.findActiveTimeframe(this.tInfo.timeframe);
+          if(this.fS.timeframe !== 'All'){
+            this.fS.findActiveTimeframe(this.fS.timeframe);
             this.fS.buildAfterFilter();
           } else {
             this.fS.filterTreks();
@@ -460,25 +497,32 @@ class ReviewTreks extends Component<
 
   // show the selected trek image
   showTrekImage = (set: number, image = 0) => {
-    let title = this.tInfo.formatImageTitle(set, image);
-    this.props.navigation.navigate('Images', {cmd: 'show', setIndex: set, imageIndex: image, title: title});
+    let title = this.tS.formatImageTitle(this.fS.tInfo, set, image);
+    this.props.navigation.navigate({
+      routeName: "Images", 
+      params: {cmd: 'show', 
+               setIndex: set, 
+               imageIndex: image, 
+               title: title,
+               trek: this.fS.tInfo
+      }, 
+      key: 'Key-Images'
+    });
   }
 
   // Display the map for the effort at the given index in trekList
-  showCourseEffort = () => {
-      let trek = this.tInfo.getSaveObj();
+  showCourseEffort = (trek: TrekObj) => {
       this.props.courseSvc.getCourse(trek.course)
       .then((course) => {
         let effort = this.props.courseSvc.getTrekEffort(course, trek);
-        this.tInfo.setTrackingMethod(effort.subject.method);
-        this.tInfo.setTrackingValue(effort.subject.goalValue);      
-        this.tInfo.setShowMapControls(true)
-        this.props.courseSvc.initCourseTrackingSnapshot(course, trek, effort)
+        this.mS.setShowMapControls(true)
+        this.props.courseSvc.initCourseTrackingSnapshot(course, trek, effort, 
+                              effort.method, effort.goalValue)
         .then(() => {        
-          // alert(JSON.stringify({...this.cS.trackingSnapshot, ...{coursePath: undefined, trekPath: undefined}},null,2))
           this.props.navigation.navigate("SelectedTrek", {
+            trek: this.fS.tInfo,
             title: this.props.utilsSvc.formatTrekDateAndTime(trek.date, trek.startTime),
-            icon: this.tInfo.type,
+            icon: trek.type,
             switchSysFn: this.switchMeasurementSystem,
           })
         })
@@ -486,11 +530,6 @@ class ReviewTreks extends Component<
       })
       .catch(() => {})
   };
-
-  // provide a fixed function to call from header back button so memoization works
-  callGoBack = () => {
-    this.props.navigation.dispatch(goBack)
-  }
 
   render() {
     if (!this.updateView) {
@@ -509,39 +548,38 @@ class ReviewTreks extends Component<
     }
 
     const {height, width} = Dimensions.get('window');
-    const extraFilters = this.fS.extraFilterSet();
     const pageTitleSpacing = 20;
-    const statusBarHt = 0;
     const sortControlsHt = 30;
-    const areaHt = height - (statusBarHt + pageTitleSpacing + HEADER_HEIGHT + PAGE_TITLE_HEIGHT);
+    const graphHeight = 210;
+    const areaHt = height - (graphHeight + pageTitleSpacing + HEADER_HEIGHT + PAGE_TITLE_HEIGHT);
     const { cardLayout } = this.props.uiTheme;
     const {
       disabledTextColor,
       pageBackground,
       trekLogBlue,
       mediumTextColor,
-    } = this.props.uiTheme.palette[this.tInfo.colorTheme];
+      bottomBorder,
+    } = this.props.uiTheme.palette[this.mS.colorTheme];
     const gotTreks = this.fS.dataReady && !this.fS.filteredTreksEmpty();
     const graphBgColor = pageBackground;
-    const graphHeight = 210;
     const maxBarHeight = 160;
     const graphAreaWidth = width;
     const yAxisWidth = 60;
     const graphWidth = graphAreaWidth - yAxisWidth - 10;
     const sortAsc = this.fS.sortDirection === SORTDIRECTION_ASCEND;
-    const hasNoCourse = !this.tInfo.course || !this.props.courseSvc.isCourse(this.tInfo.course);
+    const hasNoCourse = !this.fS.tInfo.course || !this.props.courseSvc.isCourse(this.fS.tInfo.course);
+    const multiGroup = this.fS.groupList.length > 1;
     let navMenuItems = 
     [ gotTreks ? 
         {label: 'Review Options', 
          submenu: [
           {icon: 'Delete', label: 'Delete', value: 'Delete'},
-          {icon: extraFilters ? 'FilterRemove' : 'Filter', label: 'Edit Filters', value: 'Filter'},
           {icon: 'Map', label: 'View Map', value: 'Map'},
           // {icon: 'Upload', label: 'Upload Trek', value: 'Upload'},
         ]} :
         {label: 'Review Options', 
          submenu: [
-          {icon: extraFilters ? 'FilterRemove' : 'Filter', label: 'Edit Filters', value: 'Filter'},
+          {label: 'None', value: 'None'},
         ]},
         {icon: 'Home', label: 'Home', value: 'Home'},
         {icon: 'ArrowBack', label: 'Activity', value: 'GoBack'},
@@ -569,8 +607,8 @@ class ReviewTreks extends Component<
         paddingLeft: 0
       },
       graphAndStats: {
-        marginBottom: 5,
-        marginRight: 10,
+        paddingBottom: 5,
+        paddingRight: 10,
         height: graphHeight
       },
       graphArea: {
@@ -601,10 +639,10 @@ class ReviewTreks extends Component<
         fontSize: 16
       },
       sortCtrls: {
-        flexDirection: "row",
-        justifyContent: "flex-end",
-        alignItems: "center",
-        marginHorizontal: 5,
+        position: "absolute",
+        left: 5,
+        top: 2,
+        zIndex: 10,
         height: sortControlsHt,
       },
       scrollArea: {
@@ -638,53 +676,47 @@ class ReviewTreks extends Component<
               <TrekLogHeader
                 titleText={this.headerTitle}
                 icon="*"
-                backButtonFn={this.callGoBack}
+                backButtonFn={this.checkBackButton}
                 openMenuFn={this.openMenu}
               />
               <RadioPicker pickerOpen={this.coursePickerOpen} />
               <View style={[cardLayout, styles.noPadding, {paddingTop: 10, marginBottom: 0}]}>
                 <PageTitle 
-                  colorTheme={this.tInfo.colorTheme}
+                  colorTheme={this.mS.colorTheme}
                   titleText="Trek Review"
-                  groupName={this.fS.groupList.length === 1 ? this.fS.groupList[0] : "Multiple"}
+                  groupName={multiGroup ? "Multiple" : this.fS.groupList[0]}
                   style={pageTitleFormat}
                 />
                 {gotTreks && 
-                  <View style={styles.scrollArea}>
-                    <ScrollView>
                       <View style={[cardLayout, styles.noPadding, {marginTop: 0}]}>
-                        <View style={styles.sortCtrls}>
-                          {this.fS.sortByDate && (
-                            <SvgButton
-                              onPressFn={this.fS.toggleSort}
-                              borderWidth={0}
-                              areaOffset={0}
-                              size={30}
-                              fill={trekLogBlue}
-                              path={
-                                APP_ICONS[
-                                  this.fS.sortDirection === "Descend"
-                                    ? "CalendarSortNewest"
-                                    : "CalendarSortOldest"
-                                ]
-                              }
-                            />
-                          )}
-                          {!this.fS.sortByDate && (
-                            <SvgButton
-                              onPressFn={this.fS.toggleSort}
-                              style={sortAsc ? {transform: ([{ rotateX: "180deg" }])} : {}}
-                              borderWidth={0}
-                              areaOffset={0}
-                              size={30}
-                              fill={trekLogBlue}
-                              path={
-                                APP_ICONS.Sort
-                              }
-                            />
-                          )}
-                        </View>
-                        <View style={styles.graphAndStats}>
+                        <View style={[styles.graphAndStats, bottomBorder]}>
+                          <View style={styles.sortCtrls}>
+                            {this.fS.sortByDate && (
+                              <SvgButton
+                                onPressFn={this.fS.toggleSort}
+                                size={30}
+                                fill={trekLogBlue}
+                                path={
+                                  APP_ICONS[
+                                    this.fS.sortDirection === "Descend"
+                                      ? "CalendarSortNewest"
+                                      : "CalendarSortOldest"
+                                  ]
+                                }
+                              />
+                            )}
+                            {!this.fS.sortByDate && (
+                              <SvgButton
+                                onPressFn={this.fS.toggleSort}
+                                style={sortAsc ? {transform: ([{ rotateX: "180deg" }])} : {}}
+                                size={30}
+                                fill={trekLogBlue}
+                                path={
+                                  APP_ICONS.Sort
+                                }
+                              />
+                            )}
+                          </View>
                           <View style={styles.graphArea}>
                             <SvgYAxis
                               graphHeight={graphHeight}
@@ -703,9 +735,8 @@ class ReviewTreks extends Component<
                                 graphHeight={graphHeight}
                                 gridWidth={graphWidth}
                                 lineCount={3}
-                                colorTheme={this.tInfo.colorTheme}
+                                colorTheme={this.mS.colorTheme}
                                 maxBarHeight={maxBarHeight}
-                                minBarHeight={20}
                               />
                               <BarDisplay
                                 data={this.fS.barGraphData.items}
@@ -717,41 +748,43 @@ class ReviewTreks extends Component<
                                 style={styles.graphStyle}
                                 barStyle={styles.barStyle}
                                 labelAngle={0}
-                                minBarHeight={20}
                                 scrollToBar={this.fS.scrollToBar}
                               />
                             </View>
                           </View>
                         </View>
-                        <TrekDetails
-                          selectable
-                          sortBy={this.fS.sortBy}
-                          sortByDate={this.fS.sortByDate}
-                          selectFn={this.callSetSortBy}
-                          switchSysFn={this.switchMeasurementSystem}
-                          showImagesFn={this.showTrekImage}
-                          selected={this.fS.selectedTrekIndex}
-                          showCourseEffortFn={this.showCourseEffort}
-                          toggleShowValueFn={this.toggleShowValue}
-                        />
+                        <View style={styles.scrollArea}>
+                          <ScrollView>
+                            <TrekDetails
+                              selectable
+                              sortBy={this.fS.sortBy}
+                              sortByDate={this.fS.sortByDate}
+                              selectFn={this.callSetSortBy}
+                              switchSysFn={this.switchMeasurementSystem}
+                              showImagesFn={this.showTrekImage}
+                              selected={this.fS.selectedTrekIndex}
+                              showCourseEffortFn={this.showCourseEffort}
+                              toggleShowValueFn={this.toggleShowValue}
+                              showGroup={multiGroup}
+                            />
+                          </ScrollView>
+                        </View>
                       </View>
-                    </ScrollView>
-                  </View>
                 }
               </View>
-              {!gotTreks && this.tInfo.typeSelections !== 0 && (
+              {!gotTreks && this.fS.typeSelections !== 0 && (
                 <View style={styles.emptyGraphArea}>
                   <Text style={styles.noMatches}>Nothing To Display</Text>
                 </View>
               )}
-              {!gotTreks && this.tInfo.typeSelections === 0 && (
+              {!gotTreks && this.fS.typeSelections === 0 && (
                 <View style={styles.emptyGraphArea}>
                   <Text style={styles.noMatches}>No Trek Type Selected</Text>
                 </View>
               )}
             </View>
           )}
-          {this.tInfo.waitingForSomething && <Waiting />}
+          {this.mS.waitingForSomething && <Waiting />}
         </View>
       </NavMenu>
     );

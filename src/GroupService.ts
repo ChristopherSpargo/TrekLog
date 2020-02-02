@@ -1,10 +1,11 @@
 import { action } from 'mobx'
 
-import { TrekType,MeasurementSystemType, TrekTypeDataNumeric } from './TrekInfoModel'
+import {  TrekTypeDataNumeric } from './TrekInfoModel'
 import { LB_PER_KG } from './UtilsService';
 import { ThemeType, COLOR_THEME_DARK } from './App';
 import { ModalModel } from './ModalModel';
 import { StorageSvc } from './StorageService';
+import { TrekType, MeasurementSystemType } from './MainSvc';
 
 export interface WeightObj {
   date: string,       // a short (8-char) sortDate

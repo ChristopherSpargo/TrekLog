@@ -34,8 +34,7 @@ function PageTitle({
   function callIconFn() {
     iconFn(iconFnArg);
 }
-  // alert('render ' + titleText)
-  const { disabledTextColor, highTextColor, rippleColor, secondaryColor
+  const { disabledTextColor, highTextColor, rippleColor, secondaryColor, secondaryColorDim
         } = uiTheme.palette[colorTheme];
   const { fontRegular, pageTitle } = uiTheme; 
   const groupTextColor = setGroupFn !== undefined ? highTextColor : disabledTextColor;
@@ -81,7 +80,7 @@ function PageTitle({
     groupIcon: {
       width: groupIconSize,
       height: groupIconSize,
-      marginRight: 4,
+      marginRight: 6,
       backgroundColor: "transparent"
     },
     groupText: {
@@ -135,7 +134,7 @@ return (
               style={styles.groupIcon}
               size={groupIconSize}
               paths={APP_ICONS.FolderOpenOutline}
-              fill={secondaryColor}
+              fill={haveGroupFn ? secondaryColor : secondaryColorDim}
             />
             <Text style={styles.groupText}>{groupName}</Text>
           </View>

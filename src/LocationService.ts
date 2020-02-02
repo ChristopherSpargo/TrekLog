@@ -1,14 +1,14 @@
 import { Alert } from 'react-native';
 import BackgroundGeolocation, { ConfigureOptions } from '@mauron85/react-native-background-geolocation';
 
-import { TrekInfo } from './TrekInfoModel'
 import { StorageSvc } from './StorageService';
+import { LogState } from './LogStateModel';
 
 const GPS_EVENT_INTERVAL = 1;       // seconds betweed geolocation reports
 
 export class LocationSvc {
 
-  constructor ( private trekInfo: TrekInfo,  private storageSvc: StorageSvc ) {
+  constructor ( private loggingState: LogState,  private storageSvc: StorageSvc ) {
   }
 
   geolocationIsRunning = false;
@@ -80,8 +80,9 @@ export class LocationSvc {
     // TrekLog has entered the background
     BackgroundGeolocation.on('background', () => {
       BackgroundGeolocation.startTask(taskKey => {
-        if (this.trekInfo.timerOn || this.trekInfo.pendingReview){
-          this.storageSvc.storeRestoreObj(this.trekInfo.getRestoreObject());
+        let logState = this.loggingState.getRestoreObject(); 
+        if (logState !== undefined){
+          this.storageSvc.storeRestoreObj(logState);
         }
         BackgroundGeolocation.endTask(taskKey);
       });
@@ -142,6 +143,7 @@ export class LocationSvc {
   // update the configuration options for BackgroundGeolocation
   setGeolocationConfig = (configOptions: ConfigureOptions) => {
     let options : ConfigureOptions = {
+      maxLocations: 40000,
       desiredAccuracy: BackgroundGeolocation.HIGH_ACCURACY,
       locationProvider: BackgroundGeolocation.RAW_PROVIDER,
       stationaryRadius: 0,
@@ -164,10 +166,10 @@ export class LocationSvc {
   getCurrentLocation = (gotLocation: Function, gclOptions) => {
     BackgroundGeolocation.getCurrentLocation(location => {
       gotLocation(location);
-      }, () => {
-        // setTimeout(() => {
-        //   Alert.alert('Error obtaining current location', JSON.stringify(error));
-        // }, 100);
+      }, (error) => {
+        setTimeout(() => {
+          Alert.alert('Error obtaining current location', JSON.stringify(error));
+        }, 100);
       }, gclOptions);
   }
   

@@ -10,7 +10,7 @@ import SvgIcon from './SvgIconComponent';
 import IconButton from './IconButtonComponent';
 import FadeInTemp from './FadeInTempComponent';
 import { APP_ICONS } from './SvgImages';
-import { TrekInfo } from './TrekInfoModel';
+import { MainSvc } from './MainSvc';
 
 export interface SpeedDialItem  {
   label: string,
@@ -20,7 +20,7 @@ export interface SpeedDialItem  {
   lStyle ?: any,
 }
 
-@inject('uiTheme', 'trekInfo')
+@inject('mainSvc', 'uiTheme')
 @observer
 class SpeedDial extends Component<{ 
   top ?: number,              // top of speedDial trigger (if present)
@@ -43,7 +43,7 @@ class SpeedDial extends Component<{
   autoClose ?: number,        // milliseconds to wait before closing
   fadeOut ?: number,          // if present and not 0, number of milliseconds before fading out trigger
   triggerZ ?: number,         // optional zIndex value for trigger
-  trekInfo ?: TrekInfo,
+  mainSvc ?: MainSvc,
   uiTheme ?: any
 }, {} > {
 
@@ -131,7 +131,7 @@ class SpeedDial extends Component<{
     const SD_MENU_WIDTH = smallIcons ? 54 : 64;
     const labelAdj = bigItems ? -20 : -14;
     const { highTextColor, textOnSecondaryColor, secondaryColor, primaryColor,
-            matchingMask_7, rippleColor } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
+            matchingMask_7, rippleColor } = this.props.uiTheme.palette[this.props.mainSvc.colorTheme];
     const { fontLight } = this.props.uiTheme;
     const numItems = this.props.items ? this.props.items.length : undefined;
     const menuSize = numItems * SD_ITEM_SIZE + 5;

@@ -14,7 +14,7 @@ import {
   CONFIRM_Z_INDEX,
   BACKDROP_Z_INDEX,
   ModalSvcContext,
-  TrekInfoContext,
+  MainSvcContext,
   UiThemeContext,
   HEADER_HEIGHT,
 } from "./App";
@@ -22,14 +22,14 @@ import { APP_ICONS } from "./SvgImages";
 import RadioGroup from "./RadioGroupComponent";
 import SvgIcon from "./SvgIconComponent";
 import { ModalModel } from "./ModalModel";
-import { TrekInfo } from './TrekInfoModel';
+import { MainSvc } from "./MainSvc";
 
 // dialog used for item selection from a list
 
 function RadioPicker({pickerOpen}) {
   const modalSvc: ModalModel = useContext(ModalSvcContext);
   const uiTheme: any = useContext(UiThemeContext);
-  const trekInfo: TrekInfo = useContext(TrekInfoContext);
+  const mainSvc: MainSvc = useContext(MainSvcContext);
   const mData = modalSvc.rpData;
   const [selection, setSelection] = useState();
   const bHandler = useRef(false);
@@ -54,7 +54,7 @@ function RadioPicker({pickerOpen}) {
     textOnPrimaryColor,
     footerTextColor,
     footerButtonText,
-  } = uiTheme.palette[trekInfo.colorTheme];
+  } = uiTheme.palette[mainSvc.colorTheme];
   const { cardLayout, roundedTop, roundedBottom, footer, footerButton, fontRegular 
         } = uiTheme;
   const headerHeight = 50;

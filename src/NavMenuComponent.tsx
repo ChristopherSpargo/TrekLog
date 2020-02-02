@@ -3,10 +3,10 @@ import { View, Text, StyleSheet, DrawerLayoutAndroid, ScrollView } from "react-n
 import { RectButton } from 'react-native-gesture-handler'
 import { useObserver } from 'mobx-react-lite';
 
-import { UiThemeContext, TrekInfoContext } from "./App";
+import { UiThemeContext, MainSvcContext } from "./App";
 import SvgIcon from "./SvgIconComponent";
 import { APP_ICONS } from "./SvgImages";
-import { TrekInfo, CURRENT_TREKLOG_VERSION } from './TrekInfoModel';
+import { MainSvc, CURRENT_TREKLOG_VERSION } from "./MainSvc";
 
 export interface NavMenuItem {
   icon?:      string,             // icon to display to left of label
@@ -26,7 +26,7 @@ function NavMenu({
   children
 }) {
   const uiTheme: any = useContext(UiThemeContext);
-  const tInfo: TrekInfo = useContext(TrekInfoContext);
+  const mainSvc: MainSvc = useContext(MainSvcContext);
   const navRef = useRef<DrawerLayoutAndroid>();
   const isOpen = useRef(false);
 
@@ -67,7 +67,7 @@ function NavMenu({
 
   const { navMenuRippleColor, navMenuIconColor, navMenuTextColor, navMenuBackgroundColor,
           primaryColor, navMenuTitleTextColor, navMenuDividerColor, menuItemDisabledColor
-        } = uiTheme.palette[tInfo.colorTheme];
+        } = uiTheme.palette[mainSvc.colorTheme];
   const { fontRegular, fontBold
         } = uiTheme;
   const menuIconSize = 20;
@@ -174,16 +174,17 @@ function NavMenu({
     return (
         <RectButton
           rippleColor={navMenuRippleColor}
-          // style={{flex: 1}}
           onPress={item.disabled ? undefined : () => callSelectFn(item.value)}
         >
         <View style={[styles.menuButton, {paddingLeft: padLeft}]}>
-          <SvgIcon
-            style={styles.menuButtonIcon}
-            size={menuIconSize}
-            paths={APP_ICONS[item.icon]}
-            fill={item.disabled ? menuItemDisabledColor : (item.color || navMenuIconColor)}
-          />
+          {item.icon &&
+            <SvgIcon
+              style={styles.menuButtonIcon}
+              size={menuIconSize}
+              paths={APP_ICONS[item.icon]}
+              fill={item.disabled ? menuItemDisabledColor : (item.color || navMenuIconColor)}
+            />
+          }
           <Text style={[styles.menuButtonText, item.disabled ? 
                         {color: menuItemDisabledColor} : {}]}>{item.label}</Text>
         </View>
@@ -216,7 +217,7 @@ function NavMenu({
                       </View>
                       <View>
                         {item.submenu.map((subItem) =>
-                          <MenuButton item={subItem} padLeft={25}/>
+                          <MenuButton item={subItem} padLeft={subItem.icon ? 25 : 45}/>
                           )
                         }
                       </View>
@@ -232,8 +233,8 @@ function NavMenu({
           </View>
         </ScrollView>
         <View style={styles.menuFooter}>
-          <Text style={styles.footerDateText}>{tInfo.currentDate}</Text>
-          <Text style={styles.footerTimeText}>{tInfo.currentTime}</Text>
+          <Text style={styles.footerDateText}>{mainSvc.currentDate}</Text>
+          <Text style={styles.footerTimeText}>{mainSvc.currentTime}</Text>
         </View>
       </View>
     ));

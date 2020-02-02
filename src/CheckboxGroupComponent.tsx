@@ -2,10 +2,10 @@ import React, { useContext, useState, useEffect, useRef } from "react";
 import { View, Text, StyleSheet, TouchableNativeFeedback } from "react-native";
 import { useObserver } from "mobx-react-lite";
 
-import { UiThemeContext, TrekInfoContext } from "./App";
+import { UiThemeContext, MainSvcContext } from "./App";
 import SvgIcon from "./SvgIconComponent";
 import { APP_ICONS } from "./SvgImages";
-import { TrekInfo } from './TrekInfoModel';
+import { MainSvc } from "./MainSvc";
 
 function CheckboxGroup({
   onChangeFn = undefined, // call this when selection status of an item changes
@@ -21,7 +21,7 @@ function CheckboxGroup({
   vertical = undefined // if true, arrange group vertically
 }) {
   const uiTheme: any = useContext(UiThemeContext);
-  const trekInfo: TrekInfo = useContext(TrekInfoContext);
+  const mainSvc: MainSvc = useContext(MainSvcContext);
 
   const validProps = labels;
   const [selectedItems, setSelectedItems] = useState([...selections]);
@@ -33,7 +33,7 @@ function CheckboxGroup({
   const just = justify === "start" ? "flex-start" : "center";
   const alignDir = align === "start" ? "flex-start" : "center";
   const { secondaryColor, highlightColor, highTextColor, mediumTextColor,
-          rippleColor } = uiTheme.palette[trekInfo.colorTheme];
+          rippleColor } = uiTheme.palette[mainSvc.colorTheme];
   const lStyle = labelStyle || {};
   const iStyle = itemStyle || {};
 

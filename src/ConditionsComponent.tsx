@@ -13,36 +13,36 @@ import {
   UiThemeContext,
   WeatherSvcContext,
   LocationSvcContext,
-  TrekInfoContext,
   UtilsSvcContext,
   ToastSvcContext,
-  // StorageSvcContext,
-  HEADER_HEIGHT
+  StorageSvcContext,
+  HEADER_HEIGHT,
+  MainSvcContext
 } from "./App";
 import { APP_ICONS } from "./SvgImages";
 import SvgIcon from "./SvgIconComponent";
-import { TrekInfo, SPEED_UNIT_CHOICES, SMALL_DIST_UNITS, DIST_UNIT_CHOICES } from "./TrekInfoModel";
+import { SPEED_UNIT_CHOICES, SMALL_DIST_UNITS, DIST_UNIT_CHOICES } from "./MainSvc";
 import { WeatherSvc, WeatherData, WindInfo } from './WeatherSvc';
 import { LocationSvc } from './LocationService';
 import { UtilsSvc } from './UtilsService';
 import { ToastModel } from './ToastModel';
-// import { StorageSvc } from './StorageService';
+import { StorageSvc } from './StorageService';
 import { LatLng } from "react-native-maps";
 import Waiting from './WaitingComponent';
+import { MainSvc } from "./MainSvc";
 
 function Conditions() {
 
   const uiTheme: any = useContext(UiThemeContext);
   const weatherSvc: WeatherSvc  = useContext(WeatherSvcContext);
-  const trekInfo: TrekInfo = useContext(TrekInfoContext);
+  const mainSvc: MainSvc = useContext(MainSvcContext);
   const locationSvc: LocationSvc = useContext(LocationSvcContext);
   const utilsSvc: UtilsSvc = useContext(UtilsSvcContext);
   const toastSvc: ToastModel = useContext(ToastSvcContext);
-  // const storageSvc: StorageSvc = useContext(StorageSvcContext);
+  const storageSvc: StorageSvc = useContext(StorageSvcContext);
 
   const [weatherReady, setWeatherReady] = useState(false);
   const weatherData = useRef<WeatherData>();
-  // const [update, setUpdate] = useState(false);
   const currLocation = useRef<LatLng>();
   const elevation = useRef(0);
 
@@ -50,12 +50,11 @@ function Conditions() {
     if (!weatherReady){
       getLocation();
     }
-    // if (update) {
-    //   setUpdate(false);
-    //   storageSvc.reportFilespaceUse();
-    // }
-    // return function cleanUp() { setWeatherReady(false); }
   });
+
+  useEffect(() => {           // WillUnmount
+    return () => { setWeatherReady(false); }
+  },[]);
 
   function getLocation() {
     // Get the current GPS position
@@ -95,7 +94,7 @@ function Conditions() {
   function formattedTemp(temp ?: number) : string {
     if (temp === undefined) { temp = weatherData.current ? weatherData.current.temp : undefined }
     if (temp === undefined) { return 'N/A'; }
-    return weatherSvc.formatTemperature(temp, trekInfo.measurementSystem);
+    return weatherSvc.formatTemperature(temp, mainSvc.measurementSystem);
   }
 
   // return the given humidity percentage formatted for display (or conditions.humidity if not given)
@@ -109,7 +108,7 @@ function Conditions() {
   function formattedElevation() {
     if (elevation.current) {
       return utilsSvc.formatDist(elevation.current, 
-              SMALL_DIST_UNITS[DIST_UNIT_CHOICES[trekInfo.measurementSystem]]);
+              SMALL_DIST_UNITS[DIST_UNIT_CHOICES[mainSvc.measurementSystem]]);
     } 
     else { return 'N/A';
     }
@@ -123,9 +122,9 @@ function Conditions() {
       case 'Dir':
         return windInfo.windDir;
       case 'Speed':
-        return utilsSvc.computeRoundedAvgSpeed(trekInfo.measurementSystem, windInfo.windSpeed, 1, true).toString();
+        return utilsSvc.computeRoundedAvgSpeed(mainSvc.measurementSystem, windInfo.windSpeed, 1, true).toString();
       case 'Units':
-        return SPEED_UNIT_CHOICES[trekInfo.measurementSystem];
+        return SPEED_UNIT_CHOICES[mainSvc.measurementSystem];
       default:
         return '';
     }
@@ -148,8 +147,8 @@ function Conditions() {
   }
 
   function changeSystem() {
-    trekInfo.switchMeasurementSystem();
-    // setUpdate(true);
+    mainSvc.switchMeasurementSystem();
+    storageSvc.reportFilespaceUse();
   }
 
   const {
@@ -158,12 +157,14 @@ function Conditions() {
     listIconColor,
     rippleColor,
     pageBackground,
+    altCardBackground,
     disabledTextColor,
-    trekLogBlue
-  } = uiTheme.palette[trekInfo.colorTheme];
-  const { cardLayout } = uiTheme;
-  const sortIconSize = 24;
-  const sortButtonHeight = 53;
+    trekLogBlue,
+    shadow1
+  } = uiTheme.palette[mainSvc.colorTheme];
+  const { cardLayout, fontRegular } = uiTheme;
+  const sortIconSize = 30;
+  const sortButtonHeight = 70;
 
   const styles = StyleSheet.create({
     container: { ... StyleSheet.absoluteFillObject, backgroundColor: pageBackground, top: HEADER_HEIGHT },
@@ -173,11 +174,15 @@ function Conditions() {
     },
     sortButton: {
       paddingLeft: 5,
+      paddingRight: 15,
       minHeight: sortButtonHeight,
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
-      backgroundColor: pageBackground,
+      borderStyle: "solid",
+      borderColor: dividerColor,
+      backgroundColor: altCardBackground,
+      ...shadow1
     },
     sortButtonArea: {
       minWidth: 80,
@@ -197,55 +202,45 @@ function Conditions() {
       backgroundColor: "transparent"
     },
     sortButtonText: {
-      fontSize: 18,
-      marginLeft: 10,
+      fontSize: 20,
+      paddingLeft: 10,
       color: highTextColor,
+      fontFamily: fontRegular
     },
     sortButtonValue: {
-      paddingRight: 15,
-      fontSize: 20,
+      fontSize: 24,
       color: highTextColor,
-      fontWeight: "bold",
+      fontFamily: fontRegular,
     },
     selectable: {
       color: trekLogBlue,
     },
     windText: {
-      fontSize: 18,
+      fontSize: 20,
       color: highTextColor,
-      fontWeight: "bold",
+      fontFamily: fontRegular,
     },
     windValue: {
       paddingHorizontal: 4,
-      fontSize: 20,
+      fontSize: 24,
       color: highTextColor,
-      fontWeight: "bold",
+      fontFamily: fontRegular,
     },
     city: {
       fontSize: 30,
       color: disabledTextColor,
     },
     time: {
-      fontSize: 22,
+      fontSize: 24,
       color: highTextColor,
-    },
-    divider: {
-      flex: 1,
-      marginRight: 15,
-      marginLeft: 45,
-      borderBottomWidth: 1,
-      borderStyle: "solid",
-      borderColor: dividerColor,
+      fontFamily: fontRegular
     },
   })
 
-  const SortItem = ({icon, label, valueFn, selValue, div = true}) => {
+  const SortItem = ({icon, label, valueFn, selValue}) => {
 
     return (  
       <View>   
-        {div &&
-          <View style={styles.divider}/>
-        }
         <View style={styles.sortButton}>
             <View style={styles.sortButtonTrigger}>
               <SvgIcon
@@ -284,13 +279,14 @@ function Conditions() {
       }
       <ScrollView>
         {weatherReady &&
-          <View style={[cardLayout]}>
-            <View style={{alignItems: "center"}}>
+          <View style={[cardLayout, 
+                        {marginLeft: 0, marginRight: 0, paddingLeft: 0, paddingRight: 0}]}>
+            <View style={[styles.sortButton, 
+                         {flexDirection: "column", alignItems: "center", borderTopWidth: 1}]}>
                 <Text style={styles.city}>{formattedConditions('City')}</Text>
                 <Text style={styles.time}>{formattedConditions('Time')}</Text>
             </View>
             <SortItem
-              div={false}
               icon={weatherData.current.condIconId}
               label='Skies'
               valueFn={() => utilsSvc.capitalizeWords(weatherData.current.desc)}
@@ -302,8 +298,7 @@ function Conditions() {
               valueFn={formattedTemp}
               selValue={true}
             />
-            <View style={styles.divider}/>
-            <View style={[styles.sortButton, {paddingRight: 15}]}>
+            <View style={styles.sortButton}>
               <View style={styles.sortButtonTrigger}>
                 <SvgIcon
                   style={styles.sortButtonIcon}

@@ -3,34 +3,30 @@ import { View, Text, StyleSheet } from "react-native";
 import { BorderlessButton } from "react-native-gesture-handler";
 import { useObserver } from "mobx-react-lite";
 
-import { UiThemeContext, TrekInfoContext, UtilsSvcContext } from "./App";
-import {
-  TrekInfo,
-  STEPS_APPLY,
-  DIST_UNIT_CHOICES,
-  PLURAL_STEP_NAMES,
-  SWITCH_SPEED_STAT,
-  SpeedStatType
-} from "./TrekInfoModel";
+import { UiThemeContext, TrekSvcContext, UtilsSvcContext, MainSvcContext,
+         LoggingSvcContext } from "./App";
 import { UtilsSvc } from "./UtilsService";
 import SvgIcon from "./SvgIconComponent";
 import { APP_ICONS } from "./SvgImages";
+import { MainSvc, STEPS_APPLY, DIST_UNIT_CHOICES, PLURAL_STEP_NAMES, SWITCH_SPEED_STAT,
+         SpeedStatType
+      } from "./MainSvc";
+import { TrekSvc } from "./TrekSvc";
+import { LoggingSvc } from "./LoggingService";
+import { ElevationData } from "./TrekInfoModel";
 
-export const ELEVATION_DISPLAY_SWITCH = {
-  First: "Last",
-  Last: "Points",
-  Min: "First",
-  Max: "Min",
+const ELEVATION_DISPLAY_SWITCH = {
   Gain: "Grade",
+  Grade: "Gain",   //"Points",
   Points: "AllPoints",
   AllPoints: "Gain",
-  Grade: "Max"
+  Average: "Max",
+  Max: "Min",
+  Min: "Average",
+  First: "Last",
+  Last: "First"
 };
-export const INTERVAL_ELEVATION_DISPLAY_SWITCH = {
-  Elevation: "Points",
-  Points: "Elevation"
-};
-export const ELEVATION_DISPLAY_TITLES = {
+const ELEVATION_DISPLAY_TITLES = {
   First: "Start Elev",
   Last: "End Elev",
   Max: "Max Elev",
@@ -38,11 +34,12 @@ export const ELEVATION_DISPLAY_TITLES = {
   Points: "GPS Points",
   AllPoints: "All Points",
   Gain: "Elev Gain",
-  Elevation: "Elevation",
+  Average: "Avg Elev",
   Grade: "Grade"
 };
 
 function TrekStats({
+  trek,
   logging,
   trekType,
   interval = undefined,
@@ -52,24 +49,28 @@ function TrekStats({
   sysChangeFn = undefined,
 }) {
   const uiTheme: any = useContext(UiThemeContext);
-  const tInfo: TrekInfo = useContext(TrekInfoContext);
+  const tS: TrekSvc = useContext(TrekSvcContext);
   const uSvc: UtilsSvc = useContext(UtilsSvcContext);
+  const mainSvc: MainSvc = useContext(MainSvcContext);
+  const lS: LoggingSvc = useContext(LoggingSvcContext);
 
-  const [elevDisplay, setElevDisplay] = useState("Gain");
-  const [intervalElevDisplay, setIntervalElevDisplay] = useState("Elevation");
+  const [elevItems1, setElevItems1] = useState("Gain");
+  const [elevItems2, setElevItems2] = useState("Average");
+  const [elevItems3, setElevItems3] = useState("First");
 
   function formattedSteps() {
-    let showRate = tInfo.showStepsPerMin;
+    let showRate = trek.showStepsPerMin;
     let st: string;
 
     if (interval !== undefined && interval >= 0) {
-      st = tInfo.formattedSteps(
+      st = tS.formattedSteps(
+        trek,
         showRate,
         intervalData.iDists[interval],
         intervalData.times[interval]
       );
     } else {
-      st = tInfo.formattedSteps(showRate);
+      st = tS.formattedSteps(trek, showRate);
     }
     if (showRate) {
       st = st.substr(0, st.indexOf(" "));
@@ -88,9 +89,9 @@ function TrekStats({
     if (interval !== undefined && interval >= 0) {
       d = intervalData.times[interval];
     } else {
-      d = tInfo.duration;
+      d = trek.duration;
     }
-    return tInfo.formattedDuration(d);
+    return mainSvc.formattedDuration(d);
   }
 
   function formattedDist() {
@@ -99,9 +100,9 @@ function TrekStats({
     if (interval !== undefined && interval >= 0) {
       dist = intervalData.iDists[interval];
     } else {
-      dist = tInfo.trekDist;
+      dist = trek.trekDist;
     }
-    let fd = tInfo.formattedDist(dist);
+    let fd = mainSvc.formattedDist(dist);
     let i = fd.indexOf(" ");
     return { value: fd.substr(0, i), units: fd.substr(i), label: "Distance" };
   }
@@ -113,20 +114,21 @@ function TrekStats({
       let totalCals = uSvc.computeCalories(
         intervalData.segPoints[interval],
         0,
-        tInfo.type,
-        tInfo.hills,
-        tInfo.weight,
-        tInfo.packWeight
+        trek.type,
+        trek.hills,
+        trek.weight,
+        trek.packWeight
       );
-      val = tInfo.formattedCalories(
+      val = tS.formattedCalories(
+        trek,
         totalCals,
-        tInfo.showTotalCalories,
+        trek.showTotalCalories,
         intervalData.times[interval]
       );
     } else {
-      val = tInfo.showTotalCalories
-        ? tInfo.currentCalories
-        : tInfo.currentNetCalories;
+      val = trek.showTotalCalories
+        ? trek.currentCalories
+        : trek.currentCaloriesPerMin;
     }
     let prec = val < 10 ? 10 : 1;
     let finalVal = Math.round(val * prec) / prec;
@@ -137,7 +139,7 @@ function TrekStats({
     return {
       value: finalVal.toString(),
       units: "",
-      label: tInfo.showTotalCalories ? "Calories" : "Calories/Min"
+      label: trek.showTotalCalories ? "Calories" : "Calories/Min"
     };
   }
 
@@ -145,13 +147,13 @@ function TrekStats({
     if (interval !== undefined && interval >= 0) {
       return uSvc.checkForCarSpeed(intervalData.segPoints[interval]);
     }
-    return tInfo.drivingACar;
+    return trek.drivingACar;
   }
 
   // return current speed, average speed or pace of the trek (or interval if specified)
   function displaySpeedStat() {
-    let ms = tInfo.measurementSystem;
-    let speedStat = tInfo.showSpeedStat;
+    let ms = mainSvc.measurementSystem;
+    let speedStat = trek.showSpeedStat;
     let sp: string;
     let sepStr = speedStat === 'time' ? "/" : " ";
 
@@ -169,13 +171,13 @@ function TrekStats({
     } else {
       switch(speedStat){
         case 'speedAvg':
-          sp = tInfo.averageSpeed;
+          sp = trek.averageSpeed;
           break;
         case 'speedNow':
-          sp = tInfo.speedNow;
+          sp = trek.speedNow;
           break;
         case 'time':
-          sp = tInfo.timePerDist;
+          sp = trek.timePerDist;
           break;
         default:
       }
@@ -193,66 +195,82 @@ function TrekStats({
     }
   }
 
-  // return the title to use for the elevDisplay value
-  function elevationDisplayTitle(): string {
-    if (interval !== undefined && interval >= 0) {
-      return ELEVATION_DISPLAY_TITLES[intervalElevDisplay]; // title to use for current interval elev item type
-    } else {
-      return ELEVATION_DISPLAY_TITLES[elevDisplay]; // title to use for current elev item type
-    }
-  }
-
   // return a string to be displayed in relation to the elevation data
   // base response on current value of elevDisplay and if an interval is specified
-  function elevationDisplayValue() {
+  function elevationDisplayValue(elevItem: string) {
     let result = {
       value: undefined,
       units: "",
-      label: elevationDisplayTitle()
+      label: ELEVATION_DISPLAY_TITLES[elevItem] // title to use for current elev item type
     };
     let value: string;
 
     if (interval !== undefined && interval >= 0) {
-      switch (intervalElevDisplay) {
-        case "Elevation":
-          value = tInfo.formattedElevation(intervalData.elevs[interval]);
+      let intElevs: ElevationData[] = trek.elevations.slice(intervalData.elevData[interval].first, 
+                                        intervalData.elevData[interval].last + 1);
+      switch (elevItem) {
+        case "Average":
+          value = mainSvc.formattedElevation(intervalData.avgElevs[interval]);
           break;
-        case "Points":
-          result.value = intervalData.segPaths[interval].length.toString();
-          return result;
+        case "First":
+          value = lS.formattedTrekElevation(intElevs, "First");
+          break;
+        case "Last":
+          value = lS.formattedTrekElevation(intElevs, "Last");
+          break;
+        case "Max":
+          value = lS.formattedTrekElevation(intElevs, "Max");
+          break;
+        case "Min":
+          value = lS.formattedTrekElevation(intElevs, "Min");
+          break;
+        case "Gain":
+          value = mainSvc.formattedElevation(uSvc.getElevationGain(intElevs));
+          break;
+        case "Grade":
+          value = lS.formattedElevationGainPct(uSvc.getElevationGain(intElevs), 
+                                                            intervalData.iDists[interval]);
+          break;
+        // case "Points":
+        //   result.value = intervalData.segPaths[interval].length.toString();
+        //   return result;
         default:
       }
     } else {
-      switch (elevDisplay) {
-        case "Points":
-          result.value = tInfo.pointListLength().toString();
-          return result;
-        case "AllPoints":
-          result.value = tInfo.totalGpsPoints
-            ? tInfo.totalGpsPoints.toString()
-            : "N/A";
-          return result;
+      switch (elevItem) {
+        // case "Points":
+        //   result.value = tS.pointListLength(trek).toString();
+        //   return result;
+        // case "AllPoints":
+        //   result.value = trek.totalGpsPoints
+        //     ? trek.totalGpsPoints.toString()
+        //     : "N/A";
+        //   return result;
+        case "Average":
+          value = mainSvc.formattedElevation(uSvc.getArraySegmentAverage(trek.elevations));
+          break;
         case "First":
-          value = tInfo.formattedTrekElevation("First");
+          value = lS.formattedTrekElevation(trek.elevations, "First");
           break;
         case "Last":
-          value = tInfo.formattedTrekElevation("Last");
+          value = lS.formattedTrekElevation(trek.elevations, "Last");
           break;
         case "Max":
-          value = tInfo.formattedTrekElevation("Max");
+          value = lS.formattedTrekElevation(trek.elevations, "Max");
           break;
         case "Min":
-          value = tInfo.formattedTrekElevation("Min");
+          value = lS.formattedTrekElevation(trek.elevations, "Min");
           break;
         case "Gain":
-          value = tInfo.formattedElevation(tInfo.elevationGain);
+          value = mainSvc.formattedElevation(trek.elevationGain);
           break;
         case "Grade":
-          value = tInfo.formattedElevationGainPct();
-          break;
+        value = lS.formattedElevationGainPct(trek.elevationGain, trek.trekDist);
+        break;
         default:
       }
     }
+    // alert(elevItem + ' : ' + value)
     if (value === 'N/A') {
       result.value = value;
       return result;
@@ -264,33 +282,35 @@ function TrekStats({
   }
 
   // toggle between displaying the various altitude values
-  function toggleElevDisplay() {
-    if (interval === undefined || interval < 0) {
-      setElevDisplay(ELEVATION_DISPLAY_SWITCH[elevDisplay]);
-    } else {
-      setIntervalElevDisplay(
-        INTERVAL_ELEVATION_DISPLAY_SWITCH[intervalElevDisplay]
-      );
-    }
+  function toggleElevDisplay1() {
+      setElevItems1(ELEVATION_DISPLAY_SWITCH[elevItems1]);
   }
 
-  // toggle between displaying current speed and average speed
+  function toggleElevDisplay2() {
+    setElevItems2(ELEVATION_DISPLAY_SWITCH[elevItems2]);
+}
+
+function toggleElevDisplay3() {
+  setElevItems3(ELEVATION_DISPLAY_SWITCH[elevItems3]);
+}
+
+// toggle between displaying current speed and average speed
   function toggleSpeedStatDisplay() {
-    let nextStat = SWITCH_SPEED_STAT[tInfo.showSpeedStat];
+    let nextStat = SWITCH_SPEED_STAT[trek.showSpeedStat];
     if (nextStat === 'speedNow' && !logging){
       nextStat = SWITCH_SPEED_STAT[nextStat];
     }
-    tInfo.updateShowSpeedStat(nextStat as SpeedStatType);
+    tS.updateShowSpeedStat(trek, nextStat as SpeedStatType);
   }
 
   // toggle between displaying total steps and steps/min
   function toggleShowStepsPerMin() {
-    tInfo.updateShowStepsPerMin(!tInfo.showStepsPerMin);
+    tS.updateShowStepsPerMin(trek, !trek.showStepsPerMin);
   }
 
   // toggle between displaying total calories calories/min
   function toggleShowTotalCalories() {
-    tInfo.updateShowTotalCalories(!tInfo.showTotalCalories);
+    tS.updateShowTotalCalories(trek, !trek.showTotalCalories);
   }
 
   const {
@@ -302,21 +322,24 @@ function TrekStats({
     pageBackground,
     disabledTextColor,
     rippleColor
-  } = uiTheme.palette[tInfo.colorTheme];
+  } = uiTheme.palette[mainSvc.colorTheme];
   const { fontRegular } = uiTheme;
-  const noSteps = !STEPS_APPLY[tInfo.type];
+  const noSteps = !STEPS_APPLY[trek.type];
   const small = format === 'small';
   const carIconSize = small ? 12 : 14;
   const minItemWidth = 135;
+  const minElevItemWidth = 60;
   const timeFontSie = small ? 32 : 94
   const statLabelFontSize = small ? 18 : 24;
   const statValueFontSize = small ? 26 : 54;
   const statUnitsFontSize = small ? 20 : 33;
+  const elevValueFontSize = small ? 26 : 33;
+  const elevUnitsFontSize = small ? 20 : 26;
   const statUnitsMargin = small ? 0 : 8;
   const calsMarginTop = small ? 10 : -10;
   const selectColor = bgImage ? selectOnFilm : selectOnTheme;
-  const switchSys = sysChangeFn || tInfo.switchMeasurementSystem;
-  const haveElevs = tInfo.hasElevations();
+  const switchSys = sysChangeFn || mainSvc.switchMeasurementSystem;
+  const haveElevs = tS.hasElevations(trek);
 
   const styles = StyleSheet.create({
     container: {
@@ -377,6 +400,16 @@ function TrekStats({
       width: carIconSize,
       height: carIconSize,
       backgroundColor: "transparent"
+    },
+    elevStatAdj: {
+      minWidth: minElevItemWidth,
+    },
+    elevValueAdj: {
+      fontSize: elevValueFontSize,
+    },
+    elevUnitsAdj: {
+      fontSize: elevUnitsFontSize,
+      marginBottom: 0,
     }
   });
 
@@ -387,13 +420,13 @@ function TrekStats({
           rippleColor={props.switchFn ? rippleColor : "transparent"}
           onPress={props.switchFn}
         >
-          <View style={styles.statValue}>
-            <Text style={[styles.statValueText, props.valueStyle]}>
+          <View style={{...styles.statValue, ...props.statStyleAdj}}>
+            <Text style={{...styles.statValueText, ...props.valueStyleAdj}}>
               {uSvc.zeroSuppressedValue(props.item.value)}
             </Text>
-            <Text style={styles.statUnitsText}>{props.item.units}</Text>
+            <Text style={{...styles.statUnitsText, ...props.unitsStyleAdj}}>{props.item.units}</Text>
           </View>
-          <View style={styles.statLabel}>
+          <View style={{...styles.statLabel, ...props.statStyleAdj}}>
             <Text
               style={[
                 styles.statLabelText,
@@ -441,13 +474,21 @@ function TrekStats({
         {!noSteps && (
           <StatItem item={formattedSteps()} switchFn={toggleShowStepsPerMin} />
         )}
-        {haveElevs && noSteps && (
+        {/* {haveElevs && noSteps && (
           <StatItem item={elevationDisplayValue()} switchFn={toggleElevDisplay} />
-        )}
+        )} */}
       </View>
-      {(haveElevs && !logging && !noSteps) && (
+      {(haveElevs && !logging) && (
         <View style={[styles.bigStatPair, {marginTop: calsMarginTop}]}>
-          <StatItem item={elevationDisplayValue()} switchFn={toggleElevDisplay} />
+          <StatItem item={elevationDisplayValue(elevItems1)} switchFn={toggleElevDisplay1} 
+                  statStyleAdj={styles.elevStatAdj} valueStyleAdj={styles.elevValueAdj}
+                  unitsStyleAdj={styles.elevUnitsAdj} />
+          <StatItem item={elevationDisplayValue(elevItems2)} switchFn={toggleElevDisplay2} 
+                  statStyleAdj={styles.elevStatAdj} valueStyleAdj={styles.elevValueAdj}
+                  unitsStyleAdj={styles.elevUnitsAdj} />
+          <StatItem item={elevationDisplayValue(elevItems3)} switchFn={toggleElevDisplay3} 
+                  statStyleAdj={styles.elevStatAdj} valueStyleAdj={styles.elevValueAdj}
+                  unitsStyleAdj={styles.elevUnitsAdj} />
         </View>
       )}
     </View>

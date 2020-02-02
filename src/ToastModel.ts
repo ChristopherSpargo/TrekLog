@@ -17,7 +17,7 @@ export interface ToastData {
   bColor             ?: string,   // border color for toast 
   icon               ?: string,   // Icon to use to override default icon for type
   iColor             ?: string,   // tintColor for icon
-  content            ?: string,   // modal content
+  content            ?: string | JSX.Element,   // modal content
   time               ?: number,   // length of time (milliseconds) to display the toast
   location           ?: ToastLocation // location on screen for toast
   waitForOK          ?: boolean,  // if true, display an OK button on the toast and wait for user to hit it

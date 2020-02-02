@@ -27,7 +27,6 @@ export class ExpandViewY extends React.Component<{
   }
 
   componentDidUpdate(prev){
-    // alert(this.props.open)
     if (prev.open !== this.props.open){
       this.props.open ? this.open() : this.close();
     }

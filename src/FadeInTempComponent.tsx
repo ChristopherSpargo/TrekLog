@@ -2,17 +2,17 @@ import React, { useContext, useState, useRef, useEffect } from "react";
 import { BorderlessButton } from 'react-native-gesture-handler';
 
 import {
-  TrekInfoContext,
   UiThemeContext,
+  MainSvcContext,
 } from "./App";
-import { TrekInfo } from './TrekInfoModel';
 import FadeInView from './FadeInComponent';
+import { MainSvc } from "./MainSvc";
 
 
 function FadeInTempComponent({dimOpacity=undefined, fadeDuration=undefined, useFirstTouch=undefined,
         viewTime=undefined, flexVal=undefined, onPressFn=undefined, children}) {
   const uiTheme: any = useContext(UiThemeContext);
-  const trekInfo: TrekInfo = useContext(TrekInfoContext);
+  const mainSvc: MainSvc = useContext(MainSvcContext);
   const [controlsOpen, setControlsOpen] = useState(false);
   const timerId = useRef<number>(undefined);
 
@@ -48,7 +48,7 @@ function FadeInTempComponent({dimOpacity=undefined, fadeDuration=undefined, useF
 
   const {
     rippleColor,
-  } = uiTheme.palette[trekInfo.colorTheme];
+  } = uiTheme.palette[mainSvc.colorTheme];
   const dO = dimOpacity !== undefined ? dimOpacity : 0.2;
   const fD = fadeDuration !== undefined ? fadeDuration : 300;
 

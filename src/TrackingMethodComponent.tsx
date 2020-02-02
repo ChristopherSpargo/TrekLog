@@ -7,16 +7,16 @@ import RadioGroup from './RadioGroupComponent';
 import SlideUpView from './SlideUpComponent';
 import { 
   UiThemeContext,
-  TrekInfoContext,
   LIMITS_FORM_Z_INDEX,
   INVISIBLE_Z_INDEX,
   FORMHEADER_HEIGHT,
   FOOTER_HEIGHT,
+  MainSvcContext,
  } from './App';
 import SvgIcon from './SvgIconComponent';
-import { TrekInfo } from './TrekInfoModel';
 import TextInputField from './TextInputFieldComponent';
 import TimeInput from './TimeInputComponent';
+import { MainSvc } from "./MainSvc";
 
 export type CourseTrackingMethod = 'courseTime' | 'lastTime' | 'bestTime' | 'otherEffort' |
                         'timeLimit' | 'avgSpeed' | 'avgRate';
@@ -33,9 +33,9 @@ function TrackingMethodForm({
   course     = undefined,     // Course for selected course
   trek       = undefined,     // sortDate and group of focus trek (selected in Course Details)
   onChangeFn = undefined,     // function to call on input changes
-}) {
+  }) {
   const uiTheme: any = useContext(UiThemeContext);
-  const trekInfo: TrekInfo = useContext(TrekInfoContext);
+  const mainSvc: MainSvc = useContext(MainSvcContext);
 
   const [value, setValue] = useState('');
   const [method, setMethod] = useState();
@@ -114,13 +114,13 @@ function TrackingMethodForm({
         setValue(inValue.toString());
         break;
       case 'courseTime':
-        setValue(course.definingEffort.subject.duration.toString());
+        setValue(course.definingEffort.duration.toString());
         break;
       case 'lastTime':
-        setValue(course.lastEffort.subject.duration.toString());
+        setValue(course.lastEffort.duration.toString());
         break;
       case 'bestTime':
-        setValue(course.bestEffort.subject.duration.toString());
+        setValue(course.bestEffort.duration.toString());
         break;
       default:
     }
@@ -136,20 +136,20 @@ function TrackingMethodForm({
       setValueInput(v);
       Keyboard.dismiss();
       removeListeners();
-      trekInfo.limitsCloseFn(true);
+      mainSvc.limitsCloseFn(true);
   }
 
   // call the close method, indicate CANCEL
   function dismiss() {
       Keyboard.dismiss();
       removeListeners();
-      trekInfo.limitsCloseFn(false);
+      mainSvc.limitsCloseFn(false);
   }
 
 
     const { highTextColor, dividerColor, textOnPrimaryColor,
             pageBackground, rippleColor, footerButtonText,
-          } = uiTheme.palette[trekInfo.colorTheme];
+          } = uiTheme.palette[mainSvc.colorTheme];
     const { cardLayout, roundedTop, footer, footerButton,
             formHeader, formHeaderText, formBodyText, formTextInput, formNumberInput,
             fontRegular } = uiTheme;
@@ -175,22 +175,22 @@ function TrackingMethodForm({
           }
           break;
         case 'courseTime':
-          if(trek === undefined || trek.date !== course.definingEffort.subject.date || 
-                                        trek.group !== course.definingEffort.subject.group) {
+          if(trek === undefined || trek.date !== course.definingEffort.date || 
+                                        trek.group !== course.definingEffort.group) {
             replayChoices.push(method);
             replayLabels.push(trackingMethodsLabels[idx])
           }
           break;
         case 'bestTime':
-          if(trek === undefined || trek.date !== course.bestEffort.subject.date || 
-                                        trek.group !== course.bestEffort.subject.group) {
+          if(trek === undefined || trek.date !== course.bestEffort.date || 
+                                        trek.group !== course.bestEffort.group) {
             replayChoices.push(method);
             replayLabels.push(trackingMethodsLabels[idx])
           }
           break;
         case 'lastTime':
-          if(trek === undefined || trek.date !== course.lastEffort.subject.date || 
-                                        trek.group !== course.lastEffort.subject.group) {
+          if(trek === undefined || trek.date !== course.lastEffort.date || 
+                                        trek.group !== course.lastEffort.group) {
             replayChoices.push(method);
             replayLabels.push(trackingMethodsLabels[idx])
           }
@@ -360,7 +360,7 @@ function TrackingMethodForm({
                             placeholderValue={value}
                           />
                         </View>
-                        <Text style={styles.rateUnits}>{trekInfo.speedUnits()}</Text>
+                        <Text style={styles.rateUnits}>{mainSvc.speedUnits()}</Text>
                       </View>
                     }
                     {(method === 'avgRate') &&
@@ -369,7 +369,8 @@ function TrackingMethodForm({
                             onChangeFn={setValue}
                             timeVal={value}
                         />
-                        <Text style={styles.rateUnits}>{'/' + trekInfo.distUnits()}</Text>
+                        <Text style={styles.rateUnits}>{'/' + mainSvc
+                        .distUnits()}</Text>
                       </View>
                     }
                     {(method === 'otherEffort') &&

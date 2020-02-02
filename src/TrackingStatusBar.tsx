@@ -1,11 +1,11 @@
 import React, { useContext } from "react";
 import { View, StyleSheet, Text } from "react-native";
 
-import { UiThemeContext, TrekInfoContext, HEADER_Z_INDEX, TRACKING_STATUS_BAR_HEIGHT, HEADER_HEIGHT
+import { UiThemeContext, HEADER_Z_INDEX, TRACKING_STATUS_BAR_HEIGHT, HEADER_HEIGHT
        } from "./App";
-import { TrekInfo } from './TrekInfoModel';
 
 function TrackingStatusBar({
+  colorTheme,
   trackingHeader,
   trackingDiffTime,
   trackingDiffTimeStr,
@@ -17,11 +17,10 @@ function TrackingStatusBar({
   logOn
 }) {
   const uiTheme: any = useContext(UiThemeContext);
-  const tInfo: TrekInfo = useContext(TrekInfoContext);
 
     const { matchingMask_9, trackingStatsBackgroundHeader, highTextColor, trackingColorMinus,
             trackingColorPlus
-          } = uiTheme.palette[tInfo.colorTheme];
+          } = uiTheme.palette[colorTheme];
     const { fontRegular 
           } = uiTheme;
     const tdTimeColor = trackingDiffTime < 0 ? trackingColorMinus : trackingColorPlus;

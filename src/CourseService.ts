@@ -1,37 +1,37 @@
 import { action } from 'mobx';
 import { Location } from "@mauron85/react-native-background-geolocation";
 
-import {  TrekInfo, TrekPoint, TrekObj, TrekType, RESP_CANCEL, RESP_NO_MATCH, RESP_BAD_LENGTH, 
+import {  TrekInfo, TrekPoint, TrekObj } from './TrekInfoModel';
+import {  MainSvc, TrekType, RESP_CANCEL, RESP_NO_MATCH, RESP_BAD_LENGTH, 
           RESP_OK, FAKE_SELECTION, MSG_EFFORT_PATH, MSG_COURSE_READ, MSG_EFFORT_READ, MSG_COURSE_WRITE,
           MSG_NO_LIST, MSG_REMOVE_EFFORT, RESP_HAS_LINK, MSG_STARTING_LOC, MSG_COURSE_LIST_READ,
-          MSG_COURSE_LIST_WRITE, MSG_NEW_EFFORT, MSG_NO_EFFORT, MSG_NEW_COURSE_RECORD, MSG_NEW_COURSE 
-       } from './TrekInfoModel'
+          MSG_COURSE_LIST_WRITE, MSG_NEW_EFFORT, MSG_NO_EFFORT, MSG_NEW_COURSE_RECORD, MSG_NEW_COURSE,
+          MSG_NONE_NEARBY
+       } from './MainSvc'
 import { UtilsSvc } from './UtilsService';
 import { StorageSvc } from './StorageService';
 import { ModalModel, CONFIRM_WARNING } from './ModalModel';
 import { TREKLOG_FILENAME_REGEX, BLACKISH, 
-        //  TREKLOG_COURSES_FILENAME 
+         TREKLOG_COURSES_FILENAME, 
        } from './App';
-import { IntervalSvc } from './IntervalSvc';
 import { LatLng } from 'react-native-maps';
 import { CourseTrackingMethod } from './TrackingMethodComponent';
 import { TrekLimitType, TREK_LIMIT_TYPE_TIME, TREK_LIMIT_TYPE_DIST } from './LoggingService';
 import { LocationSvc } from './LocationService';
 import { ToastModel } from './ToastModel'
+import { TrekSvc } from './TrekSvc';
 
 export interface CourseEffort {
-  subject: {
-    group:              string,       // group where the subject trek is saved
-    date:               string,       // sortDate of trek
-    type:               TrekType,     // type of trek
-    duration:           number,       // completion time of effort trek
-    distance:           number        // completion distance of effort trek
-    goalValue:          number,       // goal time, speed/rate (mps)
-    method:             CourseTrackingMethod, // method of tracking used
-    targetGroup?:       string,       // group with target trek
-    targetDate?:        string,       // sortDate of target trek
-    points?:            TrekPoint[],  // pointList of source Trek (for defining effort)
-  }
+  group:              string,       // group where the subject trek is saved
+  date:               string,       // sortDate of trek
+  type:               TrekType,     // type of trek
+  duration:           number,       // completion time of effort trek
+  distance:           number        // completion distance of effort trek
+  goalValue:          number,       // goal time, speed/rate (mps)
+  method:             CourseTrackingMethod, // method of tracking used
+  targetGroup?:       string,       // group with target trek
+  targetDate?:        string,       // sortDate of target trek
+  points?:            TrekPoint[],  // pointList of source Trek (for defining effort)
 }
 
 export interface Course {
@@ -101,8 +101,11 @@ export class CourseSvc {
   trackingSnapshot    : CourseTrackingSnapshot;
   changedDefiningEffort : boolean = false;    // flag used to indicate that the defining effort for a course was reset
 
-  constructor ( private utilsSvc: UtilsSvc, private trekInfo: TrekInfo, private locationSvc: LocationSvc,
-    private intervalSvc: IntervalSvc, private storageSvc: StorageSvc, private modalSvc: ModalModel,
+  constructor ( private mainSvc: MainSvc, 
+    private trekSvc: TrekSvc,
+    private utilsSvc: UtilsSvc, 
+    private locationSvc: LocationSvc,
+    private storageSvc: StorageSvc, private modalSvc: ModalModel,
     private toastSvc: ToastModel ) {
     this.initializeObservables();
   }
@@ -111,50 +114,72 @@ export class CourseSvc {
   initializeObservables = () => {
   }
 
-  // create the courseListFile by reading all entries in the Courses directory
-  // private createCourseListFile = () : Promise<any> => {
-  //   let allDone : Promise<any>[] = [];
-  //   let newListItem : CourseListItem;
+  private convertEffort = (effort: any) : CourseEffort => {
+    if(effort.subject){
+      let newEffort : CourseEffort = this.utilsSvc.copyObj(effort.subject);
+      return newEffort;
+    }
+    return effort;
+  }
 
-  //   return new Promise((resolve, reject) => {
-  //     this.storageSvc.readCoursesDirectory()      // read directory for the courses
-  //     .then((cDir) => {  
-  //       this.courseList = [];
-  //       for(let i=0; i<cDir.length; i++){
-  //         if(cDir[i].filename !== TREKLOG_COURSES_FILENAME){
-  //           let p = this.storageSvc.fetchDataItem(cDir[i].path)
-  //           allDone.push(p);
-  //           p.then((file) => {
-  //             let course : Course = JSON.parse(file);
-  //             // update pointList for defining effort to contain distance data
-  //             this.utilsSvc.setPointDistances(course.definingEffort.subject.points)
-  //             allDone.push(this.storageSvc.storeCourseFile(course));    // write updated course file
-  //             newListItem = {
-  //               name: course.name,
-  //               createDate: course.createDate,
-  //               courseImageUri: course.courseImageUri,
-  //               definingEffort : course.definingEffort,
-  //               bestEffort:  course.bestEffort,
-  //               lastEffort: course.lastEffort,
-  //               effortCount: course.efforts.length,
-  //             }
-  //             this.courseList.push(newListItem);
-  //           })
-  //         }
-  //       }
-  //       Promise.all(allDone)
-  //       .then(() => {
-  //           this.saveCourseList()
-  //           .then(() => resolve(RESP_OK))
-  //           .catch((err) => reject(err))         
-  //       })
-  //         .catch((err) => reject(err))
-  //       })
-  //     .catch(() => {
-  //       reject('ERROR: READING_COURSES_DIRECTORY');
-  //     })
-  //   })
-  // }
+  private convertCourseEfforts = (course: Course) => {
+    course.definingEffort = this.convertEffort(course.definingEffort)
+    course.bestEffort = this.convertEffort(course.bestEffort)
+    course.lastEffort = this.convertEffort(course.lastEffort)
+    for(let i=0; i<course.efforts.length; i++) {
+      course.efforts[i] = this.convertEffort(course.efforts[i]);
+    }
+  }
+
+  // create the courseListFile by reading all entries in the Courses directory
+  private createCourseListFile = () : Promise<any> => {
+    let allDone : Promise<any>[] = [];
+    let newListItem : CourseListItem;
+
+    return new Promise((resolve, reject) => {
+      this.storageSvc.readCoursesDirectory()      // read directory for the courses
+      .then((cDir) => {  
+        this.courseList = [];
+        for(let i=0; i<cDir.length; i++){
+          if(cDir[i].filename !== TREKLOG_COURSES_FILENAME){
+            let p = this.storageSvc.fetchDataItem(cDir[i].path)
+            allDone.push(p);
+            p.then((file) => {
+              let course : Course = JSON.parse(file);
+              // update pointList for defining effort to contain distance data
+              // this.utilsSvc.setPointDistances(course.definingEffort.subject.points);
+              // if(course.courseImageUri){
+              //   course.courseImageUri = 
+              //       course.courseImageUri.replace('TrekLogCourseMaps', TREKLOG_PICTURES_DIRECTORY)
+              // }
+              this.convertCourseEfforts(course);
+              allDone.push(this.storageSvc.storeCourseFile(course));    // write updated course file
+              newListItem = {
+                name: course.name,
+                createDate: course.createDate,
+                courseImageUri: course.courseImageUri,
+                definingEffort : this.utilsSvc.copyObj(course.definingEffort),
+                bestEffort:  this.utilsSvc.copyObj(course.bestEffort),
+                lastEffort: this.utilsSvc.copyObj(course.lastEffort),
+                effortCount: course.efforts.length,
+              }
+              this.courseList.push(newListItem);
+            })
+          }
+        }
+        Promise.all(allDone)
+        .then(() => {
+            this.saveCourseList()
+            .then(() => resolve(RESP_OK))
+            .catch((err) => reject(err))         
+        })
+          .catch((err) => reject(err))
+        })
+      .catch(() => {
+        reject('ERROR: READING_COURSES_DIRECTORY');
+      })
+    })
+  }
 
   // return true if courseList is non-empty
   haveCourses = () => {
@@ -197,31 +222,29 @@ export class CourseSvc {
   getNewEffort = (trek: TrekObj, method: CourseTrackingMethod, 
                                  course: Course, goalVal: number) : CourseEffort => {
     let effort : CourseEffort = {
-      subject: {
-        group:            trek.group,
-        date:             trek.sortDate,
-        type:             trek.type,
-        duration:         trek.duration,
-        distance:         trek.trekDist,  
-        method:           method,
-        targetDate:       trek.sortDate,
-        targetGroup:      trek.group,
-        goalValue:        goalVal,
-      }
+      group:            trek.group,
+      date:             trek.sortDate,
+      type:             trek.type,
+      duration:         trek.duration,
+      distance:         trek.trekDist,  
+      method:           method,
+      targetDate:       trek.sortDate,
+      targetGroup:      trek.group,
+      goalValue:        goalVal,
     }
     if (course !== undefined){
       switch(method){
         case 'bestTime':
-          effort.subject.targetGroup = course.bestEffort.subject.group;
-          effort.subject.targetDate  = course.bestEffort.subject.date;
+          effort.targetGroup = course.bestEffort.group;
+          effort.targetDate  = course.bestEffort.date;
           break;
         case 'lastTime':
-          effort.subject.targetGroup = course.lastEffort.subject.group;
-          effort.subject.targetDate  = course.lastEffort.subject.date;
+          effort.targetGroup = course.lastEffort.group;
+          effort.targetDate  = course.lastEffort.date;
           break;
         default:
-          effort.subject.targetGroup = course.definingEffort.subject.group;
-          effort.subject.targetDate  = course.definingEffort.subject.date;
+          effort.targetGroup = course.definingEffort.group;
+          effort.targetDate  = course.definingEffort.date;
           break;
       }
     }
@@ -229,10 +252,11 @@ export class CourseSvc {
   }
 
   // read the courseList file
-  getCourseList = (system = this.trekInfo.measurementSystem) : Promise<any> => {
+  getCourseList = (system = this.mainSvc.measurementSystem) : Promise<any> => {
     return new Promise((resolve, reject) => {
       // this.createCourseListFile()
       // .then(() => {
+      //   alert("Course List Created")
         if (this.courseList) { 
           resolve(this.courseList);      // return local copy
         } else {
@@ -246,12 +270,14 @@ export class CourseSvc {
           .catch((err) => reject(MSG_COURSE_LIST_READ + err))
         }
       // })
-      // .catch((err) => reject(err))
+      // .catch((err) => {
+      //   alert(err);
+      //   reject(err)})
     })
   }
 
   // format some display items for the given courseList or the instance courseList
-  setCourseListDisplayItems = (system = this.trekInfo.measurementSystem, list?: CourseListItem[]) => {
+  setCourseListDisplayItems = (system = this.mainSvc.measurementSystem, list?: CourseListItem[]) => {
     let cList = list || this.courseList;
 
     this.courseNames = [];
@@ -259,11 +285,11 @@ export class CourseSvc {
     cList.forEach((course) => {
       this.courseNames.push(course.name);
       let desc = 'Distance: ' +
-                 this.trekInfo.formattedDist(course.definingEffort.subject.distance, system) + '\n' +
-                 'Last: ' + this.utilsSvc.timeFromSeconds(course.lastEffort.subject.duration) + ' ' +
-                            this.utilsSvc.dateFromSortDateYY(course.lastEffort.subject.date) + '\n' +
-                 'Best: ' + this.utilsSvc.timeFromSeconds(course.bestEffort.subject.duration) + ' ' +
-                            this.utilsSvc.dateFromSortDateYY(course.bestEffort.subject.date);
+                 this.mainSvc.formattedDist(course.definingEffort.distance, system) + '\n' +
+                 'Last: ' + this.utilsSvc.timeFromSeconds(course.lastEffort.duration) + ' ' +
+                            this.utilsSvc.dateFromSortDateYY(course.lastEffort.date) + '\n' +
+                 'Best: ' + this.utilsSvc.timeFromSeconds(course.bestEffort.duration) + ' ' +
+                            this.utilsSvc.dateFromSortDateYY(course.bestEffort.date);
       this.courseDescriptions.push(desc);                
     })
   }
@@ -302,7 +328,7 @@ export class CourseSvc {
           if(p > best) { result.best = course.name; }
         }
       } else {       
-        p = this.checkStartPosition(loc, course.definingEffort.subject.points);
+        p = this.checkStartPosition(loc, course.definingEffort.points);
         if (p < MAX_DIST_FROM_START){
           result.list.push(course);        
         }
@@ -320,10 +346,10 @@ export class CourseSvc {
         if (trek){
           resolve(this.nearbyCourses(undefined, trek));
         } else {
-          this.trekInfo.setWaitingForSomething("NearbyCourses");
+          this.mainSvc.setWaitingForSomething("NearbyCourses");
           this.locationSvc.getCurrentLocation(
             (location: Location) => {
-              this.trekInfo.setWaitingForSomething();
+              this.mainSvc.setWaitingForSomething();
               resolve(this.nearbyCourses({latitude: location.latitude, longitude: location.longitude}));
             },
             { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 }
@@ -346,7 +372,7 @@ export class CourseSvc {
       .then((result) => {
         let list : CourseListItem[] = result.list;
         list.sort((a,b) => {
-          return parseInt(b.lastEffort.subject.date) - parseInt(a.lastEffort.subject.date);
+          return parseInt(b.lastEffort.date) - parseInt(a.lastEffort.date);
         })
         if(list.length !== 0 || trek){
           if (trek) {
@@ -354,13 +380,13 @@ export class CourseSvc {
             values.push(NEW_COURSE)
             comments.push("Use this " + trek.type + " to define a new course")
           }
-          this.setCourseListDisplayItems(this.trekInfo.measurementSystem, list)
+          this.setCourseListDisplayItems(this.mainSvc.measurementSystem, list)
           let selNames = names.concat(this.courseNames);
           let selValues = values.concat(this.courseNames);
           let selComments = comments.concat(this.courseDescriptions);
 
           if (selNames.length === 0){
-            reject(MSG_NO_LIST);
+            reject(this.courseList.length ? MSG_NONE_NEARBY : MSG_NO_LIST);
           } else {
             if (result.best !== "") { 
               sel = result.best;
@@ -383,14 +409,14 @@ export class CourseSvc {
             }
           }
         } else {
-           reject(MSG_NO_LIST);
+           reject(this.courseList.length ? MSG_NONE_NEARBY : MSG_NO_LIST);
         }
       })
     })
   }
 
   // create a new course from the given trek
-  createCourse = (name: string, trek: TrekObj, mapImageUri?: string) : Promise<any> => {
+  createCourse = (name: string, trek: TrekInfo, mapImageUri?: string) : Promise<any> => {
     let newCourse : Course;
     let newEffort : CourseEffort = this.getNewEffort(trek, "courseTime", undefined, trek.duration);
 
@@ -410,13 +436,12 @@ export class CourseSvc {
             efforts: [newEffort]
           };
           // save the pointList with definingEffort
-          newCourse.definingEffort.subject.points = this.utilsSvc.copyTrekPath(trek.pointList);
+          newCourse.definingEffort.points = this.utilsSvc.copyTrekPath(trek.pointList);
           this.storageSvc.storeCourseFile(newCourse)
           .then(() => {
             // update and save the trek with the new course link
-            trek.course = name;
-            this.trekInfo.setCourseLink(name);
-            this.trekInfo.saveTrek(trek);
+            this.trekSvc.setCourseLink(trek, name);
+            this.mainSvc.saveTrek(trek);
 
             let newListItem : CourseListItem = {
               name: name,
@@ -472,11 +497,11 @@ export class CourseSvc {
         let c = JSON.parse(file) as Course;
         for(let i=0; i<c.efforts.length; i++) {
           let e = c.efforts[i];
-          this.storageSvc.fetchGroupAndDateTrek(e.subject.group, e.subject.date)
+          this.storageSvc.fetchGroupAndDateTrek(e.group, e.date)
           .then((file) => {
             let trek = JSON.parse(file) as TrekObj;
             trek.course = undefined;
-            allDone.push(this.trekInfo.saveTrek(trek));
+            allDone.push(this.mainSvc.saveTrek(trek));
           })
         }
         Promise.all(allDone)
@@ -498,7 +523,7 @@ export class CourseSvc {
   }
   
   // add a new effort to the given course using the given trek
-  addCourseEffort = (courseName: string, trek: TrekObj, method: CourseTrackingMethod, goalValue: number) 
+  addCourseEffort = (courseName: string, tInfo: TrekInfo, method: CourseTrackingMethod, goalValue: number) 
         : Promise<any> => {
     let status = RESP_OK;
     let info;
@@ -507,23 +532,23 @@ export class CourseSvc {
       this.storageSvc.readCourseFile(courseName)
       .then((result) => {
         let course = JSON.parse(result) as Course;
-        let newEffort = this.getNewEffort(trek, method, course,
-                                          goalValue || course.definingEffort.subject.duration);
+        let newEffort = this.getNewEffort(tInfo, method, course,
+                                          goalValue || course.definingEffort.duration);
 
         // first, check if paths match (ish)
-        if (this.checkLengthAgainstCourse(trek, course) > MAX_DIST_DIFF_PERCENTAGE) {
+        if (this.checkLengthAgainstCourse(tInfo, course) > MAX_DIST_DIFF_PERCENTAGE) {
           status = RESP_BAD_LENGTH;
         }
         if (status === RESP_OK ){
-          let d = this.checkStartPosition(this.utilsSvc.cvtLaLoToLatLng(trek.pointList[0].l), 
-                    course.definingEffort.subject.points);
+          let d = this.checkStartPosition(this.utilsSvc.cvtLaLoToLatLng(tInfo.pointList[0].l), 
+                    course.definingEffort.points);
           if (d > MAX_DIST_FROM_START){
             info = d;
             status = MSG_STARTING_LOC;
           }
         }
         if (status === RESP_OK) {
-          let p = this.checkPathAgainstCourse(trek.pointList, course.definingEffort.subject.points);
+          let p = this.checkPathAgainstCourse(tInfo.pointList, course.definingEffort.points);
           if (p < MIN_PATH_MATCH_PERCENT) {
             info = p;
             status = RESP_NO_MATCH;
@@ -533,30 +558,29 @@ export class CourseSvc {
         if (status !== RESP_OK) {
           resolve({resp: status, info: info});
         } else {
-          this.removeCourseLink(trek, courseName)
+          this.removeCourseLink(tInfo, courseName)
           .then((resp) => {
             if(resp !== RESP_OK){
               resolve({resp: resp, info: info})   // must already have link to this course
             } else {
                   // path OK, add to course efforts list and update lastEffort and bestEffort if necessary
               course.efforts.push(newEffort);
-              if (course.lastEffort === undefined || newEffort.subject.date > course.lastEffort.subject.date){
+              if (course.lastEffort === undefined || newEffort.date > course.lastEffort.date){
                 course.lastEffort = newEffort;        // new effort is more recent
               }
               if(course.bestEffort === undefined || 
-                                          newEffort.subject.duration < course.bestEffort.subject.duration){ 
+                                          newEffort.duration < course.bestEffort.duration){ 
                 course.bestEffort = newEffort; 
                 status = MSG_NEW_COURSE_RECORD;
-                info = trek.duration;
+                info = tInfo.duration;
               }
 
               // save updated Course and update the corresponding entry in the CourseList
               this.storageSvc.storeCourseFile(course)
               .then(() => {
                 // update and save the trek with the new course link
-                trek.course = courseName;
-                this.trekInfo.setCourseLink(courseName);
-                this.trekInfo.saveTrek(trek);
+                this.trekSvc.setCourseLink(tInfo, courseName);
+                this.mainSvc.saveTrek(tInfo);
 
                 let newListItem : CourseListItem = {
                   name: courseName,
@@ -582,8 +606,8 @@ export class CourseSvc {
 
   // return true if the given trek is the defining effort for the given course
   isDefiningEffort = (course: Course, t: TrekObj) => {
-    return (course.definingEffort.subject.date === t.sortDate && 
-            course.definingEffort.subject.group === t.group);
+    return (course.definingEffort.date === t.sortDate && 
+            course.definingEffort.group === t.group);
   }
 
   // return the index of the effort of the given course that contains the given group and sortDate
@@ -591,8 +615,8 @@ export class CourseSvc {
   getEffortIndex = (course: Course, group: string, date: string) => {
     let index = -1;
     for(let i=0; i<course.efforts.length; i++){
-      if(course.efforts[i].subject.group === group &&
-         course.efforts[i].subject.date === date){
+      if(course.efforts[i].group === group &&
+         course.efforts[i].date === date){
            index = i;
            break;
          }
@@ -620,10 +644,10 @@ export class CourseSvc {
             course.lastEffort = course.efforts[0];
             course.bestEffort = course.efforts[0];
             for(let i=0; i<course.efforts.length; i++){
-              if (course.efforts[i].subject.duration < course.bestEffort.subject.duration){
+              if (course.efforts[i].duration < course.bestEffort.duration){
                 course.bestEffort = course.efforts[i];
               }
-              if (course.efforts[i].subject.date > course.lastEffort.subject.date){
+              if (course.efforts[i].date > course.lastEffort.date){
                 course.lastEffort = course.efforts[i];
               }
             }
@@ -657,10 +681,10 @@ export class CourseSvc {
   }
 
   // use the given trek to create a new Course or new Effort for an existing course
-  newCourseOrEffort = (trek: TrekObj, pickerOpenFn: Function) => {
+  newCourseOrEffort = (tInfo: TrekInfo, pickerOpenFn: Function) => {
     return new Promise<any>((resolve, reject) => {
       this.getCourseSelection(pickerOpenFn, 
-        trek.course || FAKE_SELECTION, 'Link ' + trek.type + ' To Course', false, trek, TREKLOG_FILENAME_REGEX)
+        tInfo.course || FAKE_SELECTION, 'Link ' + tInfo.type + ' To Course', false, tInfo, TREKLOG_FILENAME_REGEX)
       .then((sel : string) => {
         if(sel === FAKE_SELECTION) { 
           resolve({name: sel, resp: RESP_CANCEL}); 
@@ -673,8 +697,8 @@ export class CourseSvc {
           } else {
 
             // existing name chosen, attempt to add as effort .vs. courseTime
-            this.addCourseEffort(sel, trek, "courseTime", 
-                                 this.courseList[ndx].definingEffort.subject.duration)
+            this.addCourseEffort(sel, tInfo, "courseTime", 
+                                 this.courseList[ndx].definingEffort.duration)
             .then((added) => {
               switch(added.resp){
                 case RESP_NO_MATCH:
@@ -718,8 +742,8 @@ export class CourseSvc {
           .then(() => {
             // update and save trek with no course link
             trek.course = undefined;
-            this.trekInfo.setCourseLink(undefined)
-            this.trekInfo.saveTrek(trek)
+            // this.trekInfo.setCourseLink(undefined)
+            this.mainSvc.saveTrek(trek)
             resolve(RESP_OK);
           })
           .catch((err) => reject(MSG_REMOVE_EFFORT + err))
@@ -741,7 +765,7 @@ export class CourseSvc {
     for(let i=0; i<LLPath.length; i++) {
       for(let j=0; j<courseLL.length - 1; j++) {
         // p will be the point on the course nearest to the point from the path
-        p = this.intervalSvc.distToSegmentSquared(LLPath[i], courseLL[j], courseLL[j+1]).point;
+        p = this.utilsSvc.distToSegmentSquared(LLPath[i], courseLL[j], courseLL[j+1]).point;
         if (this.utilsSvc.calcDist(p.latitude, p.longitude, LLPath[i].latitude, LLPath[i].longitude) <= maxDist) { 
           pointsOnCourse++;
           break;
@@ -751,7 +775,7 @@ export class CourseSvc {
     for(let i=0; i<courseLL.length; i++) {
       for(let j=0; j<LLPath.length - 1; j++) {
         // p will be the point on the path nearest to the point from the course
-        p = this.intervalSvc.distToSegmentSquared(courseLL[i], LLPath[j], LLPath[j+1]).point;
+        p = this.utilsSvc.distToSegmentSquared(courseLL[i], LLPath[j], LLPath[j+1]).point;
         if (this.utilsSvc.calcDist(p.latitude, p.longitude, courseLL[i].latitude, courseLL[i].longitude) <= maxDist) { 
           pointsOnPath++;
           break;
@@ -765,8 +789,8 @@ export class CourseSvc {
   
   // return the absolute length difference of the given trek and course as a percentage of course length
   checkLengthAgainstCourse = (trek: TrekObj, course: Course | CourseListItem) => {
-    let diff = Math.abs((trek.trekDist - course.definingEffort.subject.distance) / 
-                                                            course.definingEffort.subject.distance);
+    let diff = Math.abs((trek.trekDist - course.definingEffort.distance) / 
+                                                            course.definingEffort.distance);
     return Math.round(diff * 100);
   }
 
@@ -790,8 +814,8 @@ export class CourseSvc {
   }
 
   getDefiningTrek = (index: number) => {
-    return this.getEffortTrek(this.courseList[index].definingEffort.subject.group,
-                              this.courseList[index].definingEffort.subject.date );
+    return this.getEffortTrek(this.courseList[index].definingEffort.group,
+                              this.courseList[index].definingEffort.date );
   }
 
   // set the given trek as the defining effort for the given course
@@ -802,10 +826,10 @@ export class CourseSvc {
       .then((course : Course) =>{
         course.definingEffort = newEffort;
         course.courseImageUri = mapUri;
-        course.definingEffort.subject.points = this.utilsSvc.copyTrekPath(trek.pointList);
+        course.definingEffort.points = this.utilsSvc.copyTrekPath(trek.pointList);
         for(let i=0; i<course.efforts.length; i++){
-          if(course.efforts[i].subject.method === 'courseTime'){
-            course.efforts[i].subject.goalValue = trek.duration;  // update goalValue of any 'courseTime' efforts
+          if(course.efforts[i].method === 'courseTime'){
+            course.efforts[i].goalValue = trek.duration;  // update goalValue of any 'courseTime' efforts
           }
         }
         this.storageSvc.storeCourseFile(course)
@@ -865,22 +889,22 @@ export class CourseSvc {
       switch(method){
         case 'bestTime':
           if (effort !== undefined){
-            this.getEffortTrek(effort.subject.targetGroup, effort.subject.targetDate)
+            this.getEffortTrek(effort.targetGroup, effort.targetDate)
             .then((t: TrekInfo) => resolve({trek: t, list: t.pointList}))
             .catch((err) => reject(err))
           } else {
-            this.getEffortTrek(course.bestEffort.subject.group, course.bestEffort.subject.date)
+            this.getEffortTrek(course.bestEffort.group, course.bestEffort.date)
             .then((t: TrekInfo) => resolve({trek: t, list: t.pointList}))
             .catch((err) => reject(err))
           }
           break;
         case 'lastTime':
           if (effort !== undefined){
-            this.getEffortTrek(effort.subject.targetGroup, effort.subject.targetDate)
+            this.getEffortTrek(effort.targetGroup, effort.targetDate)
             .then((t: TrekInfo) => resolve({trek: t, list: t.pointList}))
             .catch((err) => reject(err))
           } else {
-            this.getEffortTrek(course.lastEffort.subject.group, course.lastEffort.subject.date)
+            this.getEffortTrek(course.lastEffort.group, course.lastEffort.date)
             .then((t: TrekInfo) => resolve({trek: t, list: t.pointList}))
             .catch((err) => reject(err))
           }
@@ -893,7 +917,7 @@ export class CourseSvc {
         case 'avgSpeed':      // trackingValue is mph or kph
         case 'avgRate':       // trackingValue is sec/mi or sec/km
         default:
-          resolve({t: undefined, list: course.definingEffort.subject.points});
+          resolve({t: undefined, list: course.definingEffort.points});
       }
     })
   } 
@@ -905,8 +929,8 @@ export class CourseSvc {
       let dList : CourseDetailObject[] = [];
 
       for (let i=0; i<course.efforts.length; i++) {
-        let p = this.storageSvc.fetchGroupAndDateTrek(course.efforts[i].subject.group, 
-                                                      course.efforts[i].subject.date);
+        let p = this.storageSvc.fetchGroupAndDateTrek(course.efforts[i].group, 
+                                                      course.efforts[i].date);
         allDone.push(p);
         p.then((result) => {
           let trek = JSON.parse(result) as TrekObj;
@@ -929,7 +953,7 @@ export class CourseSvc {
     switch (trackingMethod) {
       case 'courseTime':
         dur = maxV = trackingValue;
-        tDist = course.definingEffort.subject.distance;
+        tDist = course.definingEffort.distance;
         inc = 1;
         type = TREK_LIMIT_TYPE_TIME;
         break;
@@ -944,22 +968,22 @@ export class CourseSvc {
       case 'timeLimit':
         // set for courseDistance/seconds of course distance for each timer tic
         dur = trackingValue;
-        tDist = course.definingEffort.subject.distance;
+        tDist = course.definingEffort.distance;
         inc = tDist / trackingValue;
         maxV = tDist;
         break;
       case 'avgSpeed':      // trackingValue is mph or kph
         // set for courseDistance/avgMetersPerSec of course distance for each timer tic
-        let metersPerHour = this.utilsSvc.convertToMeters(trackingValue, this.trekInfo.distUnits());
+        let metersPerHour = this.utilsSvc.convertToMeters(trackingValue, this.mainSvc.distUnits());
         inc = metersPerHour / 3600;
-        dur = course.definingEffort.subject.distance / inc;
-        tDist = course.definingEffort.subject.distance;
+        dur = course.definingEffort.distance / inc;
+        tDist = course.definingEffort.distance;
         maxV = tDist;
         break;
       case 'avgRate':       // trackingValue is sec/mi or sec/km
         // set for courseDistance/avgMetersPerSec of course distance for each timer tic
-        inc = this.utilsSvc.convertToMeters(1, this.trekInfo.distUnits()) / trackingValue;
-        tDist = course.definingEffort.subject.distance;
+        inc = this.utilsSvc.convertToMeters(1, this.mainSvc.distUnits()) / trackingValue;
+        tDist = course.definingEffort.distance;
         dur = tDist / inc;
         maxV = tDist;
         break;
@@ -969,24 +993,24 @@ export class CourseSvc {
   }
 
   // initialize a CourseTrackingSnapshot object from the given Course, effort and trek
-  initCourseTrackingSnapshot = (course: Course, trek: TrekObj, effort : CourseEffort, targetTrek?: TrekObj) => {
+  initCourseTrackingSnapshot = (course: Course, trek: TrekObj, effort : CourseEffort, 
+                                method: CourseTrackingMethod, value: number, targetTrek?: TrekObj) => {
     return new Promise<any>((resolve, reject) => {
       let pList : TrekPoint[];
 
-      this.getTrackingPath(course, this.trekInfo.trackingMethod, effort, targetTrek)
+      this.getTrackingPath(course, method, effort, targetTrek)
       .then((result) => {
         pList = result.list;
         // this.utilsSvc.setPointDistances(pList);
-        let params = this.getTrackingParams(course, 
-          this.trekInfo.trackingMethod, this.trekInfo.trackingValue, result.trek);
+        let params = this.getTrackingParams(course, method, value, result.trek);
         
         // init to show ending positions for both markers
         let cPos = (params.dur < trek.duration) ? params.maxV : (trek.duration * params.inc);
         let tPos = (params.dur < trek.duration) ? params.dur : trek.duration;
         this.trackingSnapshot = {
-          header: this.formatTrackingHeader(this.trekInfo.trackingMethod, this.trekInfo.trackingValue),
-          goalValue: this.trekInfo.trackingValue,
-          method: this.trekInfo.trackingMethod,
+          header: this.formatTrackingHeader(method, value),
+          goalValue: value,
+          method: method,
           coursePath: pList,
           courseDist: params.tDist,
           courseDuration: params.dur,             // time taken for courseMarker to travel the coursePath
@@ -1040,12 +1064,12 @@ export class CourseSvc {
         header += this.utilsSvc.timeFromSeconds(goalValue);
         break;
       case 'avgRate':
-        metersPerHour = this.utilsSvc.convertToMeters(1, this.trekInfo.distUnits());
-        header += this.utilsSvc.formatTimePerDist(this.trekInfo.distUnits(), metersPerHour, goalValue);
+        metersPerHour = this.utilsSvc.convertToMeters(1, this.mainSvc.distUnits());
+        header += this.utilsSvc.formatTimePerDist(this.mainSvc.distUnits(), metersPerHour, goalValue);
         break;
       case 'avgSpeed':
-        metersPerHour = this.utilsSvc.convertToMeters(goalValue, this.trekInfo.distUnits());
-        header += this.utilsSvc.formatAvgSpeed(this.trekInfo.measurementSystem, metersPerHour, 3600);
+        metersPerHour = this.utilsSvc.convertToMeters(goalValue, this.mainSvc.distUnits());
+        header += this.utilsSvc.formatAvgSpeed(this.mainSvc.measurementSystem, metersPerHour, 3600);
         break;
       case 'courseTime':
         header = '.vs Course';
@@ -1060,12 +1084,12 @@ export class CourseSvc {
   // return the percentage match with course path or 0 if wrong starting point or length
   compareTrekWithCourse = (trek: TrekObj, course: CourseListItem) : number => {
     let p = 0;
-    let sub = course.definingEffort.subject;
+    let sub = course.definingEffort;
 
     if((this.checkLengthAgainstCourse(trek, course) <= MAX_DIST_DIFF_PERCENTAGE) &&
       (this.checkStartPosition(this.utilsSvc.cvtLaLoToLatLng(trek.pointList[0].l), 
                                               sub.points) < MAX_DIST_FROM_START)){
-      p = this.checkPathAgainstCourse(trek.pointList, course.definingEffort.subject.points);
+      p = this.checkPathAgainstCourse(trek.pointList, course.definingEffort.points);
     }
     return p;
   }
@@ -1100,7 +1124,7 @@ export class CourseSvc {
   }
 
   // save the given uri (if any) as the image for the given course
-  saveCourseSnapshot = (name: string, uri: string, trek: TrekObj, mode: string) => {
+  saveCourseSnapshot = (name: string, uri: string, trek: TrekInfo, mode: string) => {
     return new Promise<any>((resolve, reject) => {
       if (uri) {
         this.storageSvc.saveCourseMapImage(name, uri)

@@ -3,7 +3,7 @@ import React from 'react'
 import { PieChart } from 'react-native-svg-charts'
 import { G, Text } from 'react-native-svg'
 import { observer, inject } from 'mobx-react'
-import { TREK_SELECT_BITS } from './TrekInfoModel';
+import { TREK_SELECT_BITS } from './MainSvc';
 
 @inject('uiTheme')
 @observer

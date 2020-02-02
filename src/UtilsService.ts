@@ -1,9 +1,11 @@
-import { LaLo, TrekPoint, TrekType, TrekTimeInterval, MeasurementSystemType, SMALL_DIST_UNITS,
-         ElevationData, TREK_TYPE_WALK, TREK_TYPE_RUN, TREK_TYPE_BIKE, TREK_TYPE_HIKE, 
-         NumericRange, SMALL_DIST_CUTOFF, STEPS_APPLY, TREK_TYPE_BOARD, TREK_TYPE_DRIVE } from './TrekInfoModel'
+import { LaLo, TrekPoint, TrekTimeInterval, ElevationData, NumericRange } from './TrekInfoModel'
 import { LatLng } from 'react-native-maps';
 import { TREK_LIMIT_TYPE_TIME } from './LoggingService';
-import { ELEVATION_API_URL, GOOGLE_MAPS_API_KEY, MAX_ELEVATION_SAMPLES_PER_REQUEST } from './AppInfo'
+import { TrekType, MeasurementSystemType, SMALL_DIST_UNITS,
+         TREK_TYPE_WALK, TREK_TYPE_RUN, TREK_TYPE_BIKE, TREK_TYPE_HIKE,
+         SMALL_DIST_CUTOFF, STEPS_APPLY, TREK_TYPE_BOARD, TREK_TYPE_DRIVE
+      } from './MainSvc';
+import { ELEVATION_API_URL, GOOGLE_MAPS_API_KEY, MAX_LOCATIONS_PER_ELEVATION_REQUEST } from './AppInfo'
 
 export type SortDate = string;
 export type DateInterval =  "daily" | "weekly" | "monthly" | "single";
@@ -50,6 +52,11 @@ export const TIME_FRAMES_NEXT = {
 export interface TimeFrame {
   start: string,      // start date (localTimeString)
   end: string         // end date (localTimeString)
+}
+
+export interface DistAndPoint {
+  dist: number,
+  point: LatLng
 }
 
 export const DayNames = [
@@ -421,7 +428,25 @@ export class UtilsSvc {
     return d;
   }
 
-  // compute the implied speed between the 2 given points
+// return the squared distance between 2 points
+dist2 = (v: LatLng, w: LatLng) : number => { 
+  return ((v.latitude - w.latitude) * (v.latitude - w.latitude)) + 
+  ((v.longitude - w.longitude) * (v.longitude - w.longitude)) }
+
+// return the distance squared between a point (p) and a line segment(v,w)
+// and the point on the segment nearest to the given point
+distToSegmentSquared = (p: LatLng, v: LatLng, w: LatLng) : DistAndPoint => {
+  let l2 = this.dist2(v, w);
+  if (l2 == 0) return {dist: this.dist2(p, v), point: v};
+  let t = ((p.latitude - v.latitude) * (w.latitude - v.latitude) + 
+           (p.longitude - v.longitude) * (w.longitude - v.longitude)) / l2;
+  t = Math.max(0, Math.min(1, t));
+  let nearestPt = { latitude: v.latitude + t * (w.latitude - v.latitude),
+                    longitude: v.longitude + t * (w.longitude - v.longitude) }
+  return {dist: this.dist2(p, nearestPt), point: nearestPt};
+}
+
+// compute the implied speed between the 2 given points
   // return meters/second
   computeImpliedSpeed = (p1: TrekPoint, p2: TrekPoint) : number => {
     return this.calcDistLaLo(p1.l, p2.l) / Math.abs(p1.t - p2.t);
@@ -466,7 +491,7 @@ export class UtilsSvc {
   }
 
   // create a 12-char date-time string for sorting as yyyyMMddhhmm from the given date and time fields
-  formatSortDate(d?: any, t?: string) : string {
+  formatSortDate(d?: any, t?: string, dNum?: number) : string {
     let dt    : Date;
     let year  : number;
     let month : number;
@@ -475,11 +500,15 @@ export class UtilsSvc {
     let m     : number;   // minute
     let fd    : string;
 
-    if (d && !/^[01]?\d\/[0123]?\d\/(\d\d|\d\d\d\d)$/.test(d)) { return ''; } // invalid given date format
-    if (d) {
-      dt = t ? new Date(d + ' ' + t) : new Date(d);
+    if(dNum){
+      dt = new Date(dNum);
     } else {
-      dt = new Date();    // no date, use current time
+      if (d && !/^[01]?\d\/[0123]?\d\/(\d\d|\d\d\d\d)$/.test(d)) { return ''; } // invalid given date format
+      if (d) {
+        dt = t ? new Date(d + ' ' + t) : new Date(d);
+      } else {
+        dt = new Date();    // no date, use current time
+      }
     }
     year = dt.getFullYear();
     month = dt.getMonth() + 1;
@@ -497,15 +526,19 @@ export class UtilsSvc {
   }
     
   // return a 17-char sortDate as yyyyMMddhhmmsskkk where kkk is number of milliseconds
-  formatLongSortDate = (d ?: any, t ?: string) => {
+  formatLongSortDate = (d ?: any, t ?: string, dNum?: number) => {
     let dt    : Date;
-    let dStr = this.formatSortDate(d, t);
+    let dStr = this.formatSortDate(d, t, dNum);
 
     if (dStr !== ''){
-      if (d) {
-        dt = t ? new Date(d + ' ' + t) : new Date(d);
+      if(dNum){
+        dt = new Date(dNum);
       } else {
-        dt = new Date();    // no date, use current time
+        if (d) {
+          dt = t ? new Date(d + ' ' + t) : new Date(d);
+        } else {
+          dt = new Date();    // no date, use current time
+        }
       }
       let s = dt.getSeconds();
       if(s < 10) { dStr += '0'; } 
@@ -577,30 +610,49 @@ export class UtilsSvc {
     return (DayNames[dt.getDay()] + ' ' + dt.toLocaleDateString());
   }
   
-  // Format a given date to hh:mm AM/PM. Use current time if not given.
+  // return the formatted time from the given sortDate
+  timeFromSortDate = (sDate: SortDate) => {
+    if (/\d{14}/.test(sDate)) {
+      let h = parseInt(sDate.substr(8,2));
+      let m = parseInt(sDate.substr(10,2));
+      return this.finishFormatTime(h, m);
+    }
+    return '';
+  }
+
+  // Format a given date to hh:mm am/pm. Use current time if not given.
   formatTime(t?: Date | number) : string {
     let dt    : Date    = t ? new Date(t) : new Date();
     let h     : number  = dt.getHours();
     let m     : number  = dt.getMinutes();
-    let ampm  : string  = 'AM';    
-    let fd    : string;
+
+    return this.finishFormatTime(h, m);
+  }
+
+  // return a string in the form of hh:mm am/pm from the given hour and minute values
+  finishFormatTime = (h: number, m: number) => {
+    let ampm  : string  = 'am';    
 
     if ( h > 11 ) {
-      ampm = 'PM';
+      ampm = 'pm';
       if ( h > 12) {
         h -= 12;
       }
     }
     else {
-      if (h === 0) { h = 12; }    // 12 AM
+      if (h === 0) { h = 12; }    // 12 am
     }
-    fd = ((h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m + ' ' + ampm);
-    return fd;
+    return ((h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m + ' ' + ampm);
   };
   
   // return the date and time for the given trek formatted for display
   formatTrekDateAndTime = (date: string, time: string) => {
-    return (this.formattedLocaleDateAbbrDay(date) + "  " + time)
+    return (this.formattedLocaleDateAbbrDay(date) + "  " + time.toLowerCase())
+  }
+
+  // return 'Today' if the given sortDate is for today, otherwise return the associated date
+  getTodayOrDate = (todaySD: string, sDate: string) => {
+    return (todaySD === sDate.substr(0,8) ? 'Today' : this.dateFromSortDate(sDate))
   }
 
   // convert the distance given in meters to a value rounded to the selected precision in the given units
@@ -824,10 +876,14 @@ export class UtilsSvc {
       case 'mi':
       case 'miles':
         return (dist / M_PER_MILE);
+      case 'ft':
+      case 'feet':
+        return (dist / M_PER_FOOT);
       case 'km':
       case 'kilometers':
         return (dist / 1000);
       case 'meters':
+      case 'm':
         return dist;
       default:
         return dist;
@@ -904,12 +960,54 @@ export class UtilsSvc {
 
   // copy the given object
   copyObj = (orig: any) => {
-    let objCopy = {};
+    return JSON.parse(JSON.stringify(orig));
+  }
 
-    for (let key in orig) {
-      objCopy[key] = orig[key];
-    }
-    return objCopy;
+  // Get the elevation data as an array of elevation readings that are evenly spaced out along the trek.
+  // Get 1 elevation reading per trek GPS point or 512 readings whichever is less.
+  // If there are more than 512 GPS points in the path, then use a sampling of the path.
+  getElevationsArray = (path: LatLng[]) : Promise<void | ElevationData[]> => {
+    let result: ElevationData[] = [];
+    let numPts = path.length;
+    let samples : number = Math.min(512, numPts);   // number of elevation readings
+    let finalPath = path;
+
+    return new Promise((resolve, reject) => {
+      if (numPts < 2) { resolve(result); }    // need at least 2 GPS points to make a path
+      if (numPts > MAX_LOCATIONS_PER_ELEVATION_REQUEST) {
+
+        // too many points in the path.  create a new path using an even sampling of the original.
+        let skipVal = Math.trunc(numPts / 512 + 1);
+        let i: number;
+        finalPath = [];
+        for (i=0; i<numPts; ){
+          finalPath.push(path[i]);
+          i += skipVal;
+        }
+        if (i - skipVal !== numPts - 1){  // make sure we get the endpoint of the original path
+          finalPath.push(path[numPts - 1]);
+        }
+      }
+
+      // compose and send request to Elevation API
+      this.getPathElevations(finalPath, samples)     
+      .then((res : any) => {
+        if (res.status !== 'OK') { 
+          reject(res.status);             // some problem reported from Elevation API
+        }
+        else {
+          // add just the elevation values to the result
+          res.results.forEach((point) => {
+            result.push(Math.round(point.elevation * 100) / 100); 
+          })
+          resolve(result);
+        }
+      })
+      .catch((err) => {
+        alert(err)
+        reject(err);
+      })
+    })
   }
 
   // use the Google Elevations API to return a list of elevations that occur along the given path
@@ -927,90 +1025,19 @@ export class UtilsSvc {
     query += '&key=' + GOOGLE_MAPS_API_KEY;
     return fetch(ELEVATION_API_URL + query)
     .then(response => response.json())  
-    .catch((err) => err)
+    .catch((err) => {
+      alert(err + '\n' + path.length + '\n' + query);
+      err})
       
   }
 
-  // Get the elevation data as an array of elevation readings that are evenly spaced out along the trek.
-  // Get 2 elevation readings per trek GPS point.
-  // If there are more than 250 GPS points in the path, then the path must be segmented by distance (not GPS points).
-  // Process each segment to get elevations and append that data to the final array.  
-  getElevationsArray = (path: LatLng[], tDist: number) : Promise<void | ElevationData[]> => {
-    let result  = [] as ElevationData[];
-    let numPts = path.length;
-    let nElevs = numPts * 2;        // total number of elevation readings we want
-    let samples;                    // number of elevation readings in a segment
-    let elevsRemaining = nElevs;    // lets us quickly know how many readinigs we need for last segment
-    let elevData = [];              // array of ElevationData arrays
-    let segStart = 0;               // start index of the current segment within the trek path
-    let reqPath = [];               // path passed to elevation API
-    let dist = 0;                   // distance accumulated for current segment
-    let cSeg = 1;                   // current segment of the total path
-    let nSegs = Math.trunc(nElevs / MAX_ELEVATION_SAMPLES_PER_REQUEST) + 1; // number of segments we will need for this path
-    let segDist = tDist / nSegs;
-    let segReady = false;           // flag that indicates a segment of the path is ready to fetch its elevation data
-    let allDone = [];               // array of Promises for each segment API call
-
-    return new Promise((resolve, reject) => {
-      if (numPts < 2) { resolve(result); }    // need at least 2 GPS points to make a path
-      for(let i=1; i < numPts; i++) {
-        if (cSeg === nSegs) {                // skip distance processing if last (or only) segment
-          samples = elevsRemaining;
-          i = numPts;                       // set to read data for last segment and stop the for loop
-          reqPath = path.slice(segStart, i);
-          segReady = true;
-        }
-        else {
-          dist += this.calcDist(path[i - 1].latitude, path[i - 1].longitude,
-                                path[i].latitude, path[i].longitude);   // add to segment distance accumulator
-          if (dist >= segDist) {
-            reqPath = path.slice(segStart, i + 1);
-            segStart = i;           // set starting point for next segment as end point of last segment
-            samples = Math.trunc(nElevs/nSegs); // % of elevation readings = % of total trek distance
-            elevsRemaining -= (samples - 1);
-            dist = 0;               // reset segment distance accumulator
-            cSeg++;                 // update current segment number
-            segReady = true;        // indicate elevation data can now be requested
-          }
-        }
-        if (segReady) {              // is a segment ready to fetch its elevation data?
-          segReady = false;
-          elevData.push([]);        // make an array to hold the elev data for this segment
-          allDone.push(this.processSegment(reqPath.slice(), samples, elevData[elevData.length-1]));
-        }
-      }
-      // now wait for all segments to be done
-      Promise.all(allDone)
-      .then(() => {
-        elevData.forEach((seg, index) => {
-          result = result.concat(seg);  // concatenate elevation data for all segments
-          if (index !== elevData.length-1) {
-            result.length--;  // ending value of all but last segment will be repeated by starting value of the next
-          }
-        })
-        resolve(result);
-      })
-      .catch((err) => {
-        reject(err);
-      })
-    })
+  // return the index into the given elevations array for the given distance and offset
+  getElevationsIndex = (elevs: ElevationData[], totalDist: number, offsetDist: number) : number => {
+    if ( totalDist === 0 || 
+         !elevs || 
+         elevs.length < 2) { alert(offsetDist + ' : ' + totalDist); return undefined; }
+    return Math.trunc((elevs.length - 1) * (offsetDist / totalDist));
   }
-
-  processSegment = (path: LatLng[], samples: number, data: ElevationData[]) => {
-    return new Promise((resolve, reject) => {
-      this.getPathElevations(path, samples)     // compose and send request to Elevation API
-      .then((res : any) => {
-        if (res.status !== 'OK') { 
-          reject(res.status);         // some problem reported from Elevation API
-        }
-        res.results.forEach((point) => {
-          data.push(Math.round(point.elevation * 100) / 100); // add just the elevation value to the result
-        })
-        resolve('OK');
-      })
-      .catch((err) => reject(err))
-    })
-}
 
   // compute the elevation gain for the given ElevationData array
   getElevationGain = (elData: ElevationData[]) : number => {
@@ -1121,6 +1148,16 @@ export class UtilsSvc {
     return range;
   }
 
+  // return the average of a segment of a list of numbers
+  getArraySegmentAverage = (list: number[], startIndex = 0, endIndex = list.length-1) =>{
+    let sum = 0;
+
+    for(let i=startIndex; i<= endIndex; i++) {
+      sum += list[i];
+    }
+    return sum / (endIndex - startIndex + 1);
+  }
+
   // given a value and a list of numbers (sorted ascending) return the index of
   // the interval of the 2 numbers the value falls between
   // return 0 if value is less than first list item
@@ -1128,7 +1165,6 @@ export class UtilsSvc {
   // return -1 if invalid value (undefined)
   findRangeIndex = (val: number, list: number[]) : number => {
     if(val === undefined || val === null) {
-      // alert("Invalid Speed:\n" + val)
       return -1;}
     let lLen = list.length;
     for (let i=0; i<lLen; i++) {
@@ -1247,6 +1283,22 @@ export class UtilsSvc {
         }
       }
     }
+  }
+
+  // return the total distance of the given path
+  getPathDist = (path: LatLng[]) : number => {
+    let dist = 0;
+    let last = path.length;
+
+    if (path.length) {        // skip if no points in path
+      if (--last > 0) {       // skip if only 1 point in path
+        for (let i = 0; i < last; i++) {
+          dist += this.calcDist(path[i].latitude, path[i].longitude, 
+                                path[i+1].latitude, path[i+1].longitude);
+        }
+      }
+    }
+    return dist;
   }
 
   // return a LatLng[] from the given TrekPoint[]
@@ -1418,4 +1470,9 @@ export class UtilsSvc {
     return intervals;
   };
 
+  replaceUriFilename = (oldUri: string, newFilename: string) => {
+    let extPos = oldUri.search(/\./);
+    let fnPos = oldUri.lastIndexOf('/');
+    return oldUri.substring(0, fnPos) + '/' + newFilename + oldUri.substr(extPos);
+  }
 }

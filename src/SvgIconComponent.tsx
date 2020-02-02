@@ -2,13 +2,13 @@ import React, { Component } from 'react';
 import { View, StyleSheet } from 'react-native';
 import Svg, { Path, G, Defs, LinearGradient, Stop } from 'react-native-svg'
 import { observer, inject } from 'mobx-react';
-import { TrekInfo } from './TrekInfoModel';
+import { MainSvc } from './MainSvc';
 
-@inject('uiTheme', 'trekInfo')
+@inject('uiTheme', 'mainSvc')
 @observer
 class SvgIcon extends Component<{
   uiTheme     ?: any,
-  trekInfo    ?: TrekInfo,
+  mainSvc     ?: MainSvc,
   style       ?: any,             // styling for the container
   fill        ?: string,          // color for the svg image
   fillPct     ?: number,          // percent to fill when using gradient
@@ -25,7 +25,7 @@ class SvgIcon extends Component<{
 
   render() {
 
-    const { trekLogBlue } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
+    const { trekLogBlue } = this.props.uiTheme.palette[this.props.mainSvc.colorTheme];
     const iconAreaSize = this.props.size || 48;
     const propStyle = this.props.style || {};
     const iconSize = this.props.paths[0].size;
@@ -81,4 +81,4 @@ class SvgIcon extends Component<{
 
 }
 
-export default SvgIcon;
+export default React.memo(SvgIcon);

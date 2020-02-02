@@ -1,14 +1,11 @@
-import { action } from "mobx";
+import { action } from 'mobx';
 import { Location } from "@mauron85/react-native-background-geolocation";
 
 import {
   TrekInfo,
-  CALC_VALUES_INTERVAL,
   LaLo,
   TrekPoint,
-  TrackingObject,
-  TREK_TYPE_DRIVE,
-  RESP_OK,
+  ElevationData
 } from "./TrekInfoModel";
 import { UtilsSvc, MPH_TO_MPS, DRIVING_A_CAR_SPEED } from "./UtilsService";
 import { Course, CourseSvc} from './CourseService';
@@ -16,6 +13,9 @@ import { CourseTrackingMethod } from './TrackingMethodComponent';
 import { LocationSvc } from "./LocationService";
 import { ModalModel } from "./ModalModel";
 import { ToastModel } from "./ToastModel";
+import { MainSvc, TREK_TYPE_DRIVE, RESP_OK } from './MainSvc';
+import { TrekSvc } from './TrekSvc';
+import { LogState, TrackingObject } from './LogStateModel';
 
 const SPEED_RANGES_MPS = [
   2 * MPH_TO_MPS,
@@ -51,92 +51,236 @@ export const MIN_POINT_DISTS_LIMITED = {
   Drive: MIN_POINT_DIST_LIMITED_DRIVE
 };
 
+export const CALC_VALUES_INTERVAL = 3;  // number of seconds between updates of 'current' values (speedNow, etc.)
+export const MAX_TIME_SINCE = 3;        // max seconds since last GPS point before we punt on current values
+
+
+export const START_VIB = 250;
+export const STOP_VIB =  500;
+
 export const TREK_LIMIT_TYPE_TIME = 'Time';
 export const TREK_LIMIT_TYPE_DIST = 'Dist';
 export type TrekLimitType = 'Time' | 'Dist';
+export type TrekLoggingState = 'Not Logging' | 'Logging' | 'Request Stop' | 'Review' | 
+                                'Aborting' | "Stopping";
 
 export interface PointAtLimitInfo {
-  pt: TrekPoint,
-  dist: number,
-  time: number,
-  index: number,
-  path?: TrekPoint[]
+  pt: TrekPoint,      // point found (computed) at dist/time
+  dist: number,       // distance of path from beginning of pointlist to pt
+  time: number,       // time "
+  index: number,      // index of TrekPoint that starts the path segment containing pt 
+  path?: TrekPoint[]  // path to point (pt)
+}
+
+export interface LogStateProperties {
+  logging ?:            boolean,
+  loggingState ?:       TrekLoggingState,
+  timerOn ?:            boolean,
+  trekSaved ?:          boolean,
+  limitsActive ?:       boolean,
+  timeLimit ?:          number,
+  distLimit ?:          number,
+  limitTrekDone ?:      boolean,
+  lastTime ?:           number,
+  lastDist ?:           number,
+  units ?:              string,
+  lastDistUnits ?:      string,
+  startMS ?:            number,  
+  saveDialogOpen ?:     boolean,
+  cancelDialogOpen ?:   boolean,
+  showMapInLog ?:       boolean,
+  currentDisplayImageSet ?: number,
+  alllowImageDisplay ?: boolean,
+  trackingObj?:         TrackingObject,
+  trekTimerPaused ?:    boolean,
+  trackingMethod  ?:    CourseTrackingMethod,
+  trackingValue  ?:     number,
+  trackingCourse  ?:    Course,
 }
 
 export class LoggingSvc {
 
-  pointsSinceSmooth = 0;
+  newTrek = this.logState.trek;
 
   constructor(
+    public logState: LogState,
+    private mainSvc: MainSvc,
     private utilsSvc: UtilsSvc,
-    private trekInfo: TrekInfo,
+    private trekSvc: TrekSvc,
     private locationSvc: LocationSvc,
     private courseSvc: CourseSvc,
     private modalSvc: ModalModel,
-    private toastSvc: ToastModel
-  ) {}
+    private toastSvc: ToastModel,
+  ) {
+    // this.initializeObservables();
+  }
+
+  @action
+  initializeObservables = () => {
+    this.clearTrackingItems();
+    this.setTrackingDiffTime(0);
+    this.setTrackingDiffDist(0);
+    this.setTrackingValue(0);
+    this.setTrackingMethod('courseTime');
+  }
+
+  // Set the value of logging
+  @action
+  setLogging = (value: boolean) => {
+    this.logState.logging = value;
+  }
+
+  // Set the value of loggingState
+  @action
+  setLoggingState = (state: TrekLoggingState) => {
+    this.logState.loggingState = state;
+    switch(state){
+      case 'Not Logging':
+      case 'Review':
+      case 'Stopping':
+        this.setLogging(false);
+        break;
+      default:
+        this.setLogging(true);
+    }
+  }
 
   // Start a new Trek logging process
   startTrek = () => {
     this.resetTrek();
-    this.trekInfo.setLogging(true);
   };
 
+  @action
   // reset properties related to the logging process
   resetTrek = () => {
-    this.trekInfo.setTrekTimerPaused(false);
-    this.trekInfo.updateTrekSaved(false);
-    this.pointsSinceSmooth = 0;
-    this.trekInfo.totalGpsPoints = 0;
-    this.trekInfo.trekImages = undefined;
-    this.trekInfo.setTrekImageCount(0);
-    this.trekInfo.hills = "Unknown";
-    this.trekInfo.drivingACar = false;
-    this.trekInfo.haveShownDriving = false;
-    this.trekInfo.setTrekLabel("");
-    this.trekInfo.setTrekNotes("");
+    this.logState.timeLimit = 0;
+    this.logState.distLimit = 0;
+    this.logState.pointsSinceSmooth = 0;
+    this.setTrekTimerPaused(false);
+    this.logState.haveShownDriving = false;
+    this.trekSvc.setTrekImageCount(this.newTrek, 0);
+    this.setAllowImageDisplay(true);
+    this.trekSvc.resetTrek(this.newTrek);
   };
 
   stopTrek = () => {
-    this.stopTrackingTimer(this.trekInfo.trackingObj);
+    this.stopTrackingTimer(this.logState.trackingObj);
     this.stopTrekTimer();
-    this.trekInfo.setLogging(false);
-    let limit = this.trekInfo.trekLimitType();
+    let limit = this.trekLimitType();
     if ( limit ) {            // is this a limited trek?
       switch(limit){
         case TREK_LIMIT_TYPE_TIME:
           this.stopLimitTimer();
-          if (this.trekInfo.limitTrekDone) {
+          if (this.logState.limitTrekDone) {
             // only do if user finished the time
-            this.trekInfo.setPointList( 
-              this.utilsSvc.truncateTrekPath(this.trekInfo.pointList, this.trekInfo.timeLimit, limit));
+            this.updatePointList(
+                this.utilsSvc.truncateTrekPath(this.newTrek.pointList, this.logState.timeLimit, limit));
           }
           break;
         case TREK_LIMIT_TYPE_DIST:
-          this.trekInfo.setPointList( 
-          this.utilsSvc.truncateTrekPath(this.trekInfo.pointList, this.trekInfo.distLimit, limit));
+          this.updatePointList( 
+              this.utilsSvc.truncateTrekPath(this.newTrek.pointList, this.logState.distLimit, limit));
           break;
         default:
       }
     } 
-    if (this.trekInfo.lastPoint() !== undefined){
-      this.updateDuration(this.trekInfo.lastPoint().t * 1000);
+    if (this.trekSvc.lastPoint(this.newTrek) !== undefined){
+      this.updateDuration(this.trekSvc.lastPoint(this.newTrek).t * 1000);
     }
-    this.setEndTime();
+    this.trekSvc.setEndTime(this.newTrek, this.utilsSvc.formatTime(this.logState.startMS + this.newTrek.duration * 1000));
     this.smoothTrek();
-    this.trekInfo.updateCalculatedValues(true);
+    this.trekSvc.updateCalculatedValues(this.newTrek, this.logState.timerOn, true);
   }
+
+  // update the group specific properties from the mainSvc
+  @action
+  updateGroupProperties = () => {
+    let update = {group: this.mainSvc.group,
+                  strideLength: this.mainSvc.strideLength,
+                  type: this.mainSvc.defaultTrekType,
+                  weight: this.mainSvc.weight,
+                  packWeight: this.mainSvc.packWeight};
+    this.trekSvc.updateGroupProperties(this.newTrek, update);
+  }
+
+  // set the value for the saveDialogOpen property
+  setSaveDialogOpen = (status: boolean) => {
+    this.logState.saveDialogOpen = status;
+  }
+
+  // set the value for the cancelDialogOpen property
+  setCancelDialogOpen = (status: boolean) => {
+    this.logState.cancelDialogOpen = status;
+  }
+  
+  @action
+  setTimeLimit = (value: number) => {
+    this.logState.timeLimit = value;
+  }
+
+  setTimeLimitInfo = (info: {value: number, units: string}) => {
+    this.setTimeLimit(info.value);
+    this.logState.units = info.units;
+  }
+
+  @action
+  setDistLimit = (value: number) => {
+    this.logState.distLimit = value;
+  }
+
+  setDistLimitInfo = (info: {value: number, units: string}) => {
+    this.setDistLimit(info.value);
+    this.logState.units = info.units;
+  }
+
+  // set packWeight from the info object (convert to kilos if nec)
+  setPackWeightInfo = (info: {value: number, units ?: string}) => {
+    this.trekSvc.setPackWeight(this.newTrek, info.value);
+  }
+
+  // return the type of limit on the trek in progress. return undefined if no limit.
+  trekLimitType = () :string => {
+    if (this.logState.distLimit !== 0) { return 'Dist'; }
+    if (this.logState.timeLimit !== 0) { return 'Time'; }
+    return undefined;
+  }
+
+  @action 
+  setLimitsActive = (status: boolean) => {
+    this.logState.limitsActive = status;
+  }
+
   // stop time limit timer
   stopLimitTimer = () => {
-    window.clearInterval(this.trekInfo.limitTimerId);
+    window.clearInterval(this.logState.limitTimerId);
   };
+
+  // set the value of the showMap property
+  @action
+  setShowMapInLog = (status: boolean) => {
+    this.logState.showMapInLog = status;
+  }
+
+  // set the value of the allowImageDisplay property
+  @action
+  setAllowImageDisplay = (status: boolean) => {
+    this.logState.allowImageDisplay = status;
+  }
+  
+  // set the value of the currentDisplayImageSet property
+  @action
+  setCurrentDisplayImageSet = (index: number) => {
+    if (this.trekSvc.getTrekImageSetCount(this.newTrek) > index){
+      this.logState.currentDisplayImageSet = index;
+    }
+  }
 
   startPositionTracking = (gotPos: Function) => {
     // Get the current GPS position
-    this.trekInfo.setWaitingForSomething("Location");
+    this.mainSvc.setWaitingForSomething("Location");
     this.locationSvc.getCurrentLocation(
       (location: Location) => {
-        this.trekInfo.setWaitingForSomething();
+        this.mainSvc.setWaitingForSomething();
         gotPos(location);
         this.watchGeolocationPosition(gotPos, true);
       },
@@ -150,13 +294,13 @@ export class LoggingSvc {
 
     // Start watching position, use an appropriate distance filter value
     // set distanceFilter limit in meters
-    this.trekInfo.setMinPointDist(
-      this.trekInfo.limitsActive
-        ? MIN_POINT_DISTS_LIMITED[this.trekInfo.type]
+    this.mainSvc.setMinPointDist(
+      this.logState.limitsActive
+        ? MIN_POINT_DISTS_LIMITED[this.newTrek.type]
         : 1
     );
     this.locationSvc.startGeoLocation(gotPos, startFresh, {
-      distanceFilter: this.trekInfo.minPointDist,
+      distanceFilter: this.mainSvc.minPointDist,
       stopOnTerminate: false
     });
   };
@@ -165,7 +309,7 @@ export class LoggingSvc {
   // Format date to dd/mm/yy.
   @action
   setDate = () => {
-    this.trekInfo.date = new Date().toLocaleDateString();
+    this.trekSvc.setDate(this.newTrek, new Date().toLocaleDateString());
   };
 
   // Set the starting date and time for the trek.
@@ -173,27 +317,29 @@ export class LoggingSvc {
   @action
   setStartTime = () => {
     this.setDate();
-    this.trekInfo.startTime = this.utilsSvc.formatTime();
-    this.trekInfo.sortDate = this.utilsSvc.formatSortDate(
-      this.trekInfo.date,
-      this.trekInfo.startTime
-    );
-    this.trekInfo.startMS = new Date().getTime(); // get time in milliseconds
-  };
-
-  // Set the ending time for the trek.  Format time to hh:mm AM/PM
-  @action
-  setEndTime = () => {
-    this.trekInfo.endTime = this.utilsSvc.formatTime(
-      this.trekInfo.startMS + this.trekInfo.duration * 1000
-    );
+    this.trekSvc.setStartTime(this.newTrek, this.utilsSvc.formatTime());
+    this.trekSvc.setSortDate(this.newTrek, 
+                             this.utilsSvc.formatSortDate(this.newTrek.date, this.newTrek.startTime));
+    this.logState.startMS = new Date().getTime(); // get time in milliseconds
   };
 
   // Indicate no end time
   @action
   clearEndTime = () => {
-    this.trekInfo.endTime = "";
+    this.trekSvc.setEndTime(this.newTrek, '');
   };
+
+  // set the value of the trekPointCount property
+  @action
+  setTrekPointCount = () => {
+    this.logState.trekPointCount = this.trekSvc.pointListLength(this.newTrek);
+  }
+
+  // set the value of the startMS property
+  @action
+  setStartMS = (ms: number) => {
+    this.logState.startMS = ms;
+  }
 
   @action
   setLayoutOpts = (val: string) => {
@@ -201,10 +347,10 @@ export class LoggingSvc {
       case "hybrid":
       case "terrain":
       case "standard":
-        this.trekInfo.setDefaultMapType(val);
+        this.mainSvc.setDefaultMapType(val);
         break;
       default:
-        this.trekInfo.layoutOpts = val;
+        this.mainSvc.layoutOpts = val;
     }
   };
 
@@ -213,19 +359,19 @@ export class LoggingSvc {
   // But, if we're stopped, that may never come (at least not for a while) so we update to show we're stopped.
   @action
   startTrekTimer = () => {
-    this.trekInfo.setTimerOn(true); // indicate that the duration timer is on
-    this.trekInfo.calculatedValuesTimer = CALC_VALUES_INTERVAL; // set to compute currentSpeed, etc. every so often
-    this.trekInfo.trekTimerId = window.setInterval(() => {
-      if (!this.trekInfo.trekTimerPaused) {
-        if (--this.trekInfo.calculatedValuesTimer === 0) {
+    this.setTimerOn(true); // indicate that the duration timer is on
+    this.logState.calculatedValuesTimer = CALC_VALUES_INTERVAL; // set to compute currentSpeed, etc. every so often
+    this.logState.trekTimerId = window.setInterval(() => {
+      if (!this.logState.trekTimerPaused) {
+        if (--this.logState.calculatedValuesTimer === 0) {
           // calculatedValues have not been updated recently, user must be stopped
-          this.trekInfo.updateCalculatedValues(true);
-          this.trekInfo.calculatedValuesTimer = CALC_VALUES_INTERVAL;
+          this.trekSvc.updateCalculatedValues(this.newTrek, this.logState.timerOn, true);
+          this.logState.calculatedValuesTimer = CALC_VALUES_INTERVAL;
           // make sure distance filter is at minimum since we're stopped
-          if (this.trekInfo.minPointDist !== 1) {
-            this.trekInfo.setMinPointDist(1);
+          if (this.mainSvc.minPointDist !== 1) {
+            this.mainSvc.setMinPointDist(1);
             this.locationSvc.updateGeolocationConfig({
-              distanceFilter: this.trekInfo.minPointDist
+              distanceFilter: this.mainSvc.minPointDist
             });
           }
         }
@@ -234,12 +380,29 @@ export class LoggingSvc {
     }, 1000);
   };
 
+  // Set the value of the timerOn property
+  @action
+  setTimerOn = (status: boolean) => {
+    this.logState.timerOn = status;
+  }
+
+  // set the value of the trekTimerPaused property
+  setTrekTimerPaused = (status: boolean) => {
+    this.logState.trekTimerPaused = status;
+  }
+
+  // Set the saved status of the trek to the given value
+  @action
+  updateTrekSaved = (status: boolean) => {
+    this.logState.trekSaved = status;
+  }
+
   // Stop the duration timer
   stopTrekTimer = () => {
-    this.trekInfo.updateCalculatedValues(true);
-    if (this.trekInfo.timerOn) {
-      window.clearInterval(this.trekInfo.trekTimerId);
-      this.trekInfo.setTimerOn(false);
+    this.trekSvc.updateCalculatedValues(this.newTrek, this.logState.timerOn, true);
+    if (this.logState.timerOn) {
+      window.clearInterval(this.logState.trekTimerId);
+      this.setTimerOn(false);
     }
   };
 
@@ -247,9 +410,9 @@ export class LoggingSvc {
   updateDuration = (value?: number) => {
     let now = new Date().getTime();
     if (value !== undefined) {
-      this.trekInfo.setStartMS(now - value);
+      this.setStartMS(now - value);
     }
-    this.trekInfo.setDuration(Math.round((now - this.trekInfo.startMS) / 1000));
+    this.trekSvc.setDuration(this.newTrek, Math.round((now - this.logState.startMS) / 1000));
   };
 
   // Add a point with the given location to the pointList. Update the trek distance and smooth the path
@@ -258,30 +421,29 @@ export class LoggingSvc {
   @action
   addPoint = (pos: Location): boolean => {
     let added = false;
-    let tInfo = this.trekInfo;
 
-    if(tInfo.logging){
-      if (tInfo.totalGpsPoints === 0) {
+    if(this.logState.logging){
+      if (this.newTrek.totalGpsPoints === 0) {
         // start Trek timer after recieving first GPS reading
         this.startTrekTimer();
         this.setStartTime();
-        tInfo.setTrekTimerPaused(true);
+        this.setTrekTimerPaused(true);
       }
-      tInfo.totalGpsPoints++;
+      this.newTrek.totalGpsPoints++;
       if (pos.speed === undefined || pos.speed === null) {
         //sometimes the speed property is undefined (why? I don't know)
-        if (!tInfo.pointListEmpty()) {
-          pos.speed = tInfo.pointList[tInfo.trekPointCount - 1].s; // use prior point speed
+        if (!this.trekSvc.pointListEmpty(this.newTrek)) {
+          pos.speed = this.newTrek.pointList[this.logState.trekPointCount - 1].s; // use prior point speed
         } else {
           pos.speed = 0;
         }
       }
       let newPt = {
         l: { a: pos.latitude, o: pos.longitude },
-        t: Math.round((pos.time - tInfo.startMS) / 1000),
+        t: Math.round((pos.time - this.logState.startMS) / 1000),
         s: this.utilsSvc.fourSigDigits(pos.speed)
       };
-      let lastPt = tInfo.trekPointCount ? tInfo.pointList[tInfo.trekPointCount - 1] : undefined;
+      let lastPt = this.logState.trekPointCount ? this.newTrek.pointList[this.logState.trekPointCount - 1] : undefined;
         // check for point unbelievably far from last pt (check for high implied speed)
       let badPt = false;
         // lastPt && (newPt.s > 0) &&
@@ -289,61 +451,61 @@ export class LoggingSvc {
 
       let secondZero = newPt.s === 0 && (lastPt && lastPt.s === 0);
 
-      let newFirstPt = tInfo.trekPointCount === 1 && (badPt || secondZero)
+      let newFirstPt = this.logState.trekPointCount === 1 && (badPt || secondZero)
       // leave out bad points and multiple 0-speed points
       if (newFirstPt || !(badPt || secondZero)) {
   
         if (!newFirstPt) {
-          this.pointsSinceSmooth++;
+          this.logState.pointsSinceSmooth++;
           let newDist = this.newPointDist(newPt.l.a, newPt.l.o);
-          tInfo.pointList.push(newPt);
-          tInfo.setTrekPointCount();
-          if (tInfo.trekPointCount === 2) {
+          this.newTrek.pointList.push(newPt);
+          this.setTrekPointCount();
+          if (this.logState.trekPointCount === 2) {
 
             // trek is officially under way
-            tInfo.setTrekTimerPaused(false);
+            this.setTrekTimerPaused(false);
             this.updateDuration();
-            if(this.trekInfo.trackingCourse){
+            if(this.logState.trackingCourse){
               // need to establish tracking object
-              this.setTrackingObj(this.trekInfo.trackingCourse, newPt.t,
-                                           this.trekInfo.trackingMethod, this.trekInfo.trackingValue)
+              this.setTrackingObj(this.logState.trackingCourse, newPt.t, 
+                                  this.logState.trackingMethod, this.logState.trackingValue)
               .then(() => {
-                this.startTrackingMarker(this.trekInfo.trackingObj);
-                this.trekInfo.trackingCourse = undefined;
+                this.startTrackingMarker(this.logState.trackingObj);
+                this.logState.trackingCourse = undefined;
                 this.setLayoutOpts('All');
-                this.trekInfo.setSpeedDialZoomedIn(false);
+                this.mainSvc.setSpeedDialZoomedIn(false);
               })      
               .catch((err) => alert(err))          
             }
           }
-          tInfo.drivingACar =
-            tInfo.drivingACar || tInfo.type === TREK_TYPE_DRIVE 
+          this.newTrek.drivingACar =
+            this.newTrek.drivingACar || this.newTrek.type === TREK_TYPE_DRIVE 
                               || newPt.s / MPH_TO_MPS > DRIVING_A_CAR_SPEED;
-          tInfo.updateSpeedNow();
-          if (!tInfo.limitsActive) {
+          this.trekSvc.updateSpeedNow(this.newTrek, this.logState.timerOn);
+          if (!this.logState.limitsActive) {
             // don't change distance filter if limited trek
             let range = this.utilsSvc.findRangeIndex(newPt.s, SPEED_RANGES_MPS);
-            if (range !== -1 && range !== tInfo.currSpeedRange) {
+            if (range !== -1 && range !== this.mainSvc.currSpeedRange) {
               // update the distance filter to reflect the new speed range
-              tInfo.currSpeedRange = range;
-              tInfo.minPointDist = DIST_FILTER_VALUES[range];
+              this.mainSvc.currSpeedRange = range;
+              this.mainSvc.minPointDist = DIST_FILTER_VALUES[range];
               this.locationSvc.updateGeolocationConfig({
-                distanceFilter: tInfo.minPointDist
+                distanceFilter: this.mainSvc.minPointDist
               });
             }
           }
-          if (this.pointsSinceSmooth >= SMOOTH_INTERVAL) {
+          if (this.logState.pointsSinceSmooth >= SMOOTH_INTERVAL) {
             this.smoothTrek();
-            tInfo.updateCalculatedValues(true);
+            this.trekSvc.updateCalculatedValues(this.newTrek, this.logState.timerOn, true);
           } else {
-            this.updateDist(newDist);
-            tInfo.updateAverageSpeed();
+            this.trekSvc.updateDist(this.newTrek, newDist);
+            this.trekSvc.updateAverageSpeed(this.newTrek);
           }
-          tInfo.calculatedValuesTimer = CALC_VALUES_INTERVAL;
+          this.logState.calculatedValuesTimer = CALC_VALUES_INTERVAL;
           added = true;
         } else {
           newPt.t = 0;
-          tInfo.pointList[0] = newPt; // replace 0-speed first point with new 0-speed pt
+          this.newTrek.pointList[0] = newPt; // replace 0-speed first point with new 0-speed pt
           this.setStartTime();
         }
       }
@@ -372,13 +534,13 @@ export class LoggingSvc {
 
   // check the distance from the given point to the last point added to the trek
   newPointDist = (lat: number, lng: number) => {
-    let n = this.trekInfo.pointList.length;
+    let n = this.newTrek.pointList.length;
     if (n === 0) {
       return 0;
     }
     return this.utilsSvc.calcDist(
-      this.trekInfo.pointList[n - 1].l.a,
-      this.trekInfo.pointList[n - 1].l.o,
+      this.newTrek.pointList[n - 1].l.a,
+      this.newTrek.pointList[n - 1].l.o,
       lat,
       lng
     );
@@ -396,44 +558,35 @@ export class LoggingSvc {
 
   // Compute the total distance of the trek.
   totalDist = () => {
-    let numPts = this.trekInfo.trekPointCount;
+    let numPts = this.logState.trekPointCount;
     this.clearDist();
     if (numPts > 0) {
-      this.utilsSvc.setPointDistances(this.trekInfo.pointList);
-      this.updateDist(this.trekInfo.pointList[numPts - 1].d);
+      this.utilsSvc.setPointDistances(this.newTrek.pointList);
+      this.trekSvc.updateDist(this.newTrek, this.newTrek.pointList[numPts - 1].d);
     }
   };
 
   // Reset the trek distance
   clearDist = () => {
-    this.setTrekDist(0);
+    this.trekSvc.setTrekDist(this.newTrek, 0);
   };
 
   // Add the distance between the 2 given points to the trek distance
   addPointDist = (p1: LaLo, p2: LaLo) => {
-    this.updateDist(this.utilsSvc.calcDist(p1.a, p1.o, p2.a, p2.o));
+    this.trekSvc.updateDist(this.newTrek, this.utilsSvc.calcDist(p1.a, p1.o, p2.a, p2.o));
   };
 
-  // Add the given value to the trek distance.
-  // Set the distance property of the ending point in the trek's pointList
-  updateDist = (dist: number) => {
-    this.setTrekDist(this.trekInfo.trekDist + dist);
-    this.trekInfo.pointList[this.trekInfo.pointList.length - 1].d = this.trekInfo.trekDist;
-  };
-
-  // set the value of the trekDist property
-  @action
-  setTrekDist = (dist: number) => {
-    this.trekInfo.trekDist = this.utilsSvc.fourSigDigits(dist);
-  };
+  // set the pointList of the trek object and the trekPointCount
+  updatePointList = (list: TrekPoint[]) => {
+    this.trekSvc.setPointList(this.newTrek, list);
+    this.setTrekPointCount();
+  }
 
   // Reduce the amount of zig-zag in the point path (every so often)
   @action
   smoothTrek = (k = KINK_FACTOR) => {
-    this.trekInfo.setPointList(
-      this.smooth(this.trekInfo.pointList, k, MIN_SIG_SPEED[this.trekInfo.type])
-    );
-    this.pointsSinceSmooth = 0;
+    this.updatePointList(this.smooth(this.newTrek.pointList, k, MIN_SIG_SPEED[this.newTrek.type]));
+    this.logState.pointsSinceSmooth = 0; 
     this.totalDist();
   };
 
@@ -572,36 +725,36 @@ export class LoggingSvc {
   // open the trek label form
   openLabelForm = () => {
     this.modalSvc.setLabelFormOpen(true);
-    this.trekInfo.setTrekLabelFormOpen(true);
+    this.mainSvc.setTrekLabelFormOpen(true);
   };
 
   // close the trek label form
   closeLabelForm = () => {
     this.modalSvc.setLabelFormOpen(false);
-    this.trekInfo.setTrekLabelFormOpen(false);
+    this.mainSvc.setTrekLabelFormOpen(false);
   };
 
   // Let the user edit the trek label and notes
-  editTrekLabel = (newTrek = false, focusField?: string) => {
+  editTrekLabel = (trek: TrekInfo, newTrek = false, focusField?: string) => {
     return new Promise((resolve, reject) => {
-      this.trekInfo.setTrekLabelFormOpen(true);
+      this.mainSvc.setTrekLabelFormOpen(true);
       this.modalSvc
         .openLabelForm({
-          heading: this.trekInfo.type + " Description",
-          label: this.trekInfo.trekLabel,
-          notes: this.trekInfo.trekNotes,
+          heading: trek.type + " Description",
+          label: trek.trekLabel,
+          notes: trek.trekNotes,
           headingIcon: "NoteText",
           okText: "SAVE",
           cancelText: newTrek ? "SKIP" : "CANCEL",
           focus: focusField
         })
         .then((resp: any) => {
-          this.trekInfo.setTrekLabelFormOpen(false);
-          this.trekInfo.setTrekLabel(resp.label);
-          this.trekInfo.setTrekNotes(resp.notes);
+          this.mainSvc.setTrekLabelFormOpen(false);
+          this.trekSvc.setTrekLabel(trek, resp.label);
+          this.trekSvc.setTrekNotes(trek, resp.notes);
           if (!newTrek) {
-            this.trekInfo
-              .saveTrek(this.trekInfo.getSaveObj())
+            this.mainSvc
+              .saveTrek(trek)
               .then(() => {
                 this.toastSvc.toastOpen({
                   tType: "Success",
@@ -622,7 +775,7 @@ export class LoggingSvc {
         })
         .catch(() => {
           // CANCEL, DO NOTHING
-          this.trekInfo.setTrekLabelFormOpen(false);
+          this.mainSvc.setTrekLabelFormOpen(false);
           reject("CANCEL");
         });
     });
@@ -675,8 +828,64 @@ export class LoggingSvc {
       let pt = points[nPts-1];
       return { pt: pt, dist: pt.d, time: pt.t, index: nPts-2, path: getPath ? path : undefined};
     }
-    alert('no points' + '\n' + limit + '\n' + max + '\n' + type )
     return undefined;
+  }
+
+  // clear the trackingObj and trackingMarkerLocation
+  clearTrackingObj = () => { 
+    this.setTrackingMarkerLocation(undefined);
+    this.logState.trackingObj = undefined;   
+  }
+
+  // update selected values of the trackingObj
+  updateTrackingObj = (updates: any) => {
+    this.logState.trackingObj = {...this.logState.trackingObj, ...updates};
+  }
+
+  // set the value of the trackingMarkerLocation property
+  @action
+  setTrackingMarkerLocation = (loc?: TrekPoint) => { 
+    this.logState.trackingMarkerLocation = loc;
+  }
+
+  // set the value of the trackingDiffTime property
+  @action
+  setTrackingDiffTime = (diff: number) => { 
+    this.logState.trackingDiffTime = diff;
+    this.logState.trackingDiffTimeStr = diff !== undefined ? this.utilsSvc.timeFromSeconds(Math.abs(diff)) : '';
+  }
+
+  // set the value of the trackingDiffDist property
+  @action
+  setTrackingDiffDist = (diff: number) => { 
+    this.logState.trackingDiffDist = diff;
+    this.logState.trackingDiffDistStr = diff !== undefined ? 
+                                                  this.mainSvc.formattedDist(Math.abs(diff)) : '';
+  }
+
+  @action
+  setTrackingValue = (value: number) => {
+    this.logState.trackingValue = value;
+  }
+
+  @action
+  setTrackingMethod = (value: CourseTrackingMethod) => {
+    this.logState.trackingMethod = value;
+  }
+
+  @action
+  setTrackingValueInfo = (info: {value: number, method: CourseTrackingMethod}) => {
+    this.setTrackingValue(info.value);
+    this.setTrackingMethod(info.method);
+  }
+
+  // clear properties related to course tracking
+  @action
+  clearTrackingItems = () => {
+    this.logState.trackingCourse = undefined;
+    this.clearTrackingObj();
+    this.setTrackingDiffDist(undefined);
+    this.setTrackingDiffTime(undefined);
   }
 
   // setup the trackingObj from the given trek, trackingMethod and trackingValue
@@ -692,7 +901,7 @@ export class LoggingSvc {
         pList = result.list;
         let params = this.courseSvc.getTrackingParams(course, trackingMethod, trackingValue, result.trek);
 
-        this.trekInfo.trackingObj = {
+        this.logState.trackingObj = {
           courseName: course.name,
           method: trackingMethod,
           goalValue: trackingValue,
@@ -717,7 +926,7 @@ export class LoggingSvc {
           distDiff: 0,
           type: params.type
         };
-        this.trekInfo.setTrackingMarkerLocation(pList[0])
+        this.setTrackingMarkerLocation(pList[0])
         resolve(RESP_OK);
       })
       .catch((err) => reject(err))
@@ -737,9 +946,9 @@ export class LoggingSvc {
       } else {
 
         // don't restart timer, just display the differentials
-        this.trekInfo.setTrackingDiffDist(tObj.distDiff);
-        this.trekInfo.setTrackingDiffTime(tObj.timeDiff);
-        this.trekInfo.setTrackingMarkerLocation(tObj.markerLocation);
+        this.setTrackingDiffDist(tObj.distDiff);
+        this.setTrackingDiffTime(tObj.timeDiff);
+        this.setTrackingMarkerLocation(tObj.markerLocation);
       }      
     }, 2000);
   }
@@ -752,12 +961,15 @@ export class LoggingSvc {
     tObj.startTime = start || new Date().getTime();
     tObj.markerValue = startValue || tObj.initialValue;
     elapsedTics = (new Date().getTime() - tObj.startTime) / tObj.timerInterval;
+
+    // get initial tracking marker position
     ptInfo = this.getPointAtLimit(tObj.pointList, 
                                   tObj.markerValue, tObj.maxValue, tObj.type);
 
+    // start the tacking interval timer
     tObj.timerId = window.setInterval(() => {
       if (ptInfo !== undefined){
-        tObj.lastIndex1 = ptInfo.index;
+        tObj.lastIndex1 = ptInfo.index; // note segment index in pointlist where position was found
         this.computeCourseTrackingInfo(tObj, ptInfo);
 
         // if final tracking marker position has not been displayed, prepare the new markerValue
@@ -796,30 +1008,67 @@ export class LoggingSvc {
     let timeAtTrekDist : number;
 
     if(tObj.markerValue <= tObj.maxValue){
-      this.trekInfo.setTrackingMarkerLocation(ptInfo.pt);
+      this.setTrackingMarkerLocation(ptInfo.pt);
     }
     // the following will stop changing the dist difference if the course is finishes first
     // since ptInfo will stop changing
-    if(this.trekInfo.pointList.length){
+    if(this.newTrek.pointList.length){
       // let trekDistAtTime = this.getPointAtLimit(this.trekInfo.pointList, ptInfo.time, 
       //                                             this.trekInfo.duration, TREK_LIMIT_TYPE_TIME).dist;
       // tObj.distDiff = trekDistAtTime - ptInfo.dist;    // negative if trek is behind, positive if ahead
-      tObj.distDiff = this.trekInfo.trekDist - ptInfo.dist;    // negative if trek is behind, positive if ahead
-      this.trekInfo.setTrackingDiffDist(tObj.distDiff);
+      tObj.distDiff = this.newTrek.trekDist - ptInfo.dist;    // negative if trek is behind, positive if ahead
+      this.setTrackingDiffDist(tObj.distDiff);
     }
 
     if (tObj.method === 'courseTime' || tObj.method === 'bestTime' || tObj.method === 'lastTime') {
       // locate when the course was/will be at a distance equal to that of the trek
-      let tatdInfo = this.getPointAtLimit(tObj.pointList, this.trekInfo.trekDist, 
+      let tatdInfo = this.getPointAtLimit(tObj.pointList, this.newTrek.trekDist, 
                                       tObj.distance, TREK_LIMIT_TYPE_DIST, false, tObj.lastIndex2);
       timeAtTrekDist = tatdInfo.time;
       tObj.lastIndex2 = tatdInfo.index;
     } else {
       // compute when the course was/will be at a distance equal to that of the trek
-      timeAtTrekDist = this.trekInfo.trekDist / tObj.incrementValue;
+      timeAtTrekDist = this.newTrek.trekDist / tObj.incrementValue;
     }
-    tObj.timeDiff = timeAtTrekDist - this.trekInfo.duration;  // negative if trek is behind, positive if ahead
-    this.trekInfo.setTrackingDiffTime(tObj.timeDiff);
+    tObj.timeDiff = timeAtTrekDist - this.newTrek.duration;  // negative if trek is behind, positive if ahead
+    this.setTrackingDiffTime(tObj.timeDiff);
   }
+
+  // find the elevation range for the given list of ElevationData items
+  getElevationRange = (list : ElevationData[]) => {
+    return this.utilsSvc.getNumericRange(list);
+  }
+
+  // return the starting (First) or current (Last) altitude for the Trek
+  // TODO: save elevation range with trek to avoid computing every time
+  formattedTrekElevation = (elevations: ElevationData[], item: string) : string => {
+    let result;
+
+    if (elevations !== undefined && elevations.length) {
+      switch(item) {
+        case 'First':
+          result = elevations[0];
+          break;
+        case 'Last':
+          result = elevations[elevations.length-1];
+          break;
+        case 'Max':
+          result = this.getElevationRange(elevations).max;
+          break;
+        case 'Min':
+          result = this.getElevationRange(elevations).min;
+          break;
+        default:
+      }
+    }
+    return this.mainSvc.formattedElevation(result)
+  }  
+
+  formattedElevationGainPct = (elevGain: number, dist: number) => {
+    let egPct = dist === 0 ? 0 : (elevGain / dist);
+    return Math.round((egPct) * 100).toString() + ' %';
+  }
+
+
 
 }

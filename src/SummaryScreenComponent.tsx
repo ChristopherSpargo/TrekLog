@@ -1,10 +1,10 @@
 import React, { Component } from "react";
-import { View, StyleSheet } from "react-native";
+import { View, StyleSheet, BackHandler } from "react-native";
 import { observer, inject } from "mobx-react";
 import { observable, action } from "mobx";
 import { NavigationActions, StackActions } from "react-navigation";
 
-import { TrekInfo, ALL_SELECT_BITS } from "./TrekInfoModel";
+import { TrekInfo } from "./TrekInfoModel";
 import DashBoard from "./DashBoardComponent";
 import { ToastModel } from "./ToastModel";
 import { LocationSvc } from "./LocationService";
@@ -16,12 +16,15 @@ import RadioPicker from './RadioPickerComponent';
 import { SummarySvc } from "./SummarySvc";
 import NavMenu from './NavMenuComponent';
 import PageTitle from './PageTitleComponent';
+import { MainSvc, ALL_SELECT_BITS } from "./MainSvc";
+import { TrekSvc } from "./TrekSvc";
 
 const pageTitleFormat = {marginBottom: 0};
 const goBack = NavigationActions.back();
 
 @inject(
-  "trekInfo",
+  "mainSvc",
+  "trekSvc",
   "uiTheme",
   "toastSvc",
   "locationSvc",
@@ -32,14 +35,15 @@ const goBack = NavigationActions.back();
 @observer
 class SummaryScreen extends Component<
   {
-    navigation?: any;
+    mainSvc?: MainSvc;
+    trekSvc?: TrekSvc;
+    uiTheme?: any;
     toastSvc?: ToastModel;
     locationSvc?: LocationSvc;
     filterSvc?: FilterSvc;
-    trekInfo?: TrekInfo;
     summarySvc?: SummarySvc;
     groupSvc?: GroupSvc;
-    uiTheme?: any;
+    navigation?: any;
   },
   {}
 > {
@@ -47,44 +51,84 @@ class SummaryScreen extends Component<
   @observable radioPickerOpen;
   @observable openNavMenu : boolean;
 
-  tInfo = this.props.trekInfo;
+  mS = this.props.mainSvc;
+  tS = this.props.trekSvc;
   fS = this.props.filterSvc;
+  tInfo: TrekInfo = this.fS.tInfo;
   sumSvc = this.props.summarySvc;
-  headerTextColor = this.props.uiTheme.palette[this.tInfo.colorTheme].headerTextColor;
+  needToFocus = true;
 
   typeSels = 0;
   originalGroup;
   headerActions = [];
 
   _didFocusSubscription;
+  _willBlurSubscription;
 
   constructor(props) {
     super(props);
-    this._didFocusSubscription = props.navigation.addListener("didFocus", () =>
-      this.focus()
-    );
+    this._didFocusSubscription = this.props.navigation.addListener("didFocus", () => {
+      this.focus(1)
+    });
     this.initializeObservables();
     this.setHeaderActions();
   }
 
   componentWillMount() {
+    this.originalGroup = this.mS.group;
     if(this.fS.groupList.length === 0){
-      this.fS.addGroupListItem(this.tInfo.group);
+      this.fS.addGroupListItem(this.mS.group);
     }
-    this.tInfo.setUpdateDashboard('');    
-    this.originalGroup = this.tInfo.group;
-    // this.fS.filterMode = '';
-    this.fS.setTrekType();
-    this.focus();
+    // read the appropriate group of treks if necessary
+    if ( !this.mS.allTreks.length ||
+         (this.fS.groupList.length === 1 && this.mS.allTreksGroup !== this.mS.group) ||
+         (this.fS.groupList.length > 1 && this.mS.allTreksGroup !== 'Multiple')) {
+      this.mS.setDataReady(false);
+      this.needToFocus = false;
+      this.mS.readAllTreks(this.fS.groupList)
+      .then(() => {
+        this.mS.setUpdateDashboard('');    
+        let havFocused = this.needToFocus;
+        this.needToFocus = true;
+        this.focus(2);
+        this.needToFocus = havFocused;
+      })
+    } else {
+      this.mS.setUpdateDashboard('');    
+      this.focus(3);
+      this.needToFocus = false;
+    }
+  }
+
+  componentDidMount() {
+    this._willBlurSubscription = this.props.navigation.addListener(
+      "willBlur",
+      () =>
+        BackHandler.removeEventListener(
+          "hardwareBackPress",
+          this.onBackButtonPressAndroid
+        )
+    );
   }
 
   componentWillUnmount() {
     this._didFocusSubscription && this._didFocusSubscription.remove();
-    this.tInfo.clearTrek();
+    this._willBlurSubscription && this._willBlurSubscription.remove();
+    this.tS.clearTrek(this.tInfo, false);
     this.sumSvc.setFTCount(0);
-    if(this.fS.groupList.length !== 1 || this.fS.groupList[0] !== this.originalGroup){
-      this.tInfo.setTrekLogGroupProperties(this.originalGroup)
+    // if(this.fS.groupList.length !== 1 || this.fS.groupList[0] !== this.originalGroup){
+    //   this.tInfo.setTrekLogGroupProperties(this.originalGroup)
+    // }
+  }
+
+  checkBackButton = () => {
+    if (!this.onBackButtonPressAndroid()) {
+      this.props.navigation.dispatch(goBack);
     }
+  };
+
+  onBackButtonPressAndroid = () => {
+    return false;
   }
 
   // give initial values to all observable properties
@@ -107,33 +151,38 @@ class SummaryScreen extends Component<
   @action
   findTime = () => {
     this.fS.setDefaultSortValues();
-    this.fS.findActiveTimeframe(this.tInfo.timeframe);  // filter the treks but don't build graph data
-    this.tInfo.dtMin = this.fS.dateMin;
-    this.tInfo.dtMax = this.fS.dateMax;
+    this.fS.findActiveTimeframe(this.fS.timeframe);  // filter the treks but don't build graph data
+    this.mS.dtMin = this.fS.dateMin;
+    this.mS.dtMax = this.fS.dateMax;
   }
 
   @action
-  focus = () => {
-    this.typeSels = this.tInfo.typeSelections;
-    this.tInfo.setTypeSelections(ALL_SELECT_BITS);
-    if(this.fS.filterMode === FILTERMODE_FROM_STATS){
-      this.tInfo.setUpdateDashboard(FILTERMODE_FROM_STATS);
-      this.fS.setDateMax(this.sumSvc.beforeRFBdateMax, "None");
-      this.fS.setDateMin(this.sumSvc.beforeRFBdateMin, "None");
-      this.fS.setDefaultSortValues();
-      this.fS.setTimeframe(this.sumSvc.beforeRFBtimeframe);
-    } else {
-      this.findTime();
+  focus = (id: number) => {
+    if(this.mS.dataReady && this.needToFocus){     
+      // alert("focus " + id);
+      this.fS.setDataReady(false);
+      this.typeSels = this.fS.typeSelections;
+      this.fS.setTypeSelections(ALL_SELECT_BITS);
+      if(this.fS.filterMode === FILTERMODE_FROM_STATS){
+        this.mS.setUpdateDashboard(FILTERMODE_FROM_STATS);
+        this.fS.setDateMax(this.sumSvc.beforeRFBdateMax, "None");
+        this.fS.setDateMin(this.sumSvc.beforeRFBdateMin, "None");
+        this.fS.setDefaultSortValues();
+        this.fS.setTimeframe(this.sumSvc.beforeRFBtimeframe);
+      } else {
+        this.findTime();
+      }
+      this.fS.setTypeSelections(this.typeSels);
+      this.fS.filterMode = '';
+      this.tS.clearTrek(this.tInfo, false);
+      this.fS.setDataReady(true);
     }
-    this.tInfo.setTypeSelections(this.typeSels);
-    this.fS.filterMode = '';
-    this.tInfo.updateType(this.fS.trekType);
-    this.tInfo.clearTrek();
+    this.needToFocus = true;
   }
 
   // call the colorTheme swap function and then reset the header params
   swapColorTheme = () => {
-    this.tInfo.swapColorTheme();
+    this.mS.swapColorTheme();
   };
 
   setActiveNav = val => {
@@ -146,20 +195,7 @@ class SummaryScreen extends Component<
           this.props.navigation.dispatch(StackActions.popToTop());
           break;
         case 'Help':
-          this.tInfo.showCurrentHelp();
-          break;
-        case "Courses":
-        case "Goals":
-        case "Settings":
-        case "Conditions":
-        const resetAction = StackActions.reset({
-                index: 1,
-                actions: [
-                  NavigationActions.navigate({ routeName: 'Log', key: 'Home' }),
-                  NavigationActions.navigate({ routeName: val, key: 'Key-' + val }),
-                ],
-              });
-          this.props.navigation.dispatch(resetAction);          
+        this.props.navigation.navigate({routeName: 'ShowHelp', key: 'Key-ShowHelp'});
           break;
         case "Review":
           this.fS.filterMode = FILTERMODE_REVIEW;
@@ -210,30 +246,24 @@ class SummaryScreen extends Component<
       .then(newGroups => {
         this.fS.clearGroupList();
         newGroups.forEach((group) => this.fS.addGroupListItem(group));
-        this.tInfo.readAllTreks(this.fS.groupList)
+        this.mS.readAllTreks(this.fS.groupList)
         .then(() => {
-          this.focus();
+          this.focus(4);
         })
       })
       .catch(() => {});
   };
 
-  // provide a fixed function to call from header back button so memoization works
-  callGoBack = () => {
-    this.props.navigation.dispatch(goBack)
-  }
-
   setHeaderActions = () => {
-    const { headerTextColor } = this.props.uiTheme.palette[this.tInfo.colorTheme];
     this.headerActions.push(
-      {icon: 'YinYang', iconColor: headerTextColor, style: {marginTop: 0}, actionFn: this.swapColorTheme});
+      {icon: 'YinYang', style: {marginTop: 0}, actionFn: this.swapColorTheme});
   }
   
   render() {
     const {
       disabledTextColor,
       pageBackground,
-    } = this.props.uiTheme.palette[this.tInfo.colorTheme];
+    } = this.props.uiTheme.palette[this.mS.colorTheme];
     const {
       cardLayout,
     } = this.props.uiTheme;
@@ -244,13 +274,9 @@ class SummaryScreen extends Component<
                 (this.sumSvc.allowEmptyIntervals 
                     ? {icon: 'NoEmpties', label: 'Hide Empty Intervals', value: 'NoEmpties'} 
                     : {icon: 'EmptiesOK', label: 'Show Empty Intervals', value: 'EmptiesOK'}),
-                {icon: 'ChartBar', label: 'Review', value: 'Review'},
+                {icon: 'ChartBar', label: 'Review All', value: 'Review'},
                ]},
     {icon: 'Home', label: 'Home', value: 'GoBack'},
-    {icon: 'Course', label: 'Courses', value: 'Courses'},
-    {icon: 'Target', label: 'Goals', value: 'Goals'},
-    {icon: 'Settings', label: 'Settings', value: 'Settings'},
-    {icon: 'PartCloudyDay', label: 'Conditions', value: 'Conditions'},
     {icon: 'InfoCircleOutline', label: 'Help', value: 'Help'}  
   ]  
 
@@ -295,24 +321,24 @@ class SummaryScreen extends Component<
         <View style={styles.container}>
           <RadioPicker pickerOpen={this.radioPickerOpen}/>
           <CheckboxPicker pickerOpen={this.checkboxPickerOpen} />
-          {this.tInfo.appReady && (
+          {(this.mS.appReady && this.mS.dataReady && this.fS.dataReady) && (
             <View style={styles.container}>
               <TrekLogHeader
                 titleText="Activity"
                 icon="*"
-                backButtonFn={this.callGoBack}
+                backButtonFn={this.checkBackButton}
                 actionButtons={this.headerActions}
                 openMenuFn={this.openMenu}
               />
               <View style={styles.listArea}>
-              <PageTitle 
-                colorTheme={this.tInfo.colorTheme}
-                titleText="Activity Summary"
-                groupName={this.fS.groupList.length === 1 ? this.fS.groupList[0] : "Multiple"}
-                setGroupFn={this.getDifferentGroups}
-                style={pageTitleFormat}
-              />
-                {this.props.trekInfo.dataReady && (
+                <PageTitle 
+                  colorTheme={this.mS.colorTheme}
+                  titleText="Activity Summary"
+                  groupName={this.fS.groupList.length === 1 ? this.fS.groupList[0] : "Multiple"}
+                  setGroupFn={this.getDifferentGroups}
+                  style={pageTitleFormat}
+                />
+                {(this.mS.dataReady === true) && (
                   <DashBoard
                     pickerOpenFn={this.setRadioPickerOpen}
                     navigation={this.props.navigation}

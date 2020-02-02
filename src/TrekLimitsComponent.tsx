@@ -9,16 +9,16 @@ import SlideUpView from './SlideUpComponent';
 import TextInputField from './TextInputFieldComponent';
 import { 
   UiThemeContext,
-  TrekInfoContext,
   LIMITS_FORM_Z_INDEX,
   INVISIBLE_Z_INDEX,
   FOOTER_HEIGHT,
-  FORMHEADER_HEIGHT
+  FORMHEADER_HEIGHT,
+  MainSvcContext
  } from './App';
 import SvgIcon from './SvgIconComponent';
-import { TrekInfo, TREK_SELECT_BITS } from './TrekInfoModel';
 import TrekTypeSelect from "./TrekTypeSelectComponent";
 import TimeInput from './TimeInputComponent';
+import { MainSvc,TREK_SELECT_BITS } from "./MainSvc";
 
 export type LimitType = 'TrekType' | 'Interval' | 'Dist' | 'Time' | 'PackWeight';
 
@@ -42,7 +42,7 @@ export interface LimitsObj {
 
 function TrekLimitsForm({open=undefined, limits=undefined}) {
   const uiTheme: any = useContext(UiThemeContext);
-  const tInfo: TrekInfo = useContext(TrekInfoContext);
+  const mainSvc: MainSvc = useContext(MainSvcContext);
 
   const [value, setValue] = useState('');
   const [timeValue, setTimeValue] = useState('');
@@ -135,7 +135,7 @@ function TrekLimitsForm({open=undefined, limits=undefined}) {
     }
     Keyboard.dismiss();
     removeListeners();
-    tInfo.limitsCloseFn(true);
+    mainSvc.limitsCloseFn(true);
     setValue('');
     setTimeValue('');
   }
@@ -144,13 +144,13 @@ function TrekLimitsForm({open=undefined, limits=undefined}) {
   function dismiss() {
       Keyboard.dismiss();
       removeListeners();
-      tInfo.limitsCloseFn(false);
+      mainSvc.limitsCloseFn(false);
       setValue('');
       setTimeValue('');
   }
 
     const { highTextColor, dividerColor, textOnPrimaryColor, footerButtonText,
-            pageBackground, rippleColor } = uiTheme.palette[tInfo.colorTheme];
+            pageBackground, rippleColor } = uiTheme.palette[mainSvc.colorTheme];
     const { cardLayout, roundedTop, footer, footerButton,
             formHeader, formHeaderText, formBody, formBodyText, formTextInput, formNumberInput
           } = uiTheme;
@@ -284,11 +284,11 @@ function TrekLimitsForm({open=undefined, limits=undefined}) {
                       </View>
                     }
                     {limits.limitType === 'TrekType' &&
-                      <View style={[styles.rowLayout, {marginTop: 5}]}>
+                      <View style={[styles.rowLayout, {marginTop: 15}]}>
                         <TrekTypeSelect
                           style={{justifyContent: "flex-start"}}
                           size={40}
-                          selected={TREK_SELECT_BITS[tInfo.type]}
+                          selected={TREK_SELECT_BITS[mainSvc.defaultTrekType]}
                           onChangeFn={setType}
                         />
                       </View>

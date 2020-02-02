@@ -7,19 +7,19 @@ import {
 import { BorderlessButton } from 'react-native-gesture-handler';
 
 import {
-  TrekInfoContext,
+  MainSvcContext,
   UiThemeContext,
   SPEED_DIAL_Z_INDEX,
 } from "./App";
-import { TrekInfo } from './TrekInfoModel';
 import IconButton from "./IconButtonComponent";
 import FadeInView from './FadeInComponent';
+import { MainSvc } from "./MainSvc";
 
 // component provides a value incrementor/decrementor function
 
 function IncDecComponent({inVal, label, onChangeFn, horizontal = undefined}) {
   const uiTheme: any = useContext(UiThemeContext);
-  const trekInfo: TrekInfo = useContext(TrekInfoContext);
+  const mainSvc: MainSvc = useContext(MainSvcContext);
   const [value, setValue] = useState("1");
   const [controlsOpen, setControlsOpen] = useState(false);
   const timerId = useRef<number>(undefined);
@@ -67,7 +67,7 @@ function IncDecComponent({inVal, label, onChangeFn, horizontal = undefined}) {
     navItemBorderColor,
     primaryColor,
     textOnPrimaryColor
-  } = uiTheme.palette[trekInfo.colorTheme];
+  } = uiTheme.palette[mainSvc.colorTheme];
   const { navIcon } = uiTheme;
   const incDecButtonSize = 30;
   const incDecDisplaySize = 40;
@@ -78,7 +78,7 @@ function IncDecComponent({inVal, label, onChangeFn, horizontal = undefined}) {
     incDecArea: {
       flexDirection: horizontal ? "row" : "column",
       alignItems: "center",
-      justifyContent: "center",
+      justifyContent: "space-between",
       zIndex: SPEED_DIAL_Z_INDEX
     },
     incDecButton: {
@@ -112,14 +112,14 @@ function IncDecComponent({inVal, label, onChangeFn, horizontal = undefined}) {
       <FadeInView startValue={0.2} endValue={1} open={controlsOpen} 
           duration={300} style={{overflow: "hidden"}}>
         <IconButton
-          iconSize={incDecIconSize}
-          icon="Plus"
+          iconSize={incDecButtonSize}
+          icon="Minus"
           style={styles.incDecButton}
           borderColor={navItemBorderColor}
           iconStyle={navIcon}
           color={textOnPrimaryColor}
           raised={controlsOpen}
-          onPressFn={incValue}
+          onPressFn={decValue}
         />
       </FadeInView>
       <BorderlessButton
@@ -135,14 +135,14 @@ function IncDecComponent({inVal, label, onChangeFn, horizontal = undefined}) {
       <FadeInView startValue={0.2} endValue={1} open={controlsOpen} 
           duration={300} style={{overflow: "hidden"}}>
         <IconButton
-          iconSize={incDecButtonSize}
-          icon="Minus"
+          iconSize={incDecIconSize}
+          icon="Plus"
           style={styles.incDecButton}
           borderColor={navItemBorderColor}
           iconStyle={navIcon}
           color={textOnPrimaryColor}
           raised={controlsOpen}
-          onPressFn={decValue}
+          onPressFn={incValue}
         />
       </FadeInView>
     </View>

@@ -3,15 +3,15 @@ import { Component } from "react";
 import { View, StyleSheet, Text } from "react-native";
 import { observer, inject } from "mobx-react";
 
-import { TrekInfo } from "./TrekInfoModel";
 import { HEADER_HEIGHT, HEADER_ICON_SIZE, BACK_BUTTON_SIZE, HEADER_Z_INDEX,
-         MENUTRIGGER_AREA, MENUTRIGGER_SIZE } from "./App";
+         MENUTRIGGER_AREA, MENUTRIGGER_SIZE, TREK_TYPE_COLORS_OBJ } from "./App";
 import SvgIcon from "./SvgIconComponent";
 import { APP_ICONS } from "./SvgImages";
 import IconButton from "./IconButtonComponent";
 import SvgButton from "./SvgButtonComponent";
+import { MainSvc } from "./MainSvc";
 
-@inject("trekInfo", "uiTheme")
+@inject("mainSvc", "uiTheme")
 @observer
 class TrekLogHeader extends Component<
   {
@@ -30,8 +30,8 @@ class TrekLogHeader extends Component<
     position?: string;        // set to absolute or not (relative)
     openMenuFn?: Function;    // show menu icon at right end of header if present
     disableMenu?: boolean;    // show menu icon as disabled and don't call openMenuFn if pressed
+    mainSvc?: MainSvc;
     uiTheme?: any;
-    trekInfo?: TrekInfo;
     navigation?: any;
   },
   {}
@@ -45,16 +45,17 @@ class TrekLogHeader extends Component<
 
 
   render() {
-    // alert('render ' + this.props.titleText);
     const {
       headerBackgroundColor,
       headerBorderColor,
       headerTextColor,
       disabledHeaderTextColor,
       headerRippleColor
-    } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
+    } = this.props.uiTheme.palette[this.props.mainSvc.colorTheme];
     const { navIcon, fontRegular } = this.props.uiTheme;
-    const iconName = this.props.icon || this.props.trekInfo.type;
+    const iconName = this.props.icon || this.props.mainSvc.defaultTrekType;
+    const iconColor = this.props.icon ? this.props.iconColor : 
+            TREK_TYPE_COLORS_OBJ[this.props.mainSvc.defaultTrekType];
     const backFn = this.props.backButtonFn !== undefined;
     const actions = this.props.actionButtons !== undefined;
     const textML = iconName === "*" ? (backFn ? 0 : 16) : 10;
@@ -190,8 +191,7 @@ class TrekLogHeader extends Component<
             <SvgButton
               style={styles.backButtonTarget}
               onPressFn={() => this.props.backButtonFn()}
-              borderWidth={0}
-              size={BACK_BUTTON_SIZE}
+              size={BACK_BUTTON_SIZE - 10}
               fill={htColor}
               path={APP_ICONS.ArrowBack}
             />
@@ -202,7 +202,7 @@ class TrekLogHeader extends Component<
             style={styles.icon}
             size={this.props.logo ? iconWithLogoSize : HEADER_ICON_SIZE}
             paths={APP_ICONS[iconName]}
-            fill={this.props.iconColor || htColor}
+            fill={iconColor || htColor}
           />
         )}
         <View style={styles.headerRight}>
@@ -235,8 +235,6 @@ class TrekLogHeader extends Component<
               <SvgButton
                 rippleColor={headerRippleColor}
                 onPressFn={this.callOpenMenuFn}
-                borderWidth={0}
-                areaOffset={0}
                 size={MENUTRIGGER_SIZE}
                 fill={this.props.disableMenu ? disabledHeaderTextColor : htColor}
                 path={ APP_ICONS.Menu }

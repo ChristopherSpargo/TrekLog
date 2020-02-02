@@ -2,13 +2,14 @@
 // Treks can be sorted using various criteria.
 
 import React, { Component } from "react";
-import { View, StyleSheet, Text, ScrollView, Dimensions } from "react-native";
+import { View, StyleSheet, ScrollView, Dimensions } from "react-native";
 import { observer, inject } from "mobx-react";
 import { action, observable } from "mobx";
 import { NavigationActions, StackActions } from "react-navigation";
 
-import { TrekInfo, TrekObj, MSG_LINK_NOT_REMOVED, TrekType, SortByTypes, ShowTypes,
-         MeasurementSystemType, DIST_UNIT_CHOICES, MSG_UPDATING_TREK } from "./TrekInfoModel";
+import { TrekObj } from './TrekInfoModel';
+import { MSG_LINK_NOT_REMOVED, TrekType, SortByTypes, ShowTypes,
+         MeasurementSystemType, DIST_UNIT_CHOICES, MSG_UPDATING_TREK, TREK_TYPE_HIKE } from "./MainSvc";
 import { UtilsSvc } from "./UtilsService";
 import { ModalModel } from "./ModalModel";
 import { HEADER_HEIGHT, PAGE_TITLE_HEIGHT, CONTROLS_HEIGHT } from "./App";
@@ -23,7 +24,7 @@ import CheckboxPicker from "./CheckboxPickerComponent";
 import RadioPicker from "./RadioPickerComponent";
 import { StorageSvc } from "./StorageService";
 import { CourseSvc, Course, CourseDetailObject } from "./CourseService";
-import TrackingMethodForm from './TrackingMethodComponent';
+import TrackingMethodForm, { CourseTrackingMethod } from './TrackingMethodComponent';
 import { FilterSvc, SortDirection, SORTDIRECTION_ASCEND,
          SORT_DIRECTION_OTHER, 
          SORTDIRECTION_DESCEND} from './FilterService';
@@ -32,24 +33,27 @@ import SvgGrid from './SvgGridComponent';
 import SpeedDial from './SpeedDialComponent';
 import NavMenu from './NavMenuComponent';
 import PageTitle from './PageTitleComponent';
+import { MainSvc } from "./MainSvc";
+import { TrekSvc } from "./TrekSvc";
          
+const pageTitleFormat = {marginBottom: 5};
 const goBack = NavigationActions.back();
 
 @inject(
-  "trekInfo",
+  'mainSvc',
   "utilsSvc",
-  "uiTheme",
   "modalSvc",
   "toastSvc",
-  "filterSvc",
-  "loggingSvc",
   "storageSvc",
   "courseSvc",
-  "groupSvc"
+  "filterSvc",
+  "uiTheme",
+  "trekSvc",
 )
 @observer
 class CourseDetails extends Component<
   {
+    mainSvc?: MainSvc;
     utilsSvc?: UtilsSvc;
     modalSvc?: ModalModel;
     toastSvc?: ToastModel;
@@ -57,8 +61,8 @@ class CourseDetails extends Component<
     courseSvc?: CourseSvc;
     filterSvc?: FilterSvc;
     uiTheme?: any;
+    trekSvc?: TrekSvc;
     navigation?: any;
-    trekInfo?: TrekInfo; // object with all non-gps information about the Trek
   },
   {}
 > {
@@ -77,13 +81,15 @@ class CourseDetails extends Component<
   @observable trackingMethodFormOpen: boolean;
   @observable openNavMenu : boolean;
   @observable otherEffortSelect : boolean;
+  @observable trackingValue;
+  @observable trackingMethod;
 
-
-  tInfo = this.props.trekInfo;
+  mainSvc = this.props.mainSvc;
+  tS = this.props.trekSvc;
   uSvc = this.props.utilsSvc;
   cS = this.props.courseSvc;
   fS = this.props.filterSvc;
-  tS = this.props.toastSvc;
+  tInfo = this.fS.tInfo;
   focusCourse: Course;
   trekList : CourseDetailObject[];
   barGraphData: BarGraphInfo = {items: [], range: {max: 0, min: 0, range: 0}};
@@ -116,8 +122,8 @@ class CourseDetails extends Component<
   }
 
   componentWillMount() {
-    this.prevGroup = this.tInfo.group;
-    this.prevType = this.tInfo.type;
+    this.prevGroup = this.mainSvc.group;
+    this.prevType = this.mainSvc.defaultTrekType;
     this.setDataReady(false);
     this.setOpenItems(false);
     let cName = this.props.navigation.getParam('focusCourse');
@@ -132,14 +138,14 @@ class CourseDetails extends Component<
         this.setDataReady(true);
       })
       .catch((err)  => {
-        this.tS.toastOpen({
+        this.props.toastSvc.toastOpen({
           tType: "Error",
           content: err,
         })
       })
     })
     .catch((err)  => {
-      this.tS.toastOpen({
+      this.props.toastSvc.toastOpen({
         tType: "Error",
         content: err,
       })
@@ -148,11 +154,11 @@ class CourseDetails extends Component<
 
   componentWillUnmount() {
     this._didFocusSubscription && this._didFocusSubscription.remove();
-    this.tInfo.clearTrek();
-    this.tInfo.updateGroup(this.prevGroup);
-    this.tInfo.updateType(this.prevType);
+    // this.tInfo.clearTrek();
+    this.mainSvc.updateGroup(this.prevGroup);
+    this.mainSvc.updateDefaultType(this.prevType);
     this.setSelectedTrekIndex(-1);
-    this.tInfo.setTrackingValueInfo({value: 0, method: 'courseTime'});
+    this.setTrackingValueInfo({value: 0, method: 'courseTime'});
     this.setDataReady(false);
   }
 
@@ -300,26 +306,52 @@ class CourseDetails extends Component<
 
   // Open the Tracking method form
   openTrackingMethodForm = () => {
-    this.tInfo.limitsCloseFn = this.prepareForReplay;
+    this.mainSvc.limitsCloseFn = this.prepareForReplay;
     this.setTrackingMethodFormOpen(true);
   };
+
+  @action
+  setTrackingValue = (value: number) => {
+    this.trackingValue = value;
+  }
+
+  @action
+  setTrackingMethod = (value: CourseTrackingMethod) => {
+    this.trackingMethod = value;
+  }
+
+  @action
+  setTrackingValueInfo = (info: {value: number, method: CourseTrackingMethod}) => {
+    this.setTrackingValue(info.value);
+    this.setTrackingMethod(info.method);
+  }
 
   // Display the map for the effort at the given index in trekList
   showTrekMap = (subjectEffort: number, useEffortTarget: boolean, targetTrek?: TrekObj) => {
     if (this.trekList.length) {
+      let method: CourseTrackingMethod;
+      let goalValue: number;
       let trek = this.trekList[subjectEffort].trek;
       let effort = useEffortTarget ? this.trekList[subjectEffort].effort : undefined;
-      this.tInfo.setTrekProperties(trek);
-      this.tInfo.setShowMapControls(true)
-      this.props.courseSvc.initCourseTrackingSnapshot(this.focusCourse, trek, effort, targetTrek)
+      if (effort){
+        method = effort.method;
+        goalValue = effort.goalValue;
+      } else {
+        method = this.trackingMethod;
+        goalValue = this.trackingValue;
+      }
+      this.mainSvc.setShowMapControls(true)
+      this.props.courseSvc.initCourseTrackingSnapshot(this.focusCourse, trek, effort,
+                  method, goalValue, targetTrek)
       .then(() => {        
         // alert(JSON.stringify({...this.cS.trackingSnapshot, ...{coursePath: undefined, trekPath: undefined}},null,2))
         this.props.navigation.navigate("SelectedTrek", {
+          trek: this.tInfo,
           title:
             this.uSvc.formattedLocaleDateAbbrDay(trek.date) +
             "  " +
             trek.startTime,
-          icon: this.tInfo.type,
+          icon: trek.type,
           switchSysFn: this.switchMeasurementSystem,
           changeTrekFn: this.changeTrek,
           checkTrekChangeFn: this.checkTrekChange,
@@ -354,8 +386,10 @@ class CourseDetails extends Component<
         resolve("");
       }
       trek = this.trekSelected(indx);
-      this.tInfo.setShowMapControls(true)
-      this.props.courseSvc.initCourseTrackingSnapshot(this.focusCourse, trek, this.trekList[indx].effort)
+      let effort = this.trekList[indx].effort;
+      this.mainSvc.setShowMapControls(true)
+      this.props.courseSvc.initCourseTrackingSnapshot(this.focusCourse, trek, effort,
+                        effort.method, effort.goalValue)
       .then(() => {        
         resolve(
           this.uSvc.formattedLocaleDateAbbrDay(trek.date) +
@@ -371,19 +405,17 @@ class CourseDetails extends Component<
   trekSelected = (indx: number) : TrekObj => {
     let trek = this.trekList[indx].trek;
     this.setSelectedTrekIndex(indx);
-    this.tInfo.setTrekProperties(trek);
-
-    this.tInfo.setTrackingMethod(this.trekList[indx].effort.subject.method);
-    this.tInfo.setTrackingValue(this.trekList[indx].effort.subject.goalValue);      
-
+    this.setTrackingMethod(this.trekList[indx].effort.method);
+    this.setTrackingValue(this.trekList[indx].effort.goalValue);      
+    this.tS.setTrekProperties(this.tInfo, trek, false);
+    this.mainSvc.setCurrentMapType(trek.type === TREK_TYPE_HIKE ? 'terrain' 
+                                                                : this.mainSvc.defaultMapType)
     return trek;
   }
 
   // respond to graph bar being pressed
   callTrekSelected = (indx: number) => {
     if (indx === this.selectedTrekIndex) {
-      this.tInfo.setTrackingMethod(this.trekList[indx].effort.subject.method);
-      this.tInfo.setTrackingValue(this.trekList[indx].effort.subject.goalValue);      
       this.showTrekMap(indx, true);
     } else {
       this.trekSelected(indx)
@@ -396,18 +428,17 @@ class CourseDetails extends Component<
     this.rebuildGraph();
   }
 
-  // remove the course link (after confirmation) from the selected trek
-  removeCourseLink = (index: number) => {
-    let trek = this.trekList[index].trek;
+  // remove the course link (after confirmation) from the currently selected trek
+  removeCourseLink = () => {
     let content =
       "Remove link to course from " +
-      trek.type +
+      this.tInfo.type +
       " on:\n" +
-      trek.date +
+      this.tInfo.date +
       " " +
-      trek.startTime +
+      this.tInfo.startTime +
       "\n" +
-      this.tInfo.getTrekLabel();
+      this.tS.getTrekLabel(this.tInfo);
     this.props.modalSvc
       .simpleOpen({
         heading: "Remove Course Link",
@@ -418,25 +449,25 @@ class CourseDetails extends Component<
         allowOutsideCancel: true
       })
       .then(() => {
-        this.tInfo.setWaitingForSomething("NoMsg");
-        this.cS.removeCourseEffort(this.focusCourse.name, trek.group, trek.sortDate)
+        this.mainSvc.setWaitingForSomething("NoMsg");
+        this.cS.removeCourseEffort(this.focusCourse.name, this.tInfo.group, this.tInfo.sortDate)
         .then(() => {
           // remove treklist entry for this effort
-          this.removeTrekListItem(index);
+          this.removeTrekListItem(this.selectedTrekIndex);
 
           // update and save trek with no course link
-          trek.course = undefined;
-          this.tInfo.setCourseLink(undefined)
-          this.tInfo.saveTrek(trek)
+          this.tInfo.course = undefined;
+          this.tS.setCourseLink(this.tInfo, undefined)
+          this.mainSvc.saveTrek(this.tInfo)
           .then(() => {
-            this.tInfo.setWaitingForSomething();
+            this.mainSvc.setWaitingForSomething();
             this.props.toastSvc.toastOpen({
               tType: "Success",
-              content: 'Link to ' + trek.type + " has been removed."
+              content: 'Link to ' + this.tInfo.type + " has been removed."
             })
           })
           .catch((err) => {
-            this.tInfo.setWaitingForSomething();
+            this.mainSvc.setWaitingForSomething();
             this.props.toastSvc.toastOpen({
               tType: "Error",
               content: MSG_UPDATING_TREK + err,
@@ -444,7 +475,7 @@ class CourseDetails extends Component<
           })
         })
         .catch((err) => {
-          this.tInfo.setWaitingForSomething();
+          this.mainSvc.setWaitingForSomething();
           this.props.toastSvc.toastOpen({
             tType: "Error",
             content: MSG_LINK_NOT_REMOVED + err
@@ -454,25 +485,24 @@ class CourseDetails extends Component<
       .catch(() => {});
   };
 
-  // remove the course link (after confirmation) from the selected trek
-  setDefiningEffort = (index: number) => {
-    let trek = this.trekList[index].trek;
-    if (this.cS.isDefiningEffort(this.focusCourse, trek)) {
+  // set the current trek as course defining effort (after confirmation)
+  setDefiningEffort = () => {
+    if (this.cS.isDefiningEffort(this.focusCourse, this.tInfo)) {
       this.props.toastSvc.toastOpen({
         tType: "Info",
-        content: 'This ' + trek.type + ' is already the\nDefault Effort for this course.',
+        content: 'This ' + this.tInfo.type + ' is already the\nDefault Effort for this course.',
         waitForOK: true
       });
     } else {      
       let content =
         "Change default effort for course to " +
-        trek.type +
+        this.tInfo.type +
         " on:\n" +
-        trek.date +
+        this.tInfo.date +
         " " +
-        trek.startTime +
+        this.tInfo.startTime +
         "\n" +
-        this.tInfo.getTrekLabel();
+        this.tS.getTrekLabel(this.tInfo);
       this.props.modalSvc
         .simpleOpen({
           heading: "Set Default Effort",
@@ -484,10 +514,11 @@ class CourseDetails extends Component<
         })
       .then(() => {
         this.props.navigation.navigate("SelectedTrek", {
+          trek: this.tInfo,
           title:
-            this.props.utilsSvc.formattedLocaleDateAbbrDay(trek.date) +
+            this.props.utilsSvc.formattedLocaleDateAbbrDay(this.tInfo.date) +
             "  " +
-            trek.startTime,
+            this.tInfo.startTime,
           icon: this.tInfo.type,
           mapDisplayMode: 'noSpeeds,noIntervals',
           takeSnapshotMode: "Update",
@@ -507,8 +538,8 @@ class CourseDetails extends Component<
     let trek = this.trekList[this.targetEffort].trek; // get the trek selected as target
     this.setSelectedTrekIndex(this.subjectEffort);    // restore selectedTrekIndex to that of subject
     this.setOtherEffortSelect(false);
-    this.tInfo.setTrackingValue(trek.duration);
-    this.tInfo.setTrackingMethod('otherEffort');
+    this.setTrackingValue(trek.duration);
+    this.setTrackingMethod('otherEffort');
     this.showTrekMap(this.subjectEffort, false, trek);
   }
 
@@ -517,7 +548,7 @@ class CourseDetails extends Component<
     if (start) {
       this.setTrackingMethodFormOpen(false);
       this.targetEffort = undefined;
-      if(this.tInfo.trackingMethod === 'otherEffort') {
+      if(this.trackingMethod === 'otherEffort') {
         this.subjectEffort = this.selectedTrekIndex;
         this.setOtherEffortSelect(true);    // allow user to select target effort
       } else {
@@ -530,7 +561,8 @@ class CourseDetails extends Component<
 
   // switch measurements system then update the bar graph
   switchMeasurementSystem = () => {
-    this.tInfo.switchMeasurementSystem();
+    this.mainSvc.switchMeasurementSystem();
+    this.tS.updateCalculatedValues(this.tInfo, false, true);
     this.buildGraphData();
     this.forceUpdate();
   };
@@ -623,7 +655,7 @@ class CourseDetails extends Component<
   // The 'show' value will be displayed on the bar and the Date value will be displayed above the bar.
   buildGraphData = () => {
     let thisSortDate = this.uSvc.formatSortDate();
-    let dataRange = this.findDataRange(this.trekList, this.show, this.tInfo.measurementSystem)
+    let dataRange = this.findDataRange(this.trekList, this.show, this.mainSvc.measurementSystem)
 
     this.barGraphData.items = [];
     dataRange.range = dataRange.max;
@@ -668,7 +700,7 @@ class CourseDetails extends Component<
         case 'Speed':
           let s = this.fS.showAvgSpeed 
                     ? this.uSvc.computeRoundedAvgSpeed(system, trek.trekDist, trek.duration)
-                    : (trek.duration / this.uSvc.convertDist(trek.trekDist, this.tInfo.distUnits()));
+                    : (trek.duration / this.uSvc.convertDist(trek.trekDist, this.mainSvc.distUnits()));
           if (s < minV) { minV = s; }
           if (s > maxV) { maxV = s; }
           break;
@@ -706,10 +738,10 @@ class CourseDetails extends Component<
       this.activeNav = val;
       switch (val) {
         case "Unlink":
-          this.removeCourseLink(this.selectedTrekIndex);
+          this.removeCourseLink();
           break;
         case "Default":
-          this.setDefiningEffort(this.selectedTrekIndex);
+          this.setDefiningEffort();
           break;
         case "Map":
           this.showTrekMap(this.selectedTrekIndex, true);
@@ -721,12 +753,11 @@ class CourseDetails extends Component<
           this.props.navigation.dispatch(goBack);
           break;
         case "Home":
-          this.tInfo.clearTrek();
           this.props.navigation.dispatch(StackActions.popToTop());
           break;
         case 'Help':
-          this.props.trekInfo.showCurrentHelp();
-          break;
+        this.props.navigation.navigate({routeName: 'ShowHelp', key: 'Key-ShowHelp'});
+        break;
         default:
       }
     });
@@ -734,29 +765,37 @@ class CourseDetails extends Component<
 
   // show the selected trek image
   showTrekImage = (set: number, image = 0) => {
-    let title = this.tInfo.formatImageTitle(set, image);
-    this.props.navigation.navigate('Images', {cmd: 'show', setIndex: set, imageIndex: image, title: title});
+    let title = this.tS.formatImageTitle(this.tInfo, set, image);
+    this.props.navigation.navigate({
+      routeName: 'Images', 
+      params:  {cmd: 'show', 
+                setIndex: set, 
+                imageIndex: image, 
+                trek: this.tInfo,
+                title: title},
+      key: 'Key-Images'
+    });
   }
 
   render() {
 
     const {height, width} = Dimensions.get('window');
     const pageTitleSpacing = 20;
-    const statusBarHt = 0;
     const sortControlsHt = 30;
-    const areaHt = height - (statusBarHt + pageTitleSpacing + HEADER_HEIGHT + PAGE_TITLE_HEIGHT);
+    const graphHeight = 210;
+    const maxBarHeight = 160;
+    const areaHt = height - (graphHeight + pageTitleSpacing + HEADER_HEIGHT + PAGE_TITLE_HEIGHT);
     const { cardLayout } = this.props.uiTheme;
     const {
       disabledTextColor,
       pageBackground,
       trekLogBlue,
       mediumTextColor,
-      secondaryColor
-    } = this.props.uiTheme.palette[this.tInfo.colorTheme];
+      secondaryColor,
+      bottomBorder
+    } = this.props.uiTheme.palette[this.mainSvc.colorTheme];
     const gotTreks = !this.dataReady ? 0 : (this.focusCourse.efforts.length);
     const graphBgColor = pageBackground;
-    const graphHeight = 210;
-    const maxBarHeight = 160;
     const graphAreaWidth = width;
     const yAxisWidth = 60;
     const graphWidth = graphAreaWidth - yAxisWidth - 10;
@@ -795,9 +834,10 @@ class CourseDetails extends Component<
         paddingLeft: 0
       },
       graphAndStats: {
-        marginBottom: 5,
-        marginRight: 10,
-        height: graphHeight
+        paddingBottom: 5,
+        paddingRight: 10,
+        height: graphHeight,
+        ...bottomBorder
       },
       graphArea: {
         backgroundColor: graphBgColor,
@@ -826,10 +866,10 @@ class CourseDetails extends Component<
         fontSize: 16
       },
       sortCtrls: {
-        flexDirection: "row",
-        justifyContent: "flex-end",
-        alignItems: "center",
-        marginHorizontal: 10,
+        position: "absolute",
+        left: 5,
+        top: 2,
+        zIndex: 10,
         height: sortControlsHt,
       },
       scrollArea: {
@@ -852,6 +892,7 @@ class CourseDetails extends Component<
         paddingBottom: 0,
         paddingLeft: 0,
         paddingRight: 0,
+        marginBottom: 0,
         backgroundColor: pageBackground,
       },
       saveFab: {
@@ -879,43 +920,38 @@ class CourseDetails extends Component<
               <RadioPicker pickerOpen={this.coursePickerOpen} />
               <View style={styles.listArea}>
                 <PageTitle titleText={"Course Efforts (" + gotTreks + ")"} 
-                           colorTheme={this.tInfo.colorTheme}/>
+                           style={pageTitleFormat}
+                           colorTheme={this.mainSvc.colorTheme}/>
                 {gotTreks && 
-                  <View style={styles.scrollArea}>
-                    <ScrollView>
-                      <View style={[cardLayout, styles.noPadding, {marginTop: 0}]}>
-                        <View style={styles.sortCtrls}>
-                          {this.sortByDate && (
-                            <SvgButton
-                              onPressFn={this.toggleSortDirection}
-                              borderWidth={0}
-                              areaOffset={0}
-                              size={30}
-                              fill={trekLogBlue}
-                              path={
-                                APP_ICONS[
-                                  this.sortDirection === SORTDIRECTION_DESCEND
-                                    ? "CalendarSortNewest"
-                                    : "CalendarSortOldest"
-                                ]
-                              }
-                            />
-                          )}
-                          {!this.sortByDate && (
-                              <SvgButton
-                              onPressFn={this.toggleSortDirection}
-                              style={sortAsc ? {transform: ([{ rotateX: "180deg" }])} : {}}
-                              borderWidth={0}
-                              areaOffset={0}
-                              size={30}
-                              fill={trekLogBlue}
-                              path={
-                                APP_ICONS.Sort
-                              }
-                            />
-                          )}
-                        </View>
+                      <View style={[cardLayout, styles.noPadding, {marginTop: 0, marginBottom: 0}]}>
                         <View style={styles.graphAndStats}>
+                          <View style={styles.sortCtrls}>
+                            {this.sortByDate && (
+                              <SvgButton
+                                onPressFn={this.toggleSortDirection}
+                                size={30}
+                                fill={trekLogBlue}
+                                path={
+                                  APP_ICONS[
+                                    this.sortDirection === SORTDIRECTION_DESCEND
+                                      ? "CalendarSortNewest"
+                                      : "CalendarSortOldest"
+                                  ]
+                                }
+                              />
+                            )}
+                            {!this.sortByDate && (
+                                <SvgButton
+                                onPressFn={this.toggleSortDirection}
+                                style={sortAsc ? {transform: ([{ rotateX: "180deg" }])} : {}}
+                                size={30}
+                                fill={trekLogBlue}
+                                path={
+                                  APP_ICONS.Sort
+                                }
+                              />
+                            )}
+                          </View>
                           <View style={styles.graphArea}>
                             <SvgYAxis
                               graphHeight={graphHeight}
@@ -934,9 +970,8 @@ class CourseDetails extends Component<
                                 graphHeight={graphHeight}
                                 gridWidth={graphWidth}
                                 lineCount={3}
-                                colorTheme={this.tInfo.colorTheme}
+                                colorTheme={this.mainSvc.colorTheme}
                                 maxBarHeight={maxBarHeight}
-                                minBarHeight={20}
                               />
                               <BarDisplay
                                 data={this.barGraphData.items}
@@ -952,43 +987,45 @@ class CourseDetails extends Component<
                             </View>
                           </View>
                         </View>
-                        <TrekDetails
-                          selectable
-                          sortBy={this.sortBy}
-                          sortByDate={this.sortByDate}
-                          selectFn={this.setSortBy}
-                          switchSysFn={this.switchMeasurementSystem}
-                          showImagesFn={this.showTrekImage}
-                          showGroup={true}
-                          toggleShowValueFn={this.toggleShowValue}
-                        />
+                        <View style={styles.scrollArea}>
+                          <ScrollView>
+                            <TrekDetails
+                              selectable
+                              sortBy={this.sortBy}
+                              sortByDate={this.sortByDate}
+                              selectFn={this.setSortBy}
+                              switchSysFn={this.switchMeasurementSystem}
+                              showImagesFn={this.showTrekImage}
+                              showGroup={true}
+                              toggleShowValueFn={this.toggleShowValue}
+                            />
+                          </ScrollView>
+                        </View>
                       </View>
-                    </ScrollView>
-                  </View>
                 }
               </View>
-              {!gotTreks && this.tInfo.typeSelections !== 0 && (
+              {/* {!gotTreks && this.mainSvc.typeSelections !== 0 && (
                 <View style={[styles.emptyGraphArea, styles.graph]}>
                   <Text style={styles.noMatches}>Nothing To Display</Text>
                 </View>
               )}
-              {!gotTreks && this.tInfo.typeSelections === 0 && (
+              {!gotTreks && this.mainSvc.typeSelections === 0 && (
                 <View style={[styles.emptyGraphArea, styles.graph]}>
                   <Text style={styles.noMatches}>No Trek Type Selected</Text>
                 </View>
-              )}
+              )} */}
             </View>
           )}
-          {this.tInfo.waitingForSomething && <Waiting />}
+          {this.mainSvc.waitingForSomething && <Waiting />}
           {this.dataReady && 
             <TrackingMethodForm
               open={this.trackingMethodFormOpen}
               header="Replay Course Effort"
               title="Move Course Marker Using:"
               icon="Replay"
-              inMethod={this.trekList[this.selectedTrekIndex].effort.subject.method}
-              inValue={this.trekList[this.selectedTrekIndex].effort.subject.goalValue}
-              onChangeFn={this.tInfo.setTrackingValueInfo}
+              inMethod={this.trekList[this.selectedTrekIndex].effort.method}
+              inValue={this.trekList[this.selectedTrekIndex].effort.goalValue}
+              onChangeFn={this.setTrackingValueInfo}
               course={this.focusCourse}
               trek={{date: this.tInfo.sortDate, group: this.tInfo.group}}
             />

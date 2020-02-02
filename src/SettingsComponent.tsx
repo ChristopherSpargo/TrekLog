@@ -7,17 +7,13 @@ import { observer, inject } from 'mobx-react'
 import { NavigationActions, StackActions } from 'react-navigation';
 import { RectButton } from 'react-native-gesture-handler'
 
-import { TrekInfo, TrekType, MeasurementSystemType, DEFAULT_STRIDE_LENGTHS,
-         WEIGHT_UNIT_CHOICES, STRIDE_UNIT_CHOICES, TREK_TYPE_CHOICES, TrekTypeDataNumeric,
-         TREK_SELECT_BITS, SWITCH_MEASUREMENT_SYSTEM, SYSTEM_TYPE_METRIC, SYSTEM_TYPE_US, 
-         TREK_TYPE_WALK, TREK_TYPE_HIKE, TREK_TYPE_RUN, INVALID_NAMES,
-         IMAGE_STORE_FULL, IMAGE_STORE_COMPRESSED
-        } from './TrekInfoModel'
+import { TrekTypeDataNumeric } from './TrekInfoModel'
 import RadioGroup from './RadioGroupComponent';
 import TrekTypeSelect from './TrekTypeSelectComponent';
 import { ToastModel } from './ToastModel';
 import { CONTROLS_HEIGHT, COLOR_THEME_LIGHT, COLOR_THEME_DARK, ThemeType,
-         SCROLL_DOWN_DURATION, FADE_IN_DURATION, TREKLOG_FILENAME_REGEX, SPEED_DIAL_Z_INDEX } from './App';
+         SCROLL_DOWN_DURATION, FADE_IN_DURATION, TREKLOG_FILENAME_REGEX, SPEED_DIAL_Z_INDEX 
+       } from './App';
 import { UtilsSvc, LB_PER_KG, CM_PER_INCH } from './UtilsService';
 import { ModalModel, CONFIRM_INFO } from './ModalModel';
 import Waiting from './WaitingComponent';
@@ -27,28 +23,33 @@ import SvgIcon from './SvgIconComponent';
 import { APP_ICONS } from './SvgImages';
 import TextInputField from './TextInputFieldComponent';
 import TrekLogHeader from './TreklogHeaderComponent';
-import IconButton from './IconButtonComponent';
 import RadioPicker from './RadioPickerComponent';
 import FadeInView from './FadeInComponent';
 import SlideDownView from './SlideDownComponent';
 import { GroupSvc, DEFAULT_WEIGHT, SettingsObj, WeightObj, GroupsObj } from './GroupService';
 import NavMenu, { NavMenuItem } from './NavMenuComponent';
 import PageTitle from './PageTitleComponent';
+import { IMAGE_STORE_FULL, IMAGE_STORE_COMPRESSED } from './ImageService';
+import { MainSvc,TrekType, MeasurementSystemType, DEFAULT_STRIDE_LENGTHS,
+  WEIGHT_UNIT_CHOICES, STRIDE_UNIT_CHOICES, TREK_TYPE_CHOICES,
+  TREK_SELECT_BITS, SWITCH_MEASUREMENT_SYSTEM, SYSTEM_TYPE_METRIC, SYSTEM_TYPE_US, 
+  TREK_TYPE_WALK, TREK_TYPE_HIKE, TREK_TYPE_RUN, INVALID_NAMES,
+   } from './MainSvc';
 
-const pageTitleFormat = {marginBottom: 0};
+const pageTitleFormat = {marginBottom: 10};
 const goBack = NavigationActions.back() ;
 
-@inject('trekInfo', 'toastSvc', 'uiTheme', 'utilsSvc', 'modalSvc', 'storageSvc', 'groupSvc')
+@inject('mainSvc', 'utilsSvc', 'storageSvc', 'uiTheme', 'modalSvc', 'toastSvc', 'groupSvc')
 @observer
 class Settings extends Component<{ 
+  mainSvc ?: MainSvc,
   utilsSvc ?: UtilsSvc,
   storageSvc ?: StorageSvc,
-  navigation ?: any
   uiTheme ?: any,
   modalSvc ?: ModalModel,
   toastSvc ?: ToastModel,
-  groupSvc ?: GroupSvc
-  trekInfo ?: TrekInfo         // object with all non-gps information about the Trek
+  groupSvc ?: GroupSvc,
+  navigation ?: any
 }, {} > {
 
   @observable dataReady;
@@ -69,6 +70,7 @@ class Settings extends Component<{
   @observable newGroup;
   @observable openNavMenu : boolean;
 
+  mS = this.props.mainSvc;
   uSvc = this.props.utilsSvc;
   gSvc = this.props.groupSvc;
   todayShortDate = this.uSvc.formatShortSortDate();
@@ -81,6 +83,7 @@ class Settings extends Component<{
   oldTheme : ThemeType;
   oldSystem : MeasurementSystemType;
   oldImageMode : string;
+  headerActions = [];
 
   keyboardDidShowListener;
   keyboardDidHideListener;
@@ -88,6 +91,7 @@ class Settings extends Component<{
   constructor(props) {
     super(props);
     this.initializeObservables();
+    this.setHeaderActions();
   }
 
   componentWillMount() {
@@ -102,7 +106,7 @@ class Settings extends Component<{
         this.oldImageMode = groups.imageStorageMode;
         this.setSystem(groups.measurementSystem || SYSTEM_TYPE_US);
         this.setImageStorageMode(groups.imageStorageMode || IMAGE_STORE_FULL)
-        this.changeGroup(this.props.trekInfo.group)
+        this.changeGroup(this.props.mainSvc.group)
       } else {
           this.setNoGroups();
       }
@@ -136,7 +140,7 @@ class Settings extends Component<{
     this.weightStr = '0';
     this.packWeightStr = '0';
     this.strideLengthStr = {Walk: '0', Run: '0', Bike: '0', Hike: '0'};
-    this.imageStorageMode = IMAGE_STORE_FULL;
+    this.imageStorageMode = IMAGE_STORE_COMPRESSED;
     this.keyboardOpen = false;
     this.originalSettings = undefined;
     this.setOpenItems(false);
@@ -229,7 +233,7 @@ class Settings extends Component<{
     this.setDefaultType(TREK_TYPE_WALK);
     // switch to wrong measurementSystem type
     this.setSystem(SYSTEM_TYPE_METRIC);
-    this.setImageStorageMode(IMAGE_STORE_FULL);
+    this.setImageStorageMode(IMAGE_STORE_COMPRESSED);
     this.heightNum = 0;
     this.setHeight("0");
     this.weightDate = this.todayShortDate;
@@ -287,8 +291,8 @@ class Settings extends Component<{
   // Update the current TrekInfoModel settings from the given object
   @action
   updateTrekInfo = (saveObj: SettingsObj) => {
-    this.props.trekInfo.setMeasurementSystem(this.system);
-    this.props.trekInfo.setTrekLogGroupProperties(this.group, saveObj);
+    this.mS.setMeasurementSystem(this.system);
+    this.mS.setTrekLogGroupProperties(this.group, saveObj, false);
   }
 
   // save the list of groups to the database
@@ -372,7 +376,7 @@ class Settings extends Component<{
   @action
   setTheme = (val: ThemeType) => {
     this.theme = val;
-    this.props.trekInfo.setColorTheme(val);
+    this.mS.setColorTheme(val);
   }
 
   // set the value of the system property
@@ -630,48 +634,36 @@ class Settings extends Component<{
         case "Home":
           this.props.navigation.dispatch(StackActions.popToTop());
           break;
-        case "Summary":
-        case "Courses":
-        case "Goals":
-        case "Conditions":
-        const resetAction = StackActions.reset({
-                index: 1,
-                actions: [
-                  NavigationActions.navigate({ routeName: 'Log', key: 'Home' }),
-                  NavigationActions.navigate({ routeName: val, key: 'Key-' + val }),
-                ],
-              });
-          this.props.navigation.dispatch(resetAction);          
-          break;
         case 'Help':
-          this.props.trekInfo.showCurrentHelp();
+          this.props.navigation.navigate({routeName: 'ShowHelp', key: 'Key-ShowHelp'});
           break;
         default:
       }
     })
   }
 
+  setHeaderActions = () => {
+    this.headerActions.push(
+      {icon: 'YinYang', style: {marginTop: 0}, actionFn: this.mS.swapColorTheme});
+  }
+
   render() {
 
     const showSave = !this.changingGroup && !this.compareSettings(this.originalSettings);
-    const { cardLayout, navItem, navIcon, fontRegular,
-            formInputItem  
+    const { cardLayout, fontRegular, formInputItem  
           } = this.props.uiTheme;
     const settingIconSize = 24;
     const cardHeight = 130;
     const haveGroups = this.gSvc.haveGroups();
-    const { highTextColor, mediumTextColor, disabledTextColor, secondaryColor, primaryColor,
-            pageBackground, dangerColor, dividerColor, rippleColor, navItemBorderColor,
-            listIconColor } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
+    const { highTextColor, mediumTextColor, disabledTextColor, secondaryColor, primaryLighter,
+            pageBackground, dangerColor, dividerColor, rippleColor, shadow1,
+            listIconColor, altCardBackground 
+          } = this.props.uiTheme.palette[this.mS.colorTheme];
     const groupSelectIconSize = 30;
     const groupSelectButtonSize = 40;
     let navMenuItems : NavMenuItem[] = 
     [ 
         {icon: 'Home', label: 'Home', value: 'Home'},
-        {icon: 'Pie', label: 'Activity', value: 'Summary'},
-        {icon: 'Course', label: 'Courses', value: 'Courses'},
-        {icon: 'Target', label: 'Goals', value: 'Goals'},
-        {icon: 'PartCloudyDay', label: 'Conditions', value: 'Conditions'},
         {icon: 'InfoCircleOutline', label: 'Help', value: 'Help'}  
     ]  
     
@@ -694,11 +686,11 @@ class Settings extends Component<{
         marginLeft: 30,
       },
       cardCustom: {
-        borderBottomWidth: 1,
         borderColor: dividerColor,
-        marginTop: 0,
         marginBottom: 0,
         minHeight: cardHeight,
+        backgroundColor: altCardBackground,
+        ...shadow1
       },
       groupNameText: {
         color: highTextColor, 
@@ -709,7 +701,7 @@ class Settings extends Component<{
       },
       labelText: {
         fontFamily: fontRegular,
-        color: primaryColor,
+        color: primaryLighter,
         marginBottom: 5,
         fontSize: 20,
       },
@@ -773,7 +765,7 @@ class Settings extends Component<{
       button: {
         color: "white",
         fontFamily: fontRegular,
-        fontSize: 16
+        fontSize: 18
       },
       settingIcon: {
         width: settingIconSize,
@@ -804,10 +796,30 @@ class Settings extends Component<{
       listArea: {
         flex: 1,
         ...cardLayout,
+        marginBottom: 0,
         paddingBottom: 0,
         paddingLeft: 0,
         paddingRight: 0,
         backgroundColor: pageBackground,
+      },
+      iconAndGroup: {
+        flexDirection: "row",
+        alignItems: "center",
+      },
+      titleIcon: {
+        width: groupSelectIconSize,
+        height: groupSelectIconSize,
+        marginLeft: 6,
+        marginRight: 6,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "transparent",
+      },
+      divider: {
+        flex: 1,
+        borderBottomWidth: 1,
+        borderStyle: "solid",
+        borderColor: dividerColor,
       },
     })
 
@@ -837,272 +849,275 @@ class Settings extends Component<{
         setOpenFn={this.setOpenNavMenu}
         open={this.openNavMenu}> 
         <RadioPicker pickerOpen={this.radioPickerOpen}/>
-        <View style={[styles.container, {paddingBottom: 10}]}>
+        <View style={styles.container}>
           <TrekLogHeader
             icon="*"
             titleText="Settings"
+            actionButtons={this.headerActions}
             backButtonFn={() =>  this.props.navigation.dispatch(goBack)}
             openMenuFn={this.openMenu}
           />
           {this.dataReady &&
             <View style={styles.listArea}>
               <PageTitle 
-                colorTheme={this.props.trekInfo.colorTheme}
+                colorTheme={this.mS.colorTheme}
                 titleText="TrekLog Settings"
                 groupName={this.group || "None"}
                 setGroupFn={this.getDifferentGroup}
                 style={pageTitleFormat}
               />
+              <View style={styles.divider}/>
               <ScrollView>
-                <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                <View style={{paddingBottom: 2}}>
+                  <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                            duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                    <SlideDownView startValue={-160} endValue={0} open={this.openItems} 
+                              duration={SCROLL_DOWN_DURATION}>
+                      <View style={[cardLayout, styles.cardCustom]}>
+                        <SettingHeader icon={APP_ICONS.YinYang} label="Theme" 
+                                      description={`Select the theme to be applied when TrekLog starts. Theme applies to all groups.`}
+                        />
+                        <View style={styles.inputRow}>
+                          <RadioGroup 
+                            onChangeFn={this.setTheme}
+                            selected={this.theme}
+                            labels={["Light", "Dark"]}
+                            values={[COLOR_THEME_LIGHT, COLOR_THEME_DARK]}
+                            labelStyle={{color: highTextColor, fontSize: 20}}
+                            justify='start'
+                            inline
+                            itemHeight={30}
+                            radioFirst
+                          />
+                        </View>
+                      </View>           
+                    </SlideDownView>
+                  </FadeInView>       
+                  <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                            duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                    <SlideDownView startValue={-cardHeight} endValue={0} open={this.openItems} 
+                              duration={SCROLL_DOWN_DURATION}>
+                      <View style={[cardLayout, styles.cardCustom]}>
+                        <SettingHeader icon={APP_ICONS.CompassMath} label="Measurements" 
+                                      description="System to use for weights and distances"
+                        />
+                        <View style={styles.inputRow}>
+                          <RadioGroup 
+                            onChangeFn={this.switchSystem}
+                            selected={this.system}
+                            labels={["Imperial", "Metric"]}
+                            values={[SYSTEM_TYPE_US, SYSTEM_TYPE_METRIC]}
+                            labelStyle={{color: highTextColor, fontSize: 20}}
+                            justify='start'
+                            inline
+                            itemHeight={30}
+                            radioFirst
+                          />
+                        </View>
+                      </View>           
+                    </SlideDownView>
+                  </FadeInView>       
+                  <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                            duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                    <SlideDownView startValue={-cardHeight} endValue={0} open={this.openItems} 
+                              duration={SCROLL_DOWN_DURATION}>
+                      <View style={[cardLayout, styles.cardCustom]}>
+                        <SettingHeader icon={APP_ICONS.Compress} label="Image Compression" 
+                                      description="Use image compression to save storage"
+                        />
+                        <View style={styles.inputRow}>
+                          <RadioGroup 
+                            onChangeFn={this.setImageStorageMode}
+                            selected={this.imageStorageMode}
+                            labels={["Yes", "No"]}
+                            values={[IMAGE_STORE_COMPRESSED, IMAGE_STORE_FULL]}
+                            labelStyle={{color: highTextColor, fontSize: 20}}
+                            justify='start'
+                            inline
+                            itemHeight={30}
+                            radioFirst
+                          />
+                        </View>
+                      </View>           
+                    </SlideDownView>
+                  </FadeInView>       
+                  <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                            duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                    <SlideDownView startValue={-160} endValue={0} open={this.openItems} 
+                              duration={SCROLL_DOWN_DURATION}>
+                      <View style={[cardLayout, styles.cardCustom]}>
+                        <SettingHeader icon={APP_ICONS.FolderOpenOutline} label="Groups" 
+                          description="Treks are organized into groups. The rest of the settings apply only to this group:"
+                        />
+                        <View style={styles.inputRow}>     
+                          <RectButton
+                            rippleColor={rippleColor}
+                            //if setGroupFn is undefined, disable this button
+                            onPress={this.getDifferentGroup}
+                          >
+                            <View style={styles.iconAndGroup}>
+                              <SvgIcon
+                                style={styles.titleIcon}
+                                size={groupSelectIconSize}
+                                paths={APP_ICONS.FolderOpenOutline}
+                                fill={secondaryColor}
+                              />
+                              <Text style={styles.groupNameText}>
+                                {this.newGroup ? "New" : this.group}</Text>
+                            </View>
+                          </RectButton>
+                          {(!this.newGroup && haveGroups) &&
+                            <View style={styles.addIconArea}>
+                              <TouchableNativeFeedback
+                                background={TouchableNativeFeedback.Ripple(rippleColor, false)}
+                                onPress={this.deleteThisGroup}
+                              >
+                                <View style={[styles.groupActionButton, {marginHorizontal: 10}]}>
+                                  <Text style={[styles.button, {color: dangerColor}]}>DELETE</Text>
+                                </View>
+                              </TouchableNativeFeedback>
+                            </View>
+                          }
+                        </View>
+                      </View>  
+                    </SlideDownView>
+                  </FadeInView>       
+                  <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                            duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                    <SlideDownView startValue={-140} endValue={0} open={this.openItems} 
+                              duration={SCROLL_DOWN_DURATION}>
+                      <View style={[cardLayout, styles.cardCustom, {minHeight: 140}]}>
+                        <SettingHeader icon={APP_ICONS.BulletedList} label="Type" 
+                                      description="Default type to use with this group"
+                        />
+                        <View style={[styles.inputRow, {marginTop: 10}]}>
+                          <TrekTypeSelect
+                            style={{justifyContent: "flex-start"}}
+                            size={30}
+                            selected={TREK_SELECT_BITS[this.defaultType]}
+                            onChangeFn={this.setDefaultType}
+                          />
+                        </View>
+                      </View>           
+                    </SlideDownView>
+                  </FadeInView>       
+                  <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                            duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                    <SlideDownView startValue={-cardHeight} endValue={0} open={this.openItems} 
+                              duration={SCROLL_DOWN_DURATION}>
+                      <View style={[cardLayout, styles.cardCustom]}>
+                        <SettingHeader icon={APP_ICONS.BathroomScale} label="Weight" 
+                                      description="Weight to use for this group"
+                        />
+                        <View style={styles.inputRow}>
+                          <TextInputField
+                            style={styles.textInputItem}
+                            onChangeFn={this.setNewWeight}
+                            placeholderValue={this.weightStr}
+                          />
+                          <Text style={styles.unitsText}>{WEIGHT_UNIT_CHOICES[this.system]}</Text>
+                          <Text style={styles.onText}>on:</Text>
+                          <Text style={styles.dateText}>{this.uSvc.dateFromSortDate(this.weightDate)}</Text>
+                        </View>
+                      </View>           
+                    </SlideDownView>
+                  </FadeInView>       
+                  <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                            duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                    <SlideDownView startValue={-cardHeight} endValue={0} open={this.openItems} 
+                              duration={SCROLL_DOWN_DURATION}>
+                      <View style={[cardLayout, styles.cardCustom]}>
+                        <SettingHeader icon={APP_ICONS.Height} label="Height" 
+                                      description="Height to use for this group"
+                        />
+                        <View style={styles.inputRow}>
+                          <TextInputField
+                            style={styles.textInputItem}
+                            onChangeFn={this.useHeightForStrides}
+                            placeholderValue={this.heightStr}
+                          />
+                          <Text style={styles.unitsText}>{STRIDE_UNIT_CHOICES[this.system]}</Text>
+                        </View>
+                      </View>           
+                    </SlideDownView>
+                  </FadeInView>       
+                  <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                            duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                    <SlideDownView startValue={-cardHeight} endValue={0} open={this.openItems} 
+                              duration={SCROLL_DOWN_DURATION}>
+                      <View style={[cardLayout, styles.cardCustom]}>
+                        <SettingHeader icon={APP_ICONS.Walk} label="Walking" 
+                                      description="Walking stride length for this group"
+                        />
+                        <View style={styles.inputRow}>
+                          <TextInputField
+                                style={styles.textInputItem}
+                                onChangeFn={(text) => this.setStrideLength(TREK_TYPE_WALK, text)}
+                            placeholderValue={this.strideLengthStr[TREK_TYPE_WALK]}
+                          />
+                          <Text style={styles.unitsText}>{STRIDE_UNIT_CHOICES[this.system]}</Text>
+                        </View>
+                      </View>           
+                    </SlideDownView>
+                  </FadeInView>       
+                  <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
                           duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
-                  <SlideDownView startValue={-160} endValue={0} open={this.openItems} 
+                    <SlideDownView startValue={-cardHeight} endValue={0} open={this.openItems} 
                             duration={SCROLL_DOWN_DURATION}>
-                    <View style={[cardLayout, styles.cardCustom]}>
-                      <SettingHeader icon={APP_ICONS.YinYang} label="Theme" 
-                                    description={`Select the theme to be applied when TrekLog starts. Theme applies to all groups.`}
-                      />
-                      <View style={styles.inputRow}>
-                        <RadioGroup 
-                          onChangeFn={this.setTheme}
-                          selected={this.theme}
-                          labels={["Light", "Dark"]}
-                          values={[COLOR_THEME_LIGHT, COLOR_THEME_DARK]}
-                          labelStyle={{color: highTextColor, fontSize: 20}}
-                          justify='start'
-                          inline
-                          itemHeight={30}
-                          radioFirst
+                      <View style={[cardLayout, styles.cardCustom]}>
+                        <SettingHeader icon={APP_ICONS.Run} label="Running" 
+                                      description="Running stride length for this group"
                         />
+                        <View style={styles.inputRow}>
+                          <TextInputField
+                                style={styles.textInputItem}
+                                onChangeFn={(text) => this.setStrideLength(TREK_TYPE_RUN, text)}
+                            placeholderValue={this.strideLengthStr[TREK_TYPE_RUN]}
+                          />
+                          <Text style={styles.unitsText}>{STRIDE_UNIT_CHOICES[this.system]}</Text>
+                        </View>
+                      </View>           
+                    </SlideDownView>
+                  </FadeInView>       
+                  <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                            duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                    <SlideDownView startValue={-cardHeight} endValue={0} open={this.openItems} 
+                              duration={SCROLL_DOWN_DURATION}>
+                      <View style={[cardLayout, styles.cardCustom]}>
+                        <SettingHeader icon={APP_ICONS.Hike} label="Hiking" 
+                                      description="Hiking stride length for this group"
+                        />
+                        <View style={styles.inputRow}>
+                          <TextInputField
+                                style={styles.textInputItem}
+                                onChangeFn={(text) => this.setStrideLength(TREK_TYPE_HIKE, text)}
+                            placeholderValue={this.strideLengthStr[TREK_TYPE_HIKE]}
+                          />
+                          <Text style={styles.unitsText}>{STRIDE_UNIT_CHOICES[this.system]}</Text>
+                        </View>
                       </View>
-                    </View>           
-                  </SlideDownView>
-                </FadeInView>       
-                <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                    </SlideDownView>
+                  </FadeInView>       
+                  <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
                           duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
-                  <SlideDownView startValue={-cardHeight} endValue={0} open={this.openItems} 
-                            duration={SCROLL_DOWN_DURATION}>
-                    <View style={[cardLayout, styles.cardCustom]}>
-                      <SettingHeader icon={APP_ICONS.CompassMath} label="Measurements" 
-                                    description="System to use for weights and distances"
-                      />
-                      <View style={styles.inputRow}>
-                        <RadioGroup 
-                          onChangeFn={this.switchSystem}
-                          selected={this.system}
-                          labels={["Imperial", "Metric"]}
-                          values={[SYSTEM_TYPE_US, SYSTEM_TYPE_METRIC]}
-                          labelStyle={{color: highTextColor, fontSize: 20}}
-                          justify='start'
-                          inline
-                          itemHeight={30}
-                          radioFirst
+                    <SlideDownView startValue={-cardHeight} endValue={0} open={this.openItems} 
+                              duration={SCROLL_DOWN_DURATION}>
+                      <View style={[cardLayout, styles.cardCustom]}>
+                        <SettingHeader icon={APP_ICONS.Sack} label="Backpack" 
+                                      description="Default backpack weight for this group"
                         />
-                      </View>
-                    </View>           
-                  </SlideDownView>
-                </FadeInView>       
-                <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
-                          duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
-                  <SlideDownView startValue={-cardHeight} endValue={0} open={this.openItems} 
-                            duration={SCROLL_DOWN_DURATION}>
-                    <View style={[cardLayout, styles.cardCustom]}>
-                      <SettingHeader icon={APP_ICONS.Compress} label="Image Compression" 
-                                    description="Use image compression to save storage"
-                      />
-                      <View style={styles.inputRow}>
-                        <RadioGroup 
-                          onChangeFn={this.setImageStorageMode}
-                          selected={this.imageStorageMode}
-                          labels={["Yes", "No"]}
-                          values={[IMAGE_STORE_COMPRESSED, IMAGE_STORE_FULL]}
-                          labelStyle={{color: highTextColor, fontSize: 20}}
-                          justify='start'
-                          inline
-                          itemHeight={30}
-                          radioFirst
-                        />
-                      </View>
-                    </View>           
-                  </SlideDownView>
-                </FadeInView>       
-                <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
-                          duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
-                  <SlideDownView startValue={-160} endValue={0} open={this.openItems} 
-                            duration={SCROLL_DOWN_DURATION}>
-                    <View style={[cardLayout, styles.cardCustom]}>
-                      <SettingHeader icon={APP_ICONS.FolderOpenOutline} label="Groups" 
-                        description="Treks are organized into groups. The rest of the settings apply only to this group:"
-                      />
-                      <View style={styles.inputRow}>     
-                        <IconButton 
-                          iconSize={groupSelectIconSize}
-                          icon="ListChoice"
-                          style={{...navItem, ...styles.groupSelectButtonStyle}}
-                          raised
-                          borderColor={navItemBorderColor}
-                          iconStyle={navIcon}
-                          color={secondaryColor}
-                          onPressFn={this.getDifferentGroup}
-                        />
-                        <RectButton
-                          rippleColor={rippleColor}
-                          onPress={this.getDifferentGroup}
-                        >
-                          <Text style={styles.groupNameText}>
-                            {this.newGroup ? "New" : this.group}</Text>
-                        </RectButton>
-                        {(!this.newGroup && haveGroups) &&
-                          <View style={styles.addIconArea}>
-                            <TouchableNativeFeedback
-                              background={TouchableNativeFeedback.Ripple(rippleColor, false)}
-                              onPress={this.deleteThisGroup}
-                            >
-                              <View style={[styles.groupActionButton, {marginHorizontal: 10}]}>
-                                <Text style={[styles.button, {color: dangerColor}]}>DELETE</Text>
-                              </View>
-                            </TouchableNativeFeedback>
-                          </View>
-                        }
-                      </View>
-                    </View>  
-                  </SlideDownView>
-                </FadeInView>       
-                <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
-                          duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
-                  <SlideDownView startValue={-140} endValue={0} open={this.openItems} 
-                            duration={SCROLL_DOWN_DURATION}>
-                    <View style={[cardLayout, styles.cardCustom, {minHeight: 140}]}>
-                      <SettingHeader icon={APP_ICONS.BulletedList} label="Type" 
-                                    description="Default type to use with this group"
-                      />
-                      <View style={[styles.inputRow, {marginTop: 0}]}>
-                        <TrekTypeSelect
-                          style={{justifyContent: "flex-start"}}
-                          size={40}
-                          selected={TREK_SELECT_BITS[this.defaultType]}
-                          onChangeFn={this.setDefaultType}
-                        />
-                      </View>
-                    </View>           
-                  </SlideDownView>
-                </FadeInView>       
-                <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
-                          duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
-                  <SlideDownView startValue={-cardHeight} endValue={0} open={this.openItems} 
-                            duration={SCROLL_DOWN_DURATION}>
-                    <View style={[cardLayout, styles.cardCustom]}>
-                      <SettingHeader icon={APP_ICONS.BathroomScale} label="Weight" 
-                                    description="Weight to use for this group"
-                      />
-                      <View style={styles.inputRow}>
-                        <TextInputField
-                          style={styles.textInputItem}
-                          onChangeFn={this.setNewWeight}
-                          placeholderValue={this.weightStr}
-                        />
-                        <Text style={styles.unitsText}>{WEIGHT_UNIT_CHOICES[this.system]}</Text>
-                        <Text style={styles.onText}>on:</Text>
-                        <Text style={styles.dateText}>{this.uSvc.dateFromSortDate(this.weightDate)}</Text>
-                      </View>
-                    </View>           
-                  </SlideDownView>
-                </FadeInView>       
-                <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
-                          duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
-                  <SlideDownView startValue={-cardHeight} endValue={0} open={this.openItems} 
-                            duration={SCROLL_DOWN_DURATION}>
-                    <View style={[cardLayout, styles.cardCustom]}>
-                      <SettingHeader icon={APP_ICONS.Height} label="Height" 
-                                    description="Height to use for this group"
-                      />
-                      <View style={styles.inputRow}>
-                        <TextInputField
-                          style={styles.textInputItem}
-                          onChangeFn={this.useHeightForStrides}
-                          placeholderValue={this.heightStr}
-                        />
-                        <Text style={styles.unitsText}>{STRIDE_UNIT_CHOICES[this.system]}</Text>
-                      </View>
-                    </View>           
-                  </SlideDownView>
-                </FadeInView>       
-                <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
-                          duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
-                  <SlideDownView startValue={-cardHeight} endValue={0} open={this.openItems} 
-                            duration={SCROLL_DOWN_DURATION}>
-                    <View style={[cardLayout, styles.cardCustom]}>
-                      <SettingHeader icon={APP_ICONS.Walk} label="Walking" 
-                                    description="Walking stride length for this group"
-                      />
-                      <View style={styles.inputRow}>
-                        <TextInputField
-                              style={styles.textInputItem}
-                              onChangeFn={(text) => this.setStrideLength(TREK_TYPE_WALK, text)}
-                          placeholderValue={this.strideLengthStr[TREK_TYPE_WALK]}
-                        />
-                        <Text style={styles.unitsText}>{STRIDE_UNIT_CHOICES[this.system]}</Text>
-                      </View>
-                    </View>           
-                  </SlideDownView>
-                </FadeInView>       
-                <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
-                        duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
-                  <SlideDownView startValue={-cardHeight} endValue={0} open={this.openItems} 
-                          duration={SCROLL_DOWN_DURATION}>
-                    <View style={[cardLayout, styles.cardCustom]}>
-                      <SettingHeader icon={APP_ICONS.Run} label="Running" 
-                                    description="Running stride length for this group"
-                      />
-                      <View style={styles.inputRow}>
-                        <TextInputField
-                              style={styles.textInputItem}
-                              onChangeFn={(text) => this.setStrideLength(TREK_TYPE_RUN, text)}
-                          placeholderValue={this.strideLengthStr[TREK_TYPE_RUN]}
-                        />
-                        <Text style={styles.unitsText}>{STRIDE_UNIT_CHOICES[this.system]}</Text>
-                      </View>
-                    </View>           
-                  </SlideDownView>
-                </FadeInView>       
-                <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
-                          duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
-                  <SlideDownView startValue={-cardHeight} endValue={0} open={this.openItems} 
-                            duration={SCROLL_DOWN_DURATION}>
-                    <View style={[cardLayout, styles.cardCustom]}>
-                      <SettingHeader icon={APP_ICONS.Hike} label="Hiking" 
-                                    description="Hiking stride length for this group"
-                      />
-                      <View style={styles.inputRow}>
-                        <TextInputField
-                              style={styles.textInputItem}
-                              onChangeFn={(text) => this.setStrideLength(TREK_TYPE_HIKE, text)}
-                          placeholderValue={this.strideLengthStr[TREK_TYPE_HIKE]}
-                        />
-                        <Text style={styles.unitsText}>{STRIDE_UNIT_CHOICES[this.system]}</Text>
-                      </View>
-                    </View>
-                  </SlideDownView>
-                </FadeInView>       
-                <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
-                        duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
-                  <SlideDownView startValue={-cardHeight} endValue={0} open={this.openItems} 
-                            duration={SCROLL_DOWN_DURATION}>
-                    <View style={[cardLayout, styles.cardCustom]}>
-                      <SettingHeader icon={APP_ICONS.Sack} label="Backpack" 
-                                    description="Default backpack weight for this group"
-                      />
-                      <View style={styles.inputRow}>
-                        <TextInputField
-                              style={styles.textInputItem}
-                              onChangeFn={(text) => this.setNewPackWeight(text)}
-                          placeholderValue={this.packWeightStr}
-                        />
-                        <Text style={styles.unitsText}>{WEIGHT_UNIT_CHOICES[this.system]}</Text>
-                      </View>
-                    </View>           
-                  </SlideDownView>
-                </FadeInView>       
+                        <View style={styles.inputRow}>
+                          <TextInputField
+                                style={styles.textInputItem}
+                                onChangeFn={(text) => this.setNewPackWeight(text)}
+                            placeholderValue={this.packWeightStr}
+                          />
+                          <Text style={styles.unitsText}>{WEIGHT_UNIT_CHOICES[this.system]}</Text>
+                        </View>
+                      </View>           
+                    </SlideDownView>
+                  </FadeInView>       
+                  </View>                
               </ScrollView>
             </View>
           }

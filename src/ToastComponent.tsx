@@ -2,11 +2,11 @@ import React, { useContext, useEffect, useRef, useCallback } from "react";
 import { View, StyleSheet, Text, Dimensions, BackHandler } from 'react-native'
 import { RectButton } from 'react-native-gesture-handler'
 
-import { TOAST_Z_INDEX, semitransWhite_3, ToastSvcContext, UiThemeContext, TrekInfoContext } from './App';
+import { TOAST_Z_INDEX, semitransWhite_3, ToastSvcContext, UiThemeContext, MainSvcContext } from './App';
 import SvgIcon  from './SvgIconComponent';
 import { ToastModel } from './ToastModel'
 import { APP_ICONS } from './SvgImages'
-import { TrekInfo } from './TrekInfoModel';
+import { MainSvc } from "./MainSvc";
 
 export const TOAST_ICON_SIZE = 30;
 
@@ -16,7 +16,7 @@ function Toast({toastOpen}) {
 
   const bHandler = useRef(false);
   const toastSvc: ToastModel = useContext(ToastSvcContext);
-  const trekInfo: TrekInfo = useContext(TrekInfoContext);
+  const mainSvc: MainSvc = useContext(MainSvcContext);
   const uiTheme: any = useContext(UiThemeContext);
   const timerId = useRef(undefined);
   const tData = toastSvc.tData;
@@ -24,7 +24,7 @@ function Toast({toastOpen}) {
   const onBackButtonPressToast = useCallback(
     () => {
       callClose();
-      return true;
+      return false;
     }, [], // Tells React to memoize regardless of arguments.
   );
 
@@ -67,7 +67,7 @@ function Toast({toastOpen}) {
     const toastWidth = width - 20;
     const { roundedLeft, roundedRight, fontRegular } = uiTheme;
     const { primaryColor, rippleColor, textOnPrimaryColor, footerButtonText,
-          } = uiTheme.palette[trekInfo.colorTheme];
+          } = uiTheme.palette[mainSvc.colorTheme];
     const styles = StyleSheet.create({
       container: { ... StyleSheet.absoluteFillObject },
       toast: {

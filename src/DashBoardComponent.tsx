@@ -6,12 +6,12 @@ import { RectButton } from 'react-native-gesture-handler'
 import { observable, action } from 'mobx'
 import { observer, inject } from 'mobx-react'
 
-import { TrekInfo,
+import { MainSvc,
          TREK_TYPE_CHOICES, TrekType, TREK_SELECT_BITS, ALL_SELECT_BITS,
          TREK_TYPE_BIKE, TREK_TYPE_RUN, TREK_TYPE_WALK, TREK_TYPE_HIKE,TREK_TYPE_BOARD, TREK_TYPE_DRIVE,
          BIKE_SELECT_BIT, WALK_SELECT_BIT, RUN_SELECT_BIT, HIKE_SELECT_BIT,
          BOARD_SELECT_BIT, DRIVE_SELECT_BIT
-       } from './TrekInfoModel'
+       } from './MainSvc';
 import { TREK_TYPE_COLORS_OBJ, TREK_TYPE_DIM_COLORS_OBJ, HEADER_HEIGHT,
          PAGE_TITLE_HEIGHT } from './App'
 import { UtilsSvc, TIME_FRAMES, TIME_FRAME_DISPLAY_NAMES, TimeFrameType,
@@ -29,22 +29,22 @@ import SummaryIntervals from './SummaryIntervalsComponent';
 import SummaryGoals from './SummaryGoalsComponent';
 
 
-@inject('trekInfo', 'utilsSvc', 'uiTheme', 'filterSvc', 'modalSvc', 'goalsSvc', 'summarySvc')
+@inject('mainSvc', 'summarySvc', 'utilsSvc', 'uiTheme', 'filterSvc', 'modalSvc', 'goalsSvc')
 @observer
 class DashBoard extends Component<{ 
   trekChecksum : number,
   pickerOpenFn ?: Function,       // function to call to open the radioPicker for TimeFrames
   uiTheme ?: any,
   navigation ?: any,
+  mainSvc ?: MainSvc,
   summarySvc ?: SummarySvc,
   utilsSvc ?: UtilsSvc,
   filterSvc ?: FilterSvc,
   goalsSvc  ?: GoalsSvc,
   modalSvc ?: ModalModel,
-  trekInfo ?: TrekInfo         // object with all non-gps information about the Trek
 }, {} > {
 
-  tInfo = this.props.trekInfo;
+  mS = this.props.mainSvc;
   fS = this.props.filterSvc;
   gS = this.props.goalsSvc;
   uSvc = this.props.utilsSvc;
@@ -77,16 +77,14 @@ class DashBoard extends Component<{
   componentWillUnmount() {
     this.gS.clearDisplayList();
     this.gS.updateDataReady(false);
-    this.tInfo.clearTrek();
     this.fS.setSelectedTrekIndex(-1);
     this.fS.setDataReady(false);
-    this.tInfo.restoreCurrentGroupSettings();
   }
 
   componentDidUpdate() {
-    if (this.props.trekInfo.dataReady && (
+    if ((this.fS.dataReady) && (
            this.ftCsum !== this.props.trekChecksum ||
-            this.tInfo.updateDashboard === FILTERMODE_FROM_STATS)) {  
+            this.mS.updateDashboard === FILTERMODE_FROM_STATS)) {  
         this.updateDashboard();
     }
   }
@@ -94,7 +92,7 @@ class DashBoard extends Component<{
   @action
   updateDashboard = () => {
     let cSum = this.props.trekChecksum;
-    if(!this.sumSvc.returningFromGoalDetail && this.tInfo.updateDashboard !== 'Skip'){
+    if(!this.sumSvc.returningFromGoalDetail && this.mS.updateDashboard !== 'Skip'){
       this.sumSvc.scanTreks();
       if (this.ftCsum !== cSum){
         this.prepareGoals();
@@ -105,7 +103,7 @@ class DashBoard extends Component<{
       this.sumSvc.returningFromGoalDetail = false;
       this.ftCsum = cSum;
     }
-    this.tInfo.setUpdateDashboard('');    
+    this.mS.setUpdateDashboard('');    
   }
 
   // initialize all the observable properties in an action for mobx strict mode
@@ -170,15 +168,15 @@ class DashBoard extends Component<{
     let selValues = TIME_FRAMES.map((item) => item.value);
 
     this.props.modalSvc.openRadioPicker({heading: 'Select A Timeframe', selectionNames: selNames,
-                              selectionValues: selValues, selection: this.tInfo.timeframe,
+                              selectionValues: selValues, selection: this.fS.timeframe,
                               openFn: this.props.pickerOpenFn})
-    .then((newTimeframe) => {
-      if(newTimeframe !== this.tInfo.timeframe){        
+    .then((newTimeframe : TimeFrameType) => {
+      if(newTimeframe !== this.fS.timeframe){        
           this.gS.clearDisplayList();
-          let sels = this.tInfo.typeSelections;
-          this.tInfo.setTypeSelections(ALL_SELECT_BITS);    // be sure to get data for all types
+          let sels = this.fS.typeSelections;
+          this.fS.setTypeSelections(ALL_SELECT_BITS);    // be sure to get data for all types
           this.fS.setTimeframe(newTimeframe);
-          this.tInfo.setTypeSelections(sels);
+          this.fS.setTypeSelections(sels);
       }
     })
     .catch(() =>{ 
@@ -194,9 +192,9 @@ class DashBoard extends Component<{
   @action
   updateTypeSels = (value: TrekType, toggle: boolean) => {
     if (toggle) {
-      this.tInfo.updateTypeSelections(value, !(this.tInfo.typeSelections & TREK_SELECT_BITS[value]));
+      this.fS.updateTypeSelections(value, !(this.fS.typeSelections & TREK_SELECT_BITS[value]));
     } else {
-      this.tInfo.setTypeSelections(TREK_SELECT_BITS[value]);
+      this.fS.setTypeSelections(TREK_SELECT_BITS[value]);
     }
     this.sumSvc.scanTreks();
     this.sumSvc.findStartingInterval(this.sumSvc.selectedInterval);
@@ -213,16 +211,26 @@ class DashBoard extends Component<{
   }
 
   callGetDateMin = () => {
+    let sels = this.fS.typeSelections;
+    this.fS.setTypeSelections(ALL_SELECT_BITS);    // be sure to get data for all types
     this.fS.getDateMin()
-    .then(() => {})
+    .then(() => {
+      this.fS.setTypeSelections(sels);
+    })
     .catch(() => {
+      this.fS.setTypeSelections(sels);
     })
   }
 
   callGetDateMax = () => {
+    let sels = this.fS.typeSelections;
+    this.fS.setTypeSelections(ALL_SELECT_BITS);    // be sure to get data for all types
     this.fS.getDateMax()
-    .then(() => {})
+    .then(() => {
+      this.fS.setTypeSelections(sels);
+    })
     .catch(() => {
+      this.fS.setTypeSelections(sels);
     })
   }
   
@@ -243,23 +251,23 @@ class DashBoard extends Component<{
     if (index === this.sumSvc.selectedInterval){
       let iData = this.sumSvc.activityData[index];
       if(iData.data.Selected.treks){
-        this.tInfo.setUpdateDashboard('Skip');
+        this.mS.setUpdateDashboard('Skip');
         this.fS.filterMode = FILTERMODE_FROM_STATS;
         this.sumSvc.beforeRFBdateMax = this.fS.dateMax;
         this.sumSvc.beforeRFBdateMin = this.fS.dateMin;
-        this.sumSvc.beforeRFBtimeframe = this.tInfo.timeframe;
-        this.tInfo.dtMin = this.uSvc.dateFromSortDateYY(iData.interval.start);
+        this.sumSvc.beforeRFBtimeframe = this.fS.timeframe;
+        this.mS.dtMin = this.uSvc.dateFromSortDateYY(iData.interval.start);
         let sdMax = this.uSvc.formatShortSortDate(this.fS.dateMax) + '9999';
         if (iData.interval.end < sdMax) {     // check for interval end beyond current date range
-          this.tInfo.dtMax = iData.endDate;        
+          this.mS.dtMax = iData.endDate;        
         } else {
-          this.tInfo.dtMax = this.fS.dateMax;
+          this.mS.dtMax = this.fS.dateMax;
         }
-        this.fS.setDateMax(this.tInfo.dtMax, "None");
-        this.fS.setDateMin(this.tInfo.dtMin, "None");
-        this.tInfo.updateTimeframe(TIME_FRAME_CUSTOM);
+        this.fS.setDateMax(this.mS.dtMax, "None");
+        this.fS.setDateMin(this.mS.dtMin, "None");
+        this.fS.updateTimeframe(TIME_FRAME_CUSTOM);
         this.fS.selectedTrekDate = '';
-        this.props.navigation.navigate('Review');
+        this.props.navigation.navigate({routeName: 'Review', key: 'Key-Review'});
       }
     } else {
         this.sumSvc.setSelectedInterval(index);
@@ -268,32 +276,34 @@ class DashBoard extends Component<{
 
   render() {
     ++this.renderCount;
-    // alert('rendering Dashboard');
     const dateAreaHt = 65;
     const sectionTitleHt = 40;
     const sectionCardHeight = this.winHeight - (dateAreaHt + HEADER_HEIGHT + PAGE_TITLE_HEIGHT + 25);
     const sectionCardWidth = this.winWidth;
     const currScrollPage = Math.trunc(this.currScrollPos / sectionCardHeight) + 1;
     const haveTreks = !this.fS.filteredTreksEmpty();
-    const bikeSel  = ((this.tInfo.typeSelections  & BIKE_SELECT_BIT)  !== 0);
+    const bikeSel  = ((this.fS.typeSelections  & BIKE_SELECT_BIT)  !== 0);
     const haveBikes = (this.sumSvc.activeTypes & BIKE_SELECT_BIT) !== 0;
-    const hikeSel  = ((this.tInfo.typeSelections  & HIKE_SELECT_BIT)  !== 0);
+    const hikeSel  = ((this.fS.typeSelections  & HIKE_SELECT_BIT)  !== 0);
     const haveHikes = (this.sumSvc.activeTypes & HIKE_SELECT_BIT) !== 0;
-    const walkSel  = ((this.tInfo.typeSelections  & WALK_SELECT_BIT)  !== 0);
+    const walkSel  = ((this.fS.typeSelections  & WALK_SELECT_BIT)  !== 0);
     const haveWalks =  (this.sumSvc.activeTypes & WALK_SELECT_BIT) !== 0;
-    const runSel   = ((this.tInfo.typeSelections  & RUN_SELECT_BIT)   !== 0);
+    const runSel   = ((this.fS.typeSelections  & RUN_SELECT_BIT)   !== 0);
     const haveRuns =  (this.sumSvc.activeTypes & RUN_SELECT_BIT) !== 0;
-    const boardSel = ((this.tInfo.typeSelections  & BOARD_SELECT_BIT) !== 0);
+    const boardSel = ((this.fS.typeSelections  & BOARD_SELECT_BIT) !== 0);
     const haveBorards =  (this.sumSvc.activeTypes & BOARD_SELECT_BIT) !== 0;
-    const driveSel = ((this.tInfo.typeSelections  & DRIVE_SELECT_BIT) !== 0);
+    const driveSel = ((this.fS.typeSelections  & DRIVE_SELECT_BIT) !== 0);
     const haveDrives =  (this.sumSvc.activeTypes & DRIVE_SELECT_BIT) !== 0;
+    const trekCounts = '(' + this.sumSvc.totalCounts(this.fS.typeSelections) + ' of ' + 
+                         this.sumSvc.ftCount + ' Treks)' + (this.fS.extraFilterSet() ? ' *' : '');
+
     const { navItem, navIcon, cardLayout, pickerTitle, dateInputText,
             fontRegular, fontLight
           } = this.props.uiTheme;
     const { highTextColor, disabledTextColor, secondaryColor,
             navItemBorderColor, rippleColor, dividerColor,
-            altCardBackground
-          } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
+            altCardBackground, pageBackground, summarySectionTitle
+          } = this.props.uiTheme.palette[this.mS.colorTheme];
     const sectionIconSize = 24;
     const sectionIconColor = highTextColor;
     const statTitleIconSize = 24;
@@ -302,14 +312,14 @@ class DashBoard extends Component<{
     const pieHeight = sectionCardHeight * .3;
     const pieWidth = sectionCardHeight * .33;
     const summaryHeight = (sectionCardHeight * .52) ;
-    const typeIconAreaSize = sectionCardHeight * .09;
-    const typeIconTop = 0;
-    const typeIconMid = (pieHeight - typeIconAreaSize) / 2;
-    const typeIconBot = pieHeight - typeIconAreaSize;
+    const typeIconAreaSize = sectionCardHeight * .07;
+    const typeIconTop = 10;
+    const typeIconMid = (pieHeight - typeIconAreaSize) / 2 + typeIconTop;
+    const typeIconBot = pieHeight - typeIconAreaSize + typeIconTop;
     const pieEdge = (sectionCardWidth - pieWidth) / 2;
     const pieMidEdge = pieEdge - (typeIconAreaSize / 2);
     const pieAtEdge = pieEdge - typeIconAreaSize;
-
+    // alert(haveTreks + '\n' + this.fS.filterRuns + '\n' + this.fS.dataReady)
 
     let data = [];
     // Build the data object for the PieChart
@@ -320,7 +330,6 @@ class DashBoard extends Component<{
                   })
       }
     })
-    // alert(JSON.stringify(data,null,2))
     const styles = StyleSheet.create({
       container: {
         flexDirection: "column",
@@ -412,7 +421,7 @@ class DashBoard extends Component<{
         marginTop: 0,
         marginBottom: 10,
         paddingTop: 0,
-        paddingBottom: 5,
+        paddingBottom: 0,
         paddingLeft: 0,
         paddingRight: 0,
         marginLeft: 3,
@@ -422,15 +431,14 @@ class DashBoard extends Component<{
       },
       sectionTitleArea: {
         borderColor: dividerColor,
-        borderBottomWidth: 2,
         borderStyle: "solid",
+        borderBottomWidth: 1,
         marginTop: 0,
         marginBottom: 5,
         height: sectionTitleHt,
         flexDirection: "row",
         alignItems: "center",  
         backgroundColor: altCardBackground,
-        // ...roundedTop,
       },
       sectionTitle: {
         fontSize: 20,
@@ -465,20 +473,19 @@ class DashBoard extends Component<{
               rippleColor={rippleColor}
               onPress={this.openRadioPicker}
             >
-              <Text style={styles.timeFrameName}>{TIME_FRAME_DISPLAY_NAMES[this.tInfo.timeframe]}</Text>
+              <Text style={styles.timeFrameName}>{TIME_FRAME_DISPLAY_NAMES[this.fS.timeframe]}</Text>
             </RectButton>
             <IconButton 
               iconSize={timeframeSelectIconSize}
               icon="CalendarEdit"
               style={{...navItem, ...styles.timeframeSelectButtonStyle}}
               borderColor={navItemBorderColor}
-              raised
               iconStyle={navIcon}
               color={secondaryColor}
               onPressFn={this.openRadioPicker}
             />
           </View>
-          {(haveTreks || this.tInfo.timeframe !== 'All') &&
+          {(haveTreks || this.fS.timeframe !== 'All') &&
             <View style={[styles.rowCenter, {marginTop: -8, marginBottom: 25}]}>
               <RectButton
                 rippleColor={rippleColor}
@@ -519,12 +526,9 @@ class DashBoard extends Component<{
                   style={styles.sectionIconArea}
                 />
                 <Text style={styles.sectionTitle}>Stats</Text>
-                <Text style={styles.sectionTitle}>
-                  {'(' + this.sumSvc.totalCounts(this.tInfo.typeSelections) + ' of ' + 
-                    this.sumSvc.ftCount + ' Treks)'}
-                </Text>
+                <Text style={styles.sectionTitle}>{trekCounts}</Text>
               </View>
-              {(!haveTreks && !this.tInfo.resObj && this.fS.filterRuns) &&
+              {(!haveTreks && !this.mS.resObj && this.fS.filterRuns) &&
                 <View style={{height: summaryHeight, justifyContent: "center"}}>
                   <Text style={styles.noMatches}>Nothing for Selected Dates</Text>
                 </View>
@@ -545,7 +549,7 @@ class DashBoard extends Component<{
                     </View>
                   }
                   {haveBorards &&
-                    <View style={[styles.typeControl, {top: typeIconMid, left: pieAtEdge}]}>
+                    <View style={[styles.typeControl, {top: typeIconMid, left: pieAtEdge - 5}]}>
                       <SvgButton 
                         value={TREK_TYPE_BOARD}
                         onPressFn={this.toggleType}
@@ -554,12 +558,11 @@ class DashBoard extends Component<{
                         style={styles.controlButton}
                         fill={boardSel ? TREK_TYPE_COLORS_OBJ.Board : TREK_TYPE_DIM_COLORS_OBJ.Board}
                         path={APP_ICONS.Board}
-                        svgHeightAdj={5}
                       />
                     </View>
                   }
                   {haveBikes &&
-                    <View style={[styles.typeControl, {top: typeIconBot, left: pieMidEdge - 12}]}>
+                    <View style={[styles.typeControl, {top: typeIconBot, left: pieMidEdge - 8}]}>
                       <SvgButton 
                         value={TREK_TYPE_BIKE}
                         onPressFn={this.toggleType}
@@ -568,8 +571,6 @@ class DashBoard extends Component<{
                         style={styles.controlButton}
                         fill={bikeSel ? TREK_TYPE_COLORS_OBJ.Bike : TREK_TYPE_DIM_COLORS_OBJ.Bike}
                         path={APP_ICONS.Bike}
-                        svgWidthAdj={4}
-                        svgHeightAdj={4}
                       />
                     </View>
                   }
@@ -579,10 +580,10 @@ class DashBoard extends Component<{
                     height={pieHeight}
                     labelColor={highTextColor}
                     data={data} 
-                    selected={this.tInfo.typeSelections}
+                    selected={this.fS.typeSelections}
                   />
                   {haveWalks &&
-                    <View style={[styles.typeControl, {top: typeIconTop, right: pieMidEdge}]}>
+                    <View style={[styles.typeControl, {top: typeIconTop, right: pieMidEdge -5}]}>
                       <SvgButton 
                         value={TREK_TYPE_WALK}
                         onPressFn={this.toggleType}
@@ -595,7 +596,7 @@ class DashBoard extends Component<{
                     </View>
                   }
                   {haveDrives &&
-                    <View style={[styles.typeControl, {top: typeIconMid, right: pieAtEdge}]}>
+                    <View style={[styles.typeControl, {top: typeIconMid, right: pieAtEdge - 10}]}>
                       <SvgButton 
                         value={TREK_TYPE_DRIVE}
                         onPressFn={this.toggleType}
@@ -608,7 +609,7 @@ class DashBoard extends Component<{
                     </View>
                   }
                   {haveRuns &&
-                    <View style={[styles.typeControl, {top: typeIconBot, right: pieMidEdge -8}]}>
+                    <View style={[styles.typeControl, {top: typeIconBot, right: pieMidEdge - 5}]}>
                       <SvgButton 
                         value={TREK_TYPE_RUN}
                         onPressFn={this.toggleType}
@@ -631,9 +632,9 @@ class DashBoard extends Component<{
                 />
               </View>
             </View>
-            <View style={{...cardLayout, ...styles.sectionCardAdj}}>
+            <View style={{...cardLayout, ...styles.sectionCardAdj, ...{backgroundColor: pageBackground}}}>
               <ScrollView nestedScrollEnabled={true}>
-                <View style={styles.sectionTitleArea}>
+                <View style={[styles.sectionTitleArea, {marginBottom: 0}, summarySectionTitle]}>
                   <SvgIcon 
                     paths={APP_ICONS.Target}
                     size={sectionIconSize}
@@ -647,6 +648,7 @@ class DashBoard extends Component<{
                   showFn={this.showGoalDetails}
                   sinceDate={this.fS.getDateMinValue()}
                   noGoals={this.noGoals}
+                  colorTheme={this.mS.colorTheme}
                 />
               </ScrollView>
             </View>

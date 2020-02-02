@@ -3,11 +3,11 @@ import { View, StyleSheet, Text, BackHandler } from "react-native";
 import { useObserver } from "mobx-react-lite";
 import { RectButton } from 'react-native-gesture-handler'
 
-import { CONFIRM_Z_INDEX, BACKDROP_Z_INDEX, ModalSvcContext, UiThemeContext, TrekInfoContext } from "./App";
+import { CONFIRM_Z_INDEX, BACKDROP_Z_INDEX, ModalSvcContext, UiThemeContext, MainSvcContext } from "./App";
 import { ModalModel, CONFIRM_INFO } from "./ModalModel";
-import { TrekInfo } from './TrekInfoModel';
 import SvgIcon from "./SvgIconComponent";
 import { APP_ICONS } from "./SvgImages";
+import { MainSvc } from "./MainSvc";
 
 // dialog used for basic NOTICES and CONFIRMATIONS
 
@@ -15,7 +15,7 @@ function ConfirmationModal({confirmOpen}) {
 
   const bHandler = useRef(false);
   const modalSvc: ModalModel = useContext(ModalSvcContext);
-  const trekInfo: TrekInfo = useContext(TrekInfoContext);
+  const mainSvc: MainSvc = useContext(MainSvcContext);
   const uiTheme: any = useContext(UiThemeContext);
   const smData = modalSvc.smData;
   const contentLines = confirmOpen && smData.content.split("\n");
@@ -72,25 +72,25 @@ function ConfirmationModal({confirmOpen}) {
   }
 
   const {
-    highTextColor,
     lowTextColor,
     dangerColor,
     cancelColor,
     okChoiceColor,
     warningConfirmColor,
     warningConfirmTextColor,
-    infoConfirmColor,
-    infoConfirmTextColor,
-    pageBackground,
-    dividerColor,
-    rippleColor,
-    contrastingMask_2,
+    infoConfirmHeaderBackgroundColor,
+    infoConfirmHeaderTextColor,
+    infoConfirmBodyBackgroundColor,
+    infoConfirmBodyTextColor,
+    infoConfirmDividerColor,
+    infoConfippleColor,
+    infoConfirmBackgroundMask,
     footerButtonText,
-  } = uiTheme.palette[trekInfo.colorTheme];
-  const { cardLayout, roundedTop, roundedBottom, footer, footerButton,
+  } = uiTheme.palette[mainSvc.colorTheme];
+  const { cardLayout, roundedTop, roundedBottom, footer, footerButton, fontBold,
           formHeader, formHeaderText, formBody, formBodyText } = uiTheme;
-  const titleColor = smData.dType === CONFIRM_INFO ? infoConfirmTextColor : warningConfirmTextColor;
-  const bgColor = smData.dType === CONFIRM_INFO ? infoConfirmColor : warningConfirmColor;
+  const titleColor = smData.dType === CONFIRM_INFO ? infoConfirmHeaderTextColor : warningConfirmTextColor;
+  const bgColor = smData.dType === CONFIRM_INFO ? infoConfirmHeaderBackgroundColor : warningConfirmColor;
   const iconColor =
     smData.iconColor !== undefined ? smData.iconColor : titleColor;
 
@@ -99,7 +99,7 @@ function ConfirmationModal({confirmOpen}) {
     background: {
       ...StyleSheet.absoluteFillObject,
       zIndex: BACKDROP_Z_INDEX,
-      backgroundColor: contrastingMask_2
+      backgroundColor: infoConfirmBackgroundMask,
     },
     formArea: {
       position: "absolute",
@@ -117,7 +117,7 @@ function ConfirmationModal({confirmOpen}) {
       marginLeft: 5,
       marginRight: 5,
       borderColor: lowTextColor,
-      backgroundColor: pageBackground,
+      backgroundColor: infoConfirmBodyBackgroundColor,
       justifyContent: "space-between",
       zIndex: CONFIRM_Z_INDEX
     },
@@ -140,17 +140,19 @@ function ConfirmationModal({confirmOpen}) {
     },
     contentText: {
       ...formBodyText,
-      color: highTextColor,
+      fontFamily: fontBold,
+      color: infoConfirmBodyTextColor,
     },
     bigContentText: {
       ...formBodyText,
       fontSize: 20,
-      color: highTextColor,
+      fontFamily: fontBold,
+      color: infoConfirmBodyTextColor,
     },
     footer: {
       ...footer,
-      borderTopColor: dividerColor, 
-      backgroundColor: pageBackground,
+      borderTopColor: infoConfirmDividerColor, 
+      backgroundColor: infoConfirmBodyBackgroundColor,
     }
   });
 
@@ -189,7 +191,7 @@ function ConfirmationModal({confirmOpen}) {
                 <View style={[styles.footer, roundedBottom]}>
                   {smData.okText && smData.deleteText && (
                     <RectButton
-                      rippleColor={rippleColor}
+                      rippleColor={infoConfippleColor}
                       style={{flex: 1}}
                       onPress={() => close(smData.deleteText)}>
                       <View style={footerButton}>
@@ -203,7 +205,7 @@ function ConfirmationModal({confirmOpen}) {
                   )}
                   {!smData.notifyOnly && (
                     <RectButton
-                      rippleColor={rippleColor}
+                      rippleColor={infoConfippleColor}
                       style={{flex: 1}}
                       onPress={dismiss}>
                       <View style={footerButton}>
@@ -217,7 +219,7 @@ function ConfirmationModal({confirmOpen}) {
                   )}
                   {!smData.okText && smData.deleteText && (
                     <RectButton
-                      rippleColor={rippleColor}
+                      rippleColor={infoConfippleColor}
                       style={{flex: 1}}
                       onPress={() => close(smData.deleteText)}>
                       <View style={footerButton}>
@@ -231,7 +233,7 @@ function ConfirmationModal({confirmOpen}) {
                   )}
                   {smData.okText && (
                     <RectButton
-                      rippleColor={rippleColor}
+                      rippleColor={infoConfippleColor}
                       style={{flex: 1}}
                       onPress={() => close(smData.okText)}>
                       <View style={[footerButton, { marginRight: 1 }]}>

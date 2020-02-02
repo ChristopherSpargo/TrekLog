@@ -12,13 +12,13 @@ function HorizontalSlideView({
   duration = undefined,   
   color,
 }) {
-  const currValue = useRef(index * (width+1) + offset)
+  const currValue = useRef(index * width + offset - Math.min(index, 1))
   const [scaleAnim] = useState<AnimatedValue>(new Animated.Value(currValue.current));
 
   useEffect(() => {      
-      currValue.current = index * (width+1) + offset;
+      currValue.current = index * width + offset - Math.min(index, 1);
       slide();
-  },[index]);
+  },[index, width, underlineWidth]);
 
 
   function slide() {

@@ -4,9 +4,9 @@ import {
   CONTROLS_HEIGHT,
   WAITING_Z_INDEX,
   uiTheme,
-  TrekInfoContext
+  MainSvcContext
 } from "./App";
-import { TrekInfo } from './TrekInfoModel';
+import { MainSvc } from "./MainSvc";
 
 // Component to display an ActivityIndicator in the center of the screen
 
@@ -16,8 +16,9 @@ function Waiting({
   bottom = undefined // bottom of message container area
 }) {
 
-  const trekInfo: TrekInfo = useContext(TrekInfoContext);
-  const { contrastingMask_9, textOffTheme, secondaryColor } = uiTheme.palette[trekInfo.colorTheme];
+  const mainSvc: MainSvc = useContext(MainSvcContext);
+  
+  const { contrastingMask_9, textOffTheme, secondaryColor } = uiTheme.palette[mainSvc.colorTheme];
   const { fontBold } = uiTheme;
   const textColor = textOffTheme;
   const bot = bottom || CONTROLS_HEIGHT;

@@ -4,40 +4,34 @@ import { useObserver } from "mobx-react-lite";
 import { ProgressCircle } from 'react-native-svg-charts';
 import { RectButton } from 'react-native-gesture-handler'
 
-import { UiThemeContext, TrekInfoContext, GoalsSvcContext, UtilsSvcContext,
+import { UiThemeContext, GoalsSvcContext, UtilsSvcContext, MainSvcContext,
          PROGRESS_COLORS } from "./App";
-import { TrekInfo } from './TrekInfoModel';
 import { UtilsSvc } from './UtilsService';
 import { PROGRESS_RANGES, GoalsSvc } from './GoalsService';
+import { MainSvc } from "./MainSvc";
 
 function SummaryGoals({
   showFn,      // function to call to show the selected goal
   sinceDate,
-  noGoals
+  noGoals,
+  colorTheme
 }) {
+
+  const mS : MainSvc = useContext(MainSvcContext);
   const uiTheme: any = useContext(UiThemeContext);
-  const tInfo: TrekInfo = useContext(TrekInfoContext);
   const gS: GoalsSvc = useContext(GoalsSvcContext)
   const uSvc: UtilsSvc = useContext(UtilsSvcContext);
 
   const progressCircleSize = 40;
   const iconLabelTextSize = 14;
   const haveGoals = gS.displayList.length !== 0;
-  const { rippleColor, highTextColor, mediumTextColor, cardItemTitleColor,
-          progressBackground, dividerColor
-        } = uiTheme.palette[tInfo.colorTheme];
+  const { rippleColor, highTextColor, cardItemTitleColor,
+          progressBackground, dividerColor, altCardBackground, shadow1
+        } = uiTheme.palette[colorTheme];
   const { fontLight, fontRegular,
         } = uiTheme;
   const styles = StyleSheet.create({
     container: { ...StyleSheet.absoluteFillObject },
-    goalItem: {
-      flexDirection: "column",
-      paddingLeft: 15,
-    },
-    goalStmt: {
-      fontSize: 18,
-      color: mediumTextColor,
-    },
     progressLabel: {
       width: progressCircleSize + 5,
       fontSize: iconLabelTextSize,
@@ -46,12 +40,16 @@ function SummaryGoals({
       textAlign: "center",
     },
     buttonArea: {
-      marginTop: 10,
-      marginLeft: 15,
+      backgroundColor: altCardBackground,
+      borderColor: dividerColor,
+      borderStyle: "solid",
+      ...shadow1
     },
     rowLayout: {
       flexDirection: "row",
-      alignItems: "center",
+      alignItems: "flex-start",
+      paddingLeft: 15,
+      paddingBottom: 5,
     },
     goalDateItem: {
       flexDirection: "row",
@@ -60,27 +58,20 @@ function SummaryGoals({
     goalDateType: {
       fontSize: 18,
       fontFamily: fontRegular,
-      color: mediumTextColor,
+      color: highTextColor,
       width: 80,
     },
     goalDateText: {
       fontFamily: fontRegular,
-      color: mediumTextColor,
+      color: highTextColor,
       fontSize: 18
     },
     goalText: {
+      paddingLeft: 15,
       color: cardItemTitleColor,
       fontFamily: fontRegular,
       marginBottom: 3,
       fontSize: 20
-    },
-    divider: {
-      flex: 1,
-      marginHorizontal: 15,
-      marginTop: 10,
-      borderBottomWidth: 1,
-      borderStyle: "solid",
-      borderColor: dividerColor,
     },
   })
 
@@ -92,14 +83,13 @@ function SummaryGoals({
           let ind = uSvc.findRangeIndex(progPct, PROGRESS_RANGES);
           let pColor = PROGRESS_COLORS[ind];
           return (
-          <RectButton
-            rippleColor={rippleColor}
-            key={index}
-            onPress={() => showFn(dlItem)}
-          >
-            <View style={styles.buttonArea}>
+            <View style={styles.buttonArea} key={index}>
+              <RectButton
+                rippleColor={rippleColor}
+                onPress={() => showFn(dlItem)}
+              >
               <Text style={styles.goalText}>{gS.formatGoalStatement(dlItem.goal)}</Text>
-              <View style={[styles.rowLayout, {alignItems: "flex-start"}]}>
+              <View style={styles.rowLayout}>
                 <View>         
                   <ProgressCircle
                     style={{height: progressCircleSize}}
@@ -121,14 +111,13 @@ function SummaryGoals({
                   <View style={styles.goalDateItem}>
                     <Text style={styles.goalDateType}>Last Met:</Text>
                     <Text style={[styles.goalDateText, {color: highTextColor}]}>
-                          {dlItem.mostRecentDate === '0' ? "Not Met" :
-                            uSvc.dateFromSortDate(dlItem.mostRecentDate)}</Text>
+                          {dlItem.mostRecentDate === '0' ? "Not Met" 
+                                        : uSvc.getTodayOrDate(mS.todaySD, dlItem.mostRecentDate)}</Text>
                   </View>
                 </View>
               </View>
-            </View>
-            <View style={styles.divider}/>
           </RectButton>
+            </View>
         )})
       }
       {!haveGoals &&
@@ -137,4 +126,4 @@ function SummaryGoals({
     </View>
   ))
 }
-export default SummaryGoals;
+export default React.memo(SummaryGoals);

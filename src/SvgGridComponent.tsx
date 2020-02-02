@@ -9,14 +9,15 @@ function SvgGrid({
   graphHeight,                  // height of assocaited graph
   gridWidth,                    // width of grid
   maxBarHeight,                 // height of grid
-  minBarHeight,                 // minimum bar height (lowest grid line)
+  minBarHeight = undefined,     // minimum bar height (lowest grid line)
   colorTheme,                   // pass trekInfo.colorTheme to cause update on theme change
   lineWidth = undefined,        // width of grid line (defaults to 1)
   lineCount,                    // number of grid lines
 }) {
   
     const uiTheme: any = useContext(UiThemeContext);
-    const gridHeight = maxBarHeight - minBarHeight;
+    const minBarHt = minBarHeight || 25;
+    const gridHeight = maxBarHeight - minBarHt;
     const lineSpace = gridHeight  / (lineCount + 1);
     const strokeWidth = lineWidth || 1;
     const lines = () => {
@@ -26,14 +27,6 @@ function SvgGrid({
       }
       return l;
     }
-    // alert("rendering grid")
-      // alert(gridHeight + '\n' + 
-      //       gridWidth + '\n' + 
-      //       lineSpace + '\n' + 
-      //       strokeWidth + '\n' + 
-      //       color + '\n' + 
-      //       lineCount + '\n' + 
-      //       JSON.stringify(lines(),null,2))
     
     const { dividerColor } = uiTheme.palette[colorTheme]
     const styles = StyleSheet.create({

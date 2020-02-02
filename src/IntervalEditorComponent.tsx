@@ -2,11 +2,11 @@ import React, { useState, useEffect, useContext, useRef } from "react";
 import { Text, View, StyleSheet, Slider } from "react-native";
 import { RectButton } from 'react-native-gesture-handler'
 
-import { UiThemeContext, TrekInfoContext, UtilsSvcContext } from "./App";
+import { UiThemeContext, MainSvcContext, UtilsSvcContext } from "./App";
 import SvgButton from "./SvgButtonComponent";
 import { APP_ICONS } from "./SvgImages";
-import { TrekInfo } from './TrekInfoModel';
 import { UtilsSvc } from './UtilsService'
+import { MainSvc } from "./MainSvc";
 
 export const INTERVAL_EDITOR_HEIGHT = 130;
 
@@ -24,7 +24,7 @@ function IntervalEditor({
 }) {
 
   const uiTheme: any = useContext(UiThemeContext);
-  const trekInfo: TrekInfo = useContext(TrekInfoContext);
+  const mainSvc: MainSvc = useContext(MainSvcContext);
   const uSvc: UtilsSvc = useContext(UtilsSvcContext)
 
   const [firstMarker, setFirstMarker] = useState(firstIntervalLoc);
@@ -125,7 +125,7 @@ function IntervalEditor({
   const {
           rippleColor, footerButtonText, dividerColor, pageBackground,
           disabledTextColor, footerTextColor, highTextColor, trekLogBlue
-        } = uiTheme.palette[trekInfo.colorTheme];
+        } = uiTheme.palette[mainSvc.colorTheme];
   const { footer, footerButton, fontRegular 
         } = uiTheme;
   const styles = StyleSheet.create({
@@ -187,8 +187,6 @@ function IntervalEditor({
             onPressFn={decrementMarker}
             repeats={500}
             value='first'
-            borderWidth={0}
-            areaOffset={0}
             size={arrowIconSize}
             fill={arrowIconColor}
             style={styles.ml0}
@@ -208,8 +206,6 @@ function IntervalEditor({
             onPressFn={incrementMarker}
             repeats={500}
             value='first'
-            borderWidth={0}
-            areaOffset={0}
             size={arrowIconSize}
             fill={arrowIconColor}
             style={styles.mr0}
@@ -226,8 +222,6 @@ function IntervalEditor({
             onPressFn={decrementMarker}
             repeats={500}
             value='second'
-            borderWidth={0}
-            areaOffset={0}
             size={arrowIconSize}
             fill={arrowIconColor}
             disabled={trekEnd}
@@ -247,8 +241,6 @@ function IntervalEditor({
             onPressFn={incrementMarker}
             repeats={500}
             value='second'
-            borderWidth={0}
-            areaOffset={0}
             size={arrowIconSize}
             fill={arrowIconColor}
             disabled={trekEnd}

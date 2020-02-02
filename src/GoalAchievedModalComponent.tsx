@@ -2,12 +2,12 @@ import React, { useContext, useEffect, useRef, useCallback } from "react";
 import { View, StyleSheet, Text, TouchableWithoutFeedback, BackHandler } from 'react-native';
 import { useObserver } from "mobx-react-lite";
 
-import { BACKDROP_Z_INDEX, CONFIRM_Z_INDEX, ModalSvcContext, UiThemeContext, TrekInfoContext } from './App';
+import { BACKDROP_Z_INDEX, CONFIRM_Z_INDEX, ModalSvcContext, UiThemeContext, MainSvcContext } from './App';
 import SvgIcon from './SvgIconComponent';
 import { ModalModel } from './ModalModel';
 import { APP_ICONS } from './SvgImages';
-import { TrekInfo } from './TrekInfoModel';
 import IconButton from './IconButtonComponent';
+import { MainSvc } from "./MainSvc";
 
 // dialog used for basic NOTICES and CONFIRMATIONS
 
@@ -15,7 +15,7 @@ function GoalAchievedModal({goalsMetOpen}) {
 
   const bHandler = useRef(false);
   const modalSvc: ModalModel = useContext(ModalSvcContext);
-  const trekInfo: TrekInfo = useContext(TrekInfoContext);
+  const mainSvc: MainSvc = useContext(MainSvcContext);
   const uiTheme: any = useContext(UiThemeContext);
 
   const onBackButtonPressGoalsMet = useCallback(
@@ -68,7 +68,7 @@ function GoalAchievedModal({goalsMetOpen}) {
     const gnmData = modalSvc.gnmData;
     const contentLines = modalSvc.goalNoticeIsOpen && modalSvc.gnmData.content.split('\n');
     const { highTextColor, goalGold, mediumTextColor, pageBackground, contrastingMask_3
-          } = uiTheme.palette[trekInfo.colorTheme];
+          } = uiTheme.palette[mainSvc.colorTheme];
     const { cardLayout, fontRegular, fontItalic } = uiTheme;          
     const styles = StyleSheet.create({
       container: { ... StyleSheet.absoluteFillObject },

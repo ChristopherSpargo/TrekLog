@@ -1,11 +1,11 @@
 import { action, observable } from 'mobx';
 
-import { TrekInfo, TrekObj, NumericRange, TREK_TYPE_CHOICES,
-         TREK_SELECT_BITS, TrekTypeDataNumeric, STEPS_APPLY, TREKS_WITH_STEPS_BITS
-       } from './TrekInfoModel'
-import { UtilsSvc, SortDateRange, DateInterval } from './UtilsService';
+import { TrekObj, NumericRange,  TrekTypeDataNumeric } from './TrekInfoModel'
+import { UtilsSvc, SortDateRange, DateInterval, TimeFrameType } from './UtilsService';
 import { BarData, BarGraphInfo } from "./BarDisplayComponent";
 import { FilterSvc } from './FilterService';
+import { MainSvc, TREK_TYPE_CHOICES,
+         TREK_SELECT_BITS, STEPS_APPLY, TREKS_WITH_STEPS_BITS} from './MainSvc';
 
 export type ActivityStatType = 'time' | 'dist' | 'speed' | 'cals' | 'steps';
 export const STAT_CATS : ActivityStatType[] = ['time', 'dist', 'speed', 'cals', 'steps'];
@@ -72,9 +72,10 @@ export class SummarySvc {
   returningFromGoalDetail = false;
   beforeRFBdateMin : string;
   beforeRFBdateMax : string;
-  beforeRFBtimeframe : string;
+  beforeRFBtimeframe : TimeFrameType;
 
-  constructor ( private uSvc: UtilsSvc, private tInfo: TrekInfo, private fS: FilterSvc ) {
+  constructor ( private mainSvc: MainSvc, private uSvc: UtilsSvc,
+                private fS: FilterSvc ) {
     this.initializeObservables();
   }
 
@@ -131,7 +132,7 @@ export class SummarySvc {
     } else {
       switch(sType){
         case 'dist':
-          this.tInfo.switchMeasurementSystem();
+          this.mainSvc.switchMeasurementSystem();
           this.buildGraphData();
           break;
         case 'speed':
@@ -224,7 +225,7 @@ export class SummarySvc {
 
   // return true if any selected and active types involve steps
   haveStepData = () => {
-    let activeAndSelected = this.tInfo.typeSelections & this.activeTypes;
+    let activeAndSelected = this.fS.typeSelections & this.activeTypes;
     return (activeAndSelected & TREKS_WITH_STEPS_BITS) !== 0;
   }
 
@@ -239,11 +240,10 @@ export class SummarySvc {
   @action
   scanTreks = () => {
     let index = 0;
-    let at = this.tInfo.allTreks;
+    let at = this.mainSvc.allTreks;
     let treks = this.fS.filteredTreks;
     let t : TrekObj;
 
-    // alert('in ScanTreks ' + ++this.scanCount)
     this.setOpenItems(false);
     this.setFTCount(treks.length);
     this.resetTrekCountData();
@@ -263,7 +263,7 @@ export class SummarySvc {
             JSON.stringify(this.activityData,null,2)) 
       throw error;      
     }
-    this.fS.setFoundType(this.totalCounts(this.tInfo.typeSelections) !== 0);
+    this.fS.setFoundType(this.totalCounts(this.fS.typeSelections) !== 0);
     this.setActiveTypes();
     this.checkShowStatType();
     this.buildGraphData();
@@ -327,7 +327,7 @@ export class SummarySvc {
   // Compute all summary values for the given trek and add to the appropriate tallys
   tallyTrek = (t: TrekObj, interval: number) => {
     let cals: number = t.calories;
-    let selectedType = TREK_SELECT_BITS[t.type] & this.tInfo.typeSelections;
+    let selectedType = TREK_SELECT_BITS[t.type] & this.fS.typeSelections;
     let iData = this.activityData[interval];
 
     this.trekCountData[t.type]++;   // count a trek of this type
@@ -378,13 +378,13 @@ export class SummarySvc {
           val = tData.time;
           break;
         case 'dist':
-          val = this.uSvc.getRoundedDist(tData.dist, this.tInfo.distUnits(), true)
+          val = this.uSvc.getRoundedDist(tData.dist, this.mainSvc.distUnits(), true)
           break;
         case 'speed':
-          let sys = this.tInfo.measurementSystem;
+          let sys = this.mainSvc.measurementSystem;
           val = this.showAvgSpeed 
                           ? this.uSvc.computeRoundedAvgSpeed(sys, tData.dist, tData.time)
-                          : (tData.time / this.uSvc.convertDist(tData.dist, this.tInfo.distUnits()));
+                          : (tData.time / this.uSvc.convertDist(tData.dist, this.mainSvc.distUnits()));
           break;
         case 'cals':
           val = this.showTotalCalories ? tData.cals : tData.maxCPM;
@@ -395,7 +395,8 @@ export class SummarySvc {
       }
       if (val > maxV) { maxV = val; }
     })
-    maxV = Math.round(maxV*10)/10;
+    maxV = Math.trunc(maxV) + 1;
+    // maxV = Math.round(maxV*10)/10;
     return {max: maxV, min: minV, range: maxV}
   }
 
@@ -403,12 +404,12 @@ export class SummarySvc {
   buildGraphData = () => {
     let graphData : ActivityBarGraphData = {
       time: {items: [], range: {} as NumericRange},
-      dist: {items: [], range: {} as NumericRange, title: this.tInfo.longDistUnitsCaps()},
+      dist: {items: [], range: {} as NumericRange, title: this.mainSvc.longDistUnitsCaps()},
       speed: {items: [], range: {} as NumericRange,
               title: this.showAvgSpeed 
-              ? this.tInfo.speedUnits() : ("Time/" + this.tInfo.distUnits())},
+              ? this.mainSvc.speedUnits() : ("Time/" + this.mainSvc.distUnits())},
       cals: {items: [], range: {} as NumericRange,
-              title: this.showTotalCalories ? undefined : "Calories/min"},
+              title: this.showTotalCalories ? "Calories" : "Calories/min"},
       steps: {items: [], range: {} as NumericRange,
           title: this.showStepsPerMin ? "Steps/min" : undefined},
     };
@@ -431,11 +432,11 @@ export class SummarySvc {
   getBarItem = (iData: ActivityStatsInterval, sType: ActivityStatType) => {
     let barItem : BarData = {} as BarData;
     let data = iData.data.Selected;
-    let sys = this.tInfo.measurementSystem;
+    let sys = this.mainSvc.measurementSystem;
     let noData = '-';
     switch(sType){
       case "dist":
-        let d = this.uSvc.getRoundedDist(data.dist, this.tInfo.distUnits(), true);
+        let d = this.uSvc.getRoundedDist(data.dist, this.mainSvc.distUnits(), true);
         barItem.value = d;
         // barItem.label1 = data.treks === 0 ? noData : d.toString();
         break;
@@ -456,7 +457,7 @@ export class SummarySvc {
       case "speed":
         barItem.value = this.showAvgSpeed 
                           ? this.uSvc.computeRoundedAvgSpeed(sys, data.dist, data.time)
-                          : (data.time / this.uSvc.convertDist(data.dist, this.tInfo.distUnits()));
+                          : (data.time / this.uSvc.convertDist(data.dist, this.mainSvc.distUnits()));
         break;
       default:
         barItem.value = 0;
@@ -464,7 +465,7 @@ export class SummarySvc {
     }
     // barItem.indicator = iData.endDate;   // interval date for display
     if(isNaN(barItem.value)) { barItem.value = 0; }
-    barItem.label1 = !data.treks ? noData : ''; 
+    barItem.label1 = !data.treks ? noData : data.treks.toString() ; 
     barItem.showEmpty = !data.treks;// || barItem.value === 0;
     barItem.indicator = iData.label;
     return barItem;

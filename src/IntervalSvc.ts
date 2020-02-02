@@ -1,49 +1,59 @@
 import { observable, action } from 'mobx';
 import { LatLng } from 'react-native-maps';
 
-import { TrekInfo, TrekTimeInterval, TrekPoint, NumericRange, TrekType,
+import { TrekInfo, TrekTimeInterval, TrekPoint, NumericRange, ElevationData
           } from './TrekInfoModel'
 import { BarData, BarGraphInfo } from './BarDisplayComponent';
-import { UtilsSvc, DRIVING_A_CAR_MET, ACTIVITY_SPEEDS } from './UtilsService';
+import { UtilsSvc, DRIVING_A_CAR_MET, ACTIVITY_SPEEDS, DistAndPoint } from './UtilsService';
+import { LoggingSvc, TREK_LIMIT_TYPE_DIST } from './LoggingService';
+import { MainSvc, TrekType, SMALL_DIST_UNITS_SYS } from './MainSvc';
+import { TrekSvc } from './TrekSvc';
 
-export interface DistAndPoint {
-  dist: number,
-  point: LatLng
-}
 export interface SegmentAndPoint {
   segIndex: number,
   point: LatLng
 }
 
-export const RANGE_COLORS = ['#4d4dff', '#00cc00', '#ffff00', '#ff9900', '#ff3300'];
+export const RANGE_COLORS = { 
+  speed: ['#4d4dff', '#00cc00', '#ffff00', '#ff9900', '#ff3300'],
+  calories: ['#4d4dff', '#00cc00', '#ffff00', '#ff9900', '#ff3300'],
+  elevation: ['#ff3300', '#ff9900', '#ffff00', '#00cc00', '#4d4dff'],
+};
 export interface RateRangeLine {
   lineSegment: LatLng[], 
   fillColor: string, 
   duration: number
 }
 
-export interface RateRangePathsObj {
+export interface RangeDataPathsObj {
   lines: RateRangeLine[],
   legend: {title: string, ranges: { start: string, end: string, color: string }[]}
 }
 
 export interface TrekValueRangesObj {
-  items: {value: number, duration: number}[], 
+  items: {value: number, size: number}[], 
   ranges: number[], 
   dataRange: NumericRange
 }
 
-export type RangeDataType = "speed" | "calories";
+export type RangeDataType = "speed" | "calories" | "elevation";
+export const RANGE_TYPE_SWITCH = {speed: 'calories', calories: 'elevation', elevation: 'speed'};
 
-export interface RateRangeInfoObj {
+export interface RangeDataInfoObj {
   rangeType:  RangeDataType,  // type of rate ranges to create
   pointList:  TrekPoint[],    // points to use for paths
+  dist:       number,         // distance of trek
   weight:     number,         // weight to use for calorie calculations
   packWeight: number,         // packWeight to use for calories
   hills:      string,         // hills category for calories
-  type:       TrekType        // activity type for calories
+  type:       TrekType,       // activity type for calories
+  elevs?:     ElevationData[] // array of elevation values
 }
 
+export interface ElevSegmentIndices {
+  first: number,
+  last: number
+}
 
 export const SAVED_UNITS = "saved";
 export const INTERVALS_UNITS = "intervals";
@@ -52,9 +62,8 @@ export interface IntervalData {
   markers     ?: LatLng[],        // location on map for marker
   distUnits   ?: string,          // units used to display interval distances
   labelUnits  ?: string,          // units used to display interval labels (callouts)
-  intDist     ?: number,          // interval distance (meters)
   segIndicies ?: number[],        // trek path segment that contains each marker
-  segPaths    ?: LatLng[][],      // path from this marker to the next
+  segPaths    ?: LatLng[][],      // path (as LatLng) from this marker to the next
   segPoints   ?: TrekPoint[][],   // segPath as full TrekPoints
   endDists    ?: number[],        // ending distances for each interval
   startTimes  ?: number[],        // starting times for intervals
@@ -62,7 +71,8 @@ export interface IntervalData {
   distRange   ?: NumericRange,    // range for interval distances
   times       ?: number[],        // duration values for each segment
   timeRange   ?: NumericRange,    // range for interval durations
-  elevs       ?: number[],        // elevation readings at each marker
+  elevData    ?: ElevSegmentIndices[], // part of elevations array that applies to each segment
+  avgElevs    ?: number[],        // elevation average for each segment
   elevRange   ?: NumericRange,    // range for interval elevations
   speeds      ?: number[]         // average speed for each segment
   speedRange  ?: NumericRange,    // range for interval speeds
@@ -96,7 +106,8 @@ export class IntervalSvc {
   graphBarWidth = 50;
   intervalGraphData: BarGraphInfo = {items: [], range: {max: 0, min: 0, range: 0}};
 
-  constructor ( private utilsSvc: UtilsSvc, private trekInfo: TrekInfo ) {
+  constructor ( private mainSvc: MainSvc, private utilsSvc: UtilsSvc, 
+                private trekSvc: TrekSvc, private loggingSvc: LoggingSvc ) {
     this.initializeObservables();
   }
 
@@ -123,24 +134,6 @@ export class IntervalSvc {
     this.units = vals.units;
   }
 
-// return the squared distance between 2 points
-  dist2 = (v: LatLng, w: LatLng) : number => { 
-    return ((v.latitude - w.latitude) * (v.latitude - w.latitude)) + 
-    ((v.longitude - w.longitude) * (v.longitude - w.longitude)) }
-
-  // return the distance squared between a point (p) and a line segment(v,w)
-  // and the point on the segment nearest to the given point
-  distToSegmentSquared = (p: LatLng, v: LatLng, w: LatLng) : DistAndPoint => {
-    let l2 = this.dist2(v, w);
-    if (l2 == 0) return {dist: this.dist2(p, v), point: v};
-    let t = ((p.latitude - v.latitude) * (w.latitude - v.latitude) + 
-             (p.longitude - v.longitude) * (w.longitude - v.longitude)) / l2;
-    t = Math.max(0, Math.min(1, t));
-    let nearestPt = { latitude: v.latitude + t * (w.latitude - v.latitude),
-                      longitude: v.longitude + t * (w.longitude - v.longitude) }
-    return {dist: this.dist2(p, nearestPt), point: nearestPt};
-  }
-  
   // return an IntervalAdjustInfo object for the given interval.
   // the first interval is interval 0.
   getIntervalAdjustInfo = (iNum: number, units: string) : IntervalAdjustInfo => {
@@ -206,7 +199,7 @@ export class IntervalSvc {
       for( let i = 0; i < path.length-1; i++) {
         segStart = {latitude: path[i].latitude, longitude: path[i].longitude};
         segEnd = {latitude: path[i+1].latitude, longitude: path[i+1].longitude};
-        distAndPt = this.distToSegmentSquared(point, segStart, segEnd);
+        distAndPt = this.utilsSvc.distToSegmentSquared(point, segStart, segEnd);
         dist = distAndPt.dist;
         if (dist < shortestDist){
           shortestDist = dist;
@@ -221,7 +214,7 @@ export class IntervalSvc {
   // Handle onDragEnd event for interval marker
   // Find the nearest point in the segment of the marker or the one after it to the given drop point.
   // Then find the segment of the main trek that contains the new marker location.
-  markerToPath = (index: number, pt: LatLng, path: LatLng[], pointList: TrekPoint[]) => {
+  markerToPath = (trek: TrekInfo, index: number, pt: LatLng, path: LatLng[], pointList: TrekPoint[]) => {
     let segAndPt: SegmentAndPoint;
     let iData = this.intervalData;
     let validPath : LatLng[];
@@ -229,12 +222,12 @@ export class IntervalSvc {
     validPath = iData.segPaths[index].concat(iData.segPaths[index+1]);
     segAndPt = this.findNearestPoint(pt, validPath);    // restrict search to validPath
     segAndPt = this.findNearestPoint(segAndPt.point, path); // get segAndPt.segIndex relative to full path
-    this.finishMarkerToPath(index, segAndPt, pointList);
+    this.finishMarkerToPath(trek, index, segAndPt, pointList);
   }
 
   // call moveIntervalMarker for given marker index and point information
-  finishMarkerToPath = (index: number, segAndPt: SegmentAndPoint, pointList: TrekPoint[]) => {  
-    this.moveIntervalMarker(index, segAndPt, pointList);
+  finishMarkerToPath = (trek: TrekInfo, index: number, segAndPt: SegmentAndPoint, pointList: TrekPoint[]) => {  
+    this.moveIntervalMarker(trek, index, segAndPt, pointList);
     this.buildGraphData(this.intervalData);
     this.setIntervalChange(true);
   } 
@@ -255,13 +248,14 @@ export class IntervalSvc {
   // The final marker cannot be moved
   //  - Recompute the values of given interval and interval after that.
   @action
-  moveIntervalMarker = (index: number, newLoc: SegmentAndPoint, tPath: TrekPoint[]) => {
-    let tInfo = this.trekInfo;
+  moveIntervalMarker = (trek: TrekInfo, index: number, newLoc: SegmentAndPoint, tPath: TrekPoint[]) => {
+    let tS = this.trekSvc;
     let uSvc = this.utilsSvc;
+    let mS = this.mainSvc;
     let iData = this.intervalData;
     let lastMarkerIndex = iData.markers.length - 1;
     let segD, partD;
-    const nElevs = tInfo.hasElevations() ? tInfo.elevations.length - 1 : 0;
+    const nElevs = tS.hasElevations(trek) ? trek.elevations.length - 1 : 0;
     const segIndex = newLoc.segIndex;
     let segST : number, segET : number;
     let pathAndPoints : {path: LatLng[], points: TrekPoint[]};
@@ -303,44 +297,47 @@ export class IntervalSvc {
       iData.startTimes[index + 1] = segST + ((segET - segST) * partD);
 
     // update the length of time for the next interval
-    iData.times[index + 1] = ((index + 1) === lastMarkerIndex ? tInfo.duration : iData.startTimes[index + 2])
+    iData.times[index + 1] = ((index + 1) === lastMarkerIndex ? trek.duration : iData.startTimes[index + 2])
                                - iData.startTimes[index + 1];
 
     // update the length of time for this interval
     iData.times[index] = iData.startTimes[index + 1] - iData.startTimes[index];
 
     if (nElevs) {
-      // update the elevation value for this interval (use rough midpoint)
-      if (index > 0){
-        iData.elevs[index] = 
-          tInfo.elevations[
-            Math.round(((iData.endDists[index - 1] + (iData.iDists[index] / 2)) / tInfo.trekDist) * nElevs)];
-      }
-      else {
-        iData.elevs[index] = 
-          tInfo.elevations[Math.round(((iData.iDists[index] / 2) / tInfo.trekDist) * nElevs)];
-      }
+      // update the elevation value for this interval (use average)
+      let eStartIndex = index > 0 ?
+            this.utilsSvc.getElevationsIndex(trek.elevations, trek.trekDist, iData.endDists[index - 1]) :
+            0;
+      let eEndIndex = this.utilsSvc.getElevationsIndex(trek.elevations, trek.trekDist, iData.endDists[index]);
+      iData.elevData[index].first = eStartIndex;
+      iData.elevData[index].last = eEndIndex;
+      iData.avgElevs[index] = 
+                  this.utilsSvc.getArraySegmentAverage(trek.elevations, eStartIndex, eEndIndex);
 
-      // update the elevation value for the next interval (use rough midpoint)
-      iData.elevs[index + 1] = 
-      tInfo.elevations[Math.round(((iData.endDists[index] + (iData.iDists[index + 1] / 2)) / tInfo.trekDist) * nElevs)];
+      // update the elevation value for the next interval (use average)
+      let eNextIndex = 
+            this.utilsSvc.getElevationsIndex(trek.elevations, trek.trekDist, iData.endDists[index + 1]);
+      iData.elevData[index + 1].first = eEndIndex;
+      iData.elevData[index + 1].last = eNextIndex;
+      iData.avgElevs[index + 1] = 
+                  this.utilsSvc.getArraySegmentAverage(trek.elevations, eEndIndex, eNextIndex);
     }
 
     // update the average speed for the interval
     iData.speeds[index] = 
-      uSvc.computeRoundedAvgSpeed(tInfo.measurementSystem, iData.iDists[index], iData.times[index]);
+      uSvc.computeRoundedAvgSpeed(mS.measurementSystem, iData.iDists[index], iData.times[index]);
 
     // update the average speed for the next interval
     iData.speeds[index + 1] = 
-      uSvc.computeRoundedAvgSpeed(tInfo.measurementSystem, iData.iDists[index + 1], iData.times[index + 1]);
+      uSvc.computeRoundedAvgSpeed(mS.measurementSystem, iData.iDists[index + 1], iData.times[index + 1]);
 
     // update the calories for the interval
     iData.cals[index] =  uSvc.computeCalories(iData.segPoints[index], 0,
-                          tInfo.type, tInfo.hills, tInfo.weight, tInfo.getPackWeight());
+                          trek.type, trek.hills, trek.weight, tS.getPackWeight(trek));
 
     // update the calories for the next interval
     iData.cals[index + 1] = uSvc.computeCalories(iData.segPoints[index + 1], 0,
-                          tInfo.type, tInfo.hills, tInfo.weight, tInfo.getPackWeight());
+                          trek.type, trek.hills, trek.weight, tS.getPackWeight(trek));
 
     // recompute the interval data ranges
     this.getDataRanges();
@@ -389,17 +386,17 @@ export class IntervalSvc {
   }
 
   // check that we have a reasonable value for number of intervals
-  intervalDistOK = (val = this.intervalDist) => {
+  intervalDistOK = (trek: TrekInfo, val = this.intervalDist) => {
     if (this.intervalValue === -1) { return true; }
     if (this.intervalValue === 0) { return false; }
     if (this.units === 'time'){
-      return (this.trekInfo.duration / val ) < 100;
+      return (trek.duration / val ) < 100;
     }
-    return (this.trekInfo.trekDist / val) < 100;
+    return (trek.trekDist / val) < 100;
   }
 
   // return the units selector for labels or bars for the given units
-  getIntervalDisplayUnits = (units: string, forLabels: boolean) => {
+  getIntervalDisplayUnits = (trek: TrekInfo, units: string, forLabels: boolean) => {
     let val = '';
     
     switch(units){
@@ -413,52 +410,54 @@ export class IntervalSvc {
         val = 'mi';
         break;
       case 'time':
-        val = forLabels ? 'time' : this.trekInfo.distUnits();
+        val = forLabels ? 'time' : this.mainSvc.distUnits();
         break;
       case INTERVALS_UNITS:
-        val = this.trekInfo.distUnits();
+        val = this.mainSvc.distUnits();
         break;
       case SAVED_UNITS:
-        val = this.trekInfo.intervalDisplayUnits || this.trekInfo.distUnits();
+        val = trek.intervalDisplayUnits || this.mainSvc.distUnits();
         if(val === 'time' && !forLabels) {
-          val = this.trekInfo.distUnits();
+          val = this.mainSvc.distUnits();
         }
         break;
       default:
-        val = this.trekInfo.distUnits();
+        val = this.mainSvc.distUnits();
         break;
     }
     return val;
   }
 
   // Given the interval distance, compute marker locations and values of several data categories for each interval.
-  getIntervalData = (iDist: number, tPath: TrekPoint[]) => {
+  getIntervalData = (trek: TrekInfo, iDist: number, tPath: TrekPoint[]) => {
     let uSvc = this.utilsSvc;
     let iData : IntervalData;
-    let dist = 0, eDist = 0, testDist, halfDist;
+    let dist = 0, eDist = 0, testDist;
     let intervalStartTime, intervalTime, newTime;
     let intIndex = 0;
-    const nElevs = this.trekInfo.hasElevations() ? this.trekInfo.elevations.length-1 : 0;
+    const nElevs = this.trekSvc.hasElevations(trek) ? trek.elevations.length-1 : 0;
     let tempPts = uSvc.copyTrekPath(tPath); // copy path data
     const nPts = tempPts.length;
     let endTrekPt = tempPts[nPts - 1];
-    let finalPt = 0;
+    let finalPt = false;
     let d : number, part : number;
     let timeInts : TrekTimeInterval[] = []; 
+    let eStartIndex = 0, eEndIndex = 0;
     
     this.intervalData = { markers: [], segIndicies: [], iDists: [], segPaths: [], segPoints: [], 
-                          startTimes: [], endDists: [], elevs: [], times: [], speeds: [], cals: [] };
+                          startTimes: [], endDists: [], elevData: [], avgElevs: [], times: [], 
+                          speeds: [], cals: [] };
     iData = this.intervalData;
     if(this.units === 'time'){
       timeInts = this.utilsSvc.getTrekTimeIntervals(tempPts, iDist );
     }
-    iData.distUnits = this.getIntervalDisplayUnits(this.units, false);
-    iData.labelUnits = this.getIntervalDisplayUnits(this.units, true);
+    iData.distUnits = this.getIntervalDisplayUnits(trek, this.units, false);
+    iData.labelUnits = this.getIntervalDisplayUnits(trek, this.units, true);
     if (tempPts.length > 0) {
       intervalStartTime = tempPts[0].t || 0;
       for(let i=1; i<nPts; i++){
         if(i === (nPts - 1)) { 
-          finalPt = .01; 
+          finalPt = true; 
         };
         if (dist === 0) {                                // new interval?
           if (this.units === 'time'){
@@ -466,30 +465,26 @@ export class IntervalSvc {
             testDist = timeInts[intIndex].distance;
           } else {
             // if trek has saved intervals and we're not replacing them, use saved interval distances
-            testDist = (this.trekInfo.intervals && iDist === -1) ? this.trekInfo.intervals[intIndex] : iDist;
+            testDist = (trek.intervals && iDist === -1) ? trek.intervals[intIndex] : iDist;
           }
           intervalStartTime = tempPts[i - 1].t || 0;  // update start time for new interval
           iData.segPaths.push([]);                    // add new array to hold segment path LatLngs
           iData.segPoints.push([]);                    // add new array to hold segment path TrekPoints
           iData.startTimes.push(intervalStartTime);
-          if (nElevs) {                               // set the elevation value for this interval
-            halfDist = (testDist > this.trekInfo.trekDist - eDist) ? this.trekInfo.trekDist - eDist : testDist;
-            iData.elevs.push(this.trekInfo.elevations[
-                Math.round( ((eDist + (halfDist / 2)) / this.trekInfo.trekDist) * nElevs)]);
-          }
         }
         // add last point to current segment path
         iData.segPaths[intIndex].push({latitude: tempPts[i-1].l.a, longitude: tempPts[i-1].l.o});
         iData.segPoints[intIndex].push(tempPts[i-1]);
         d = uSvc.calcDistLaLo(tempPts[i-1].l, tempPts[i].l);
-        if (dist + d >= (testDist + finalPt)) {      // will the distance to this point complete the interval?
-          part = (testDist - dist) / d;              // yes, what % of the distance do we need?
+        if (finalPt || (dist + d >= testDist)) {      // will the distance to this point complete the interval?
+          part = finalPt ? 1 : ((testDist - dist) / d);    // yes, what % of the distance do we need?
           // compute the point time for the replacement point
           newTime = Math.round((tempPts[i].t - tempPts[i - 1].t) * part + tempPts[i - 1].t);
           intervalTime = newTime - intervalStartTime; // compute the duration for this interval
           iData.times.push(intervalTime);
           iData.segIndicies.push(i-1);               // save which trek segment has end of interval (marker)
-          iData.speeds.push(this.utilsSvc.computeRoundedAvgSpeed(this.trekInfo.measurementSystem, testDist, intervalTime));
+          iData.speeds.push(
+              this.utilsSvc.computeRoundedAvgSpeed(this.mainSvc.measurementSystem, testDist, intervalTime));
           eDist += testDist;                         // update ending distance accumulator
           iData.endDists.push(eDist);
           // now get a point that is 'part' % into the distance between these 2 points
@@ -501,9 +496,17 @@ export class IntervalSvc {
           iData.segPaths[intIndex].push(uSvc.cvtLaLoToLatLng(newP.l));  // push end GPS point of this segment
           iData.segPoints[intIndex].push(newP);
           iData.cals.push(uSvc.computeCalories(iData.segPoints[intIndex], 0,
-                            this.trekInfo.type, this.trekInfo.hills, this.trekInfo.weight, this.trekInfo.getPackWeight()));
+                        trek.type, trek.hills, trek.weight, this.trekSvc.getPackWeight(trek)));
           iData.iDists.push(testDist);        // save length of this interval
-          i--;                                // set to do this point over
+          if (nElevs) {                               // set the elevation value for this interval
+            eEndIndex = 
+              this.utilsSvc.getElevationsIndex(trek.elevations, trek.trekDist, iData.endDists[intIndex]);
+            iData.elevData.push({first: eStartIndex, last: eEndIndex});
+            iData.avgElevs.push(
+                    this.utilsSvc.getArraySegmentAverage(trek.elevations, eStartIndex, eEndIndex));
+            eStartIndex = eEndIndex;                 
+          }
+          if(!finalPt) { i--; }               // set to do this point over
           tempPts[i] = newP;                  // make this the starting point of the next segment and reprocess
           dist = 0;                           // reset interval distance accumulator
           intIndex++;                         // update interval counter
@@ -515,7 +518,13 @@ export class IntervalSvc {
 
       if(dist > 0){
         // add ending values for everything
-        iData.endDists.push(this.trekInfo.trekDist);
+        if (nElevs) {                               // set the elevation value for last interval
+          eEndIndex = trek.elevations.length - 1;
+          iData.elevData.push({first: eStartIndex, last: eEndIndex});
+          iData.avgElevs.push(
+                    this.utilsSvc.getArraySegmentAverage(trek.elevations, eStartIndex, eEndIndex));
+        }
+        iData.endDists.push(trek.trekDist);
         iData.markers.push(uSvc.cvtLaLoToLatLng(endTrekPt.l));
         intervalTime = endTrekPt.t - intervalStartTime;
         iData.segIndicies.push(nPts-1);  // save which trek segment has end of interval (marker)
@@ -523,10 +532,11 @@ export class IntervalSvc {
         iData.segPoints[intIndex].push(endTrekPt);
         iData.iDists.push(dist);
         iData.times.push(intervalTime);
-        iData.speeds.push(this.utilsSvc.computeRoundedAvgSpeed(this.trekInfo.measurementSystem, dist, intervalTime));
+        iData.speeds.push(
+              this.utilsSvc.computeRoundedAvgSpeed(this.mainSvc.measurementSystem, dist, intervalTime));
         iData.cals.push(uSvc.computeCalories(iData.segPoints[intIndex], 0,
-                          this.trekInfo.type, this.trekInfo.hills, this.trekInfo.weight, this.trekInfo.getPackWeight()));
-}
+                          trek.type, trek.hills, trek.weight, this.trekSvc.getPackWeight(trek)));
+      }
       this.getDataRanges();
     }
   }
@@ -535,10 +545,8 @@ export class IntervalSvc {
   getDataRanges = () => {
     let iData = this.intervalData;
 
-    if (iData.elevs.length) {
-      // set range information for elevations
-      iData.elevRange = this.utilsSvc.getNumericRange(iData.elevs);
-    }
+    // set range information for elevations
+    iData.elevRange = this.utilsSvc.getNumericRange(iData.avgElevs);
 
     // set range information for times
     iData.timeRange = this.utilsSvc.getNumericRange(iData.times);
@@ -602,12 +610,12 @@ export class IntervalSvc {
           break;
         case "Speed":
           barItem.value = intData.speeds[i];
-          barItem.label1 = intData.speeds[i].toString() + ' ' + this.trekInfo.speedUnits();
+          barItem.label1 = intData.speeds[i].toString() + ' ' + this.mainSvc.speedUnits();
           break;
         case "Elevation":
-          let e = Math.round(this.trekInfo.convertDist(intData.elevs[i]));
-          barItem.value = intData.elevs[i];
-          barItem.label1 = e.toString() + ' ' + this.trekInfo.smallDistUnits();
+          let e = Math.round(this.mainSvc.convertDist(intData.avgElevs[i]));
+          barItem.value = intData.avgElevs[i];
+          barItem.label1 = e.toString() + ' ' + this.mainSvc.smallDistUnits();
           break;
         case "Distance":
           barItem.value = intData.iDists[i];
@@ -633,76 +641,148 @@ export class IntervalSvc {
   // make sure to impose a resonable minimum on duration in a new range.
   // return an array of {lineSegment: LatLng[], fillColor: string} and a 
   // Legend object with {title: string, ranges: {start: string, end: string, color: string}[]}
-  buildRateRangePaths = (rrInfo: RateRangeInfoObj) : RateRangePathsObj => {
-    let result : RateRangePathsObj = {lines: [], legend:{title: '', ranges: []}};
-    let rangeInfo : TrekValueRangesObj = this.defineTrekValueRanges(rrInfo);
+  buildRateRangePaths = (rdInfo: RangeDataInfoObj) : RangeDataPathsObj => {
+    let result : RangeDataPathsObj = {lines: [], legend:{title: '', ranges: []}};
+    let rangeInfo : TrekValueRangesObj = this.defineTrekValueRanges(rdInfo);
     let numRanges = rangeInfo.ranges.length + 1;
 
     if (rangeInfo === undefined) {return undefined;}
 
     // first, lets build the legend
-    result.legend.title = rrInfo.rangeType === 'speed' ? ('Speed (' + this.trekInfo.speedUnits() + ')') : 
-                                                          'Calories/Min';
+    switch(rdInfo.rangeType){
+      case 'speed':
+        result.legend.title = 'Speed (' + this.mainSvc.speedUnits() + ')';
+        break;
+      case 'calories':
+        result.legend.title = 'Calories/Min';
+        break;
+      case 'elevation':
+        result.legend.title = 'Elevation (' + SMALL_DIST_UNITS_SYS[this.mainSvc.measurementSystem] + ')';
+        break;
+      default:
+    }
     for(let i=0; i<=rangeInfo.ranges.length; i++) {
       let start = i === 0 ? rangeInfo.dataRange.min : rangeInfo.ranges[i-1];
       let end = i === rangeInfo.ranges.length ? rangeInfo.dataRange.max : rangeInfo.ranges[i];
-      result.legend.ranges.push({start: this.getDisplayValue(start, rrInfo.rangeType, false), 
-                                 end: this.getDisplayValue(end, rrInfo.rangeType, false), 
-                                 color: RANGE_COLORS[i + 5 - numRanges]})
+      result.legend.ranges.push({start: this.getDisplayValue(start, rdInfo.rangeType, false), 
+                                 end: this.getDisplayValue(end, rdInfo.rangeType, false), 
+                                 color: RANGE_COLORS[rdInfo.rangeType][i + 5 - numRanges]})
     }
 
     // now, process the point data into line segments per data ranges
-    let minDur = 5; // minDuration || Math.max(trek.duration/50, 20);
     let items = rangeInfo.items;
     let ranges = rangeInfo.ranges;
     let currRangeIndex = this.utilsSvc.findRangeIndex(items[0].value, ranges);
     let thisItemIndex;
-    let currRangeDuration = 0;
-    let points = rrInfo.pointList;
+    let points: TrekPoint[] = rdInfo.pointList;
+    let elevPts = rdInfo.rangeType === 'elevation' && 
+                  rdInfo.elevs && 
+                  rdInfo.elevs.length ? Math.min(512, points.length) : 0;
+    let minRangeSize = rdInfo.rangeType === 'elevation' ? 1 : 5; 
+    let currRangeSize = 0;
     let currLine = 0;
-    result.lines.push({lineSegment: [], fillColor: RANGE_COLORS[currRangeIndex + 5 - numRanges], duration: 0})
-    for(let i=0; i<rangeInfo.items.length; i++) {
+    let itemRangeStart = 0;
+    let i;
+
+    result.lines.push({lineSegment: [], 
+            fillColor: RANGE_COLORS[rdInfo.rangeType][currRangeIndex + 5 - numRanges], duration: 0})
+    for(i=0; i<rangeInfo.items.length; i++) {
       thisItemIndex = this.utilsSvc.findRangeIndex(items[i].value, ranges);
       if (thisItemIndex === currRangeIndex || thisItemIndex === -1){  // watch out for bad data
-        currRangeDuration += items[i].duration;
-        result.lines[currLine].lineSegment.push({latitude: points[i].l.a, longitude: points[i].l.o});
+        currRangeSize += items[i].size;
       } else {
         currRangeIndex = thisItemIndex;
-        result.lines[currLine].lineSegment.push({latitude: points[i].l.a, longitude: points[i].l.o});
-        if (currRangeDuration >= minDur) {    
+        if (currRangeSize >= minRangeSize) {    
 
-          // time in this range was long enough, finish line and start next
-          result.lines[currLine].duration = currRangeDuration;
-          result.lines.push({lineSegment: [], fillColor: RANGE_COLORS[currRangeIndex + 5 - numRanges], duration: 0});
+          // size of range is large enough, finish line and start next
+          result.lines[currLine].duration = currRangeSize;
+          result.lines[currLine].lineSegment = 
+          this.getRangeDataLocations(points, itemRangeStart, i, rdInfo.dist, rdInfo.rangeType, elevPts);
+          result.lines.push({lineSegment: [], 
+              fillColor: RANGE_COLORS[rdInfo.rangeType][currRangeIndex + 5 - numRanges], duration: 0});
           currLine++;
-          result.lines[currLine].lineSegment.push({latitude: points[i].l.a, longitude: points[i].l.o});
-          currRangeDuration = items[i].duration;
+          itemRangeStart = i;
+          currRangeSize = items[i].size;
         } else {
           
-          // time in this range was NOT long enough, switch current segment to new range
-          result.lines[currLine].fillColor = RANGE_COLORS[currRangeIndex + 5 - numRanges];
-          currRangeDuration += items[i].duration;
+          // size of this range is NOT large enough, switch current segment to new range
+          result.lines[currLine].fillColor = RANGE_COLORS[rdInfo.rangeType][currRangeIndex + 5 - numRanges];
+          currRangeSize += items[i].size;
         }
       }
     }
-    result.lines[currLine].duration = currRangeDuration;
+    result.lines[currLine].lineSegment = 
+      this.getRangeDataLocations(points, itemRangeStart, 
+              rdInfo.rangeType === 'elevation' ? i : i-1, rdInfo.dist, rdInfo.rangeType, elevPts);
+    result.lines[currLine].duration = currRangeSize;
 
+    return result;
+  }
+
+
+  // return a LatLng[] of points from the given TrekPoing[] that contains either the points
+  // between and including the given first/last indices or points that are between the distances
+  // represented by the first/last values times the distance between elevation readings.
+  getRangeDataLocations = (ptList: TrekPoint[], first: number, 
+                last: number, tDist: number, rangeType: RangeDataType, nElevs: number) : LatLng[]=> {
+    let result: LatLng[] = [];
+    if (rangeType !== 'elevation'){
+      for (let i = first; i <= last; i++){
+        result.push({latitude: ptList[i].l.a, longitude: ptList[i].l.o});
+      }
+    } else{
+      if (nElevs){
+        let eDist = tDist / nElevs;         // compute distance between elevation readings
+        let startDist = first * eDist;
+        let endDist = last * eDist;
+        //  now include all path points between startDist and endDist
+        for (let i = 0; i < ptList.length; i++) {
+          if (ptList[i].d >= startDist ){
+            if ((result.length === 0) && (i > 0)){     
+              // first, get exact starting location if not absolute beginning of path
+              let pt = this.loggingSvc.getPointAtLimit(ptList, startDist, tDist, TREK_LIMIT_TYPE_DIST).pt;
+              result.push({latitude: pt.l.a, longitude: pt.l.o});
+            }
+            if (ptList[i].d <= endDist){
+              result.push({latitude: ptList[i].l.a, longitude: ptList[i].l.o});
+            } else {    
+              // finally, get exact ending location and return
+              let pt = this.loggingSvc.getPointAtLimit(ptList, endDist, tDist, TREK_LIMIT_TYPE_DIST).pt;
+              result.push({latitude: pt.l.a, longitude: pt.l.o});
+              return result;
+            }
+          }
+        } 
+      }
+    }
     return result;
   }
 
   // return the given value formatted for display with units optional
   getDisplayValue = (val: number, type: RangeDataType, showUnits: boolean ) : string => {
+    let precision: number;
+    let newVal: number;
+    let absVal = Math.abs(val);
+
     switch(type){
       case 'speed':
         if (showUnits){
-          return this.utilsSvc.formatAvgSpeed(this.trekInfo.measurementSystem, val, 1);
+          return this.utilsSvc.formatAvgSpeed(this.mainSvc.measurementSystem, val, 1);
         }
-        return this.utilsSvc.computeRoundedAvgSpeed(this.trekInfo.measurementSystem, val, 1).toString();
+        return this.utilsSvc.computeRoundedAvgSpeed(this.mainSvc.measurementSystem, val, 1).toString();
       case 'calories':
-        let precision = val < 10 ? 10 : 1;
-        let newVal = Math.round(val * precision) / precision;
+        precision = absVal < 10 ? 10 : 1;
+        newVal = Math.round(val * precision) / precision;
         if (showUnits){
           return newVal.toString() + ' /min';
+        }
+        return newVal.toString();
+      case 'elevation':
+        val = this.utilsSvc.convertDist(val, SMALL_DIST_UNITS_SYS[this.mainSvc.measurementSystem]);
+        precision = absVal < 10 ? 10 : 1;
+        newVal = Math.round(val * precision) / precision;
+        if (showUnits){
+          return newVal.toString() + ' ' + SMALL_DIST_UNITS_SYS[this.mainSvc.measurementSystem];
         }
         return newVal.toString();
       defalut:
@@ -712,44 +792,54 @@ export class IntervalSvc {
 
   // given a TrekObj, define an array of item values at each point in the trek and
   // an array of ranges for the items
-  defineTrekValueRanges = (rrInfo: RateRangeInfoObj) : TrekValueRangesObj => {
+  defineTrekValueRanges = (rdInfo: RangeDataInfoObj) : TrekValueRangesObj => {
     let itemRanges = [];
-    let itemList : {value: number, duration: number}[] = [];
+    let itemList : {value: number, size: number}[] = [];
     let valueRange : NumericRange = {max: -5000, min: 100000, range: 0};
-    let points = rrInfo.pointList;
-    let lastPtIndex = points.length - 1;
+    let list = rdInfo.pointList;
+    let lastPtIndex = list.length - 1;
+    let elevs = rdInfo.elevs;
 
-    if (points.length === 0) { return undefined; }
-    switch (rrInfo.rangeType) {
+    if (list.length === 0) { return undefined; }
+    switch (rdInfo.rangeType) {
       case 'speed':
         // get speeds at every point
         for(let i=0; i<=lastPtIndex; i++) {
-          let val = points[i].s;
+          let val = list[i].s;
           if (val > valueRange.max){ valueRange.max = val; }
           if (val < valueRange.min){ valueRange.min = val; }
-          itemList.push({value: val,
-                          duration: i === lastPtIndex ? 0 : (points[i + 1].t - points[i].t)});
+          itemList.push({value: val, size: i === lastPtIndex ? 0 : (list[i + 1].t - list[i].t)});
           };
         break;
       case 'calories':
         // get calories burned/minute at every point
-        let metTable = this.utilsSvc.getMETTable(rrInfo.type, rrInfo.packWeight)
-        let hIndex = this.utilsSvc.getHillsIndex(rrInfo.hills);
+        let metTable = this.utilsSvc.getMETTable(rdInfo.type, rdInfo.packWeight)
+        let hIndex = this.utilsSvc.getHillsIndex(rdInfo.hills);
         let speedIndex, currMET, calRate;
-        let weight = rrInfo.weight;
-        let pWt = rrInfo.packWeight || 0;
-        for(let i=0; i<rrInfo.pointList.length; i++) {
+        let weight = rdInfo.weight;
+        let pWt = rdInfo.packWeight || 0;
+        for(let i=0; i<=lastPtIndex; i++) {
           calRate = 0;
-          speedIndex = this.utilsSvc.findRangeIndex(points[i].s, ACTIVITY_SPEEDS);
+          speedIndex = this.utilsSvc.findRangeIndex(list[i].s, ACTIVITY_SPEEDS);
           if (speedIndex !== -1) {
             currMET = metTable[speedIndex][hIndex];
             calRate = currMET * (weight + (currMET === DRIVING_A_CAR_MET ? 0 : pWt)) / 60;
           }
           if (calRate > valueRange.max){ valueRange.max = calRate; }
           if (calRate < valueRange.min){ valueRange.min = calRate; }
-          itemList.push({value: calRate, 
-                         duration: i === lastPtIndex ? 0 : (points[i + 1].t - points[i].t)});
+          itemList.push({value: calRate, size: i === lastPtIndex ? 0 : (list[i + 1].t - list[i].t)});
         };
+        break;
+      case 'elevation':
+        // get elevations at every point
+        lastPtIndex = elevs.length - 1;
+        
+        for(let i=0; i<=lastPtIndex; i++) {
+          let val = elevs[i];
+          if (val > valueRange.max){ valueRange.max = val; }
+          if (val < valueRange.min){ valueRange.min = val; }
+          itemList.push({value: val, size: 1});
+          };
         break;
       default:
         return {items: [], ranges: [], dataRange: {max: 0, min: 0, range: 0}};

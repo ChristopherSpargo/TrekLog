@@ -6,7 +6,6 @@ import { observable, action } from 'mobx';
 import { NavigationActions } from 'react-navigation';
 
 import { FilterSvc, FilterSettingsObj, FILTERMODE_DASHBOARD, FILTERMODE_FROM_STATS } from './FilterService'
-import { TrekInfo, ALL_SELECT_BITS } from './TrekInfoModel'
 import { UtilsSvc, TIME_FRAMES, TIME_FRAME_DISPLAY_NAMES,
          TimeFrameType } from './UtilsService';
 import IconButton from './IconButtonComponent';
@@ -21,10 +20,11 @@ import FadeInView from './FadeInComponent';
 import SlideDownView from './SlideDownComponent';
 import { SCROLL_DOWN_DURATION, FADE_IN_DURATION } from './App';
 import PageTitle from './PageTitleComponent';
+import { MainSvc, ALL_SELECT_BITS } from './MainSvc';
 
 const goBack = NavigationActions.back() ;
 
-@inject('trekInfo', 'utilsSvc', 'uiTheme', 'filterSvc', 'modalSvc')
+@inject('mainSvc', 'utilsSvc', 'uiTheme', 'filterSvc', 'modalSvc')
 @observer
 class ExtraFilters extends Component<{ 
   filterSvc ?: FilterSvc,
@@ -32,16 +32,17 @@ class ExtraFilters extends Component<{
   navigation ?: any,
   uiTheme ?: any,
   modalSvc ?: ModalModel,
-  trekInfo ?: TrekInfo         // object with all information about the Trek
+  mainSvc ?: MainSvc,
 }, {} > {
 
   @observable radioPickerOpen;
   @observable openItems;
   @observable headerTitle;
 
-  tInfo = this.props.trekInfo;
+  mS = this.props.mainSvc;
   uSvc = this.props.utilsSvc;
   fS = this.props.filterSvc;
+  tInfo = this.fS.tInfo;
   AFFIndex: number;
   typeSels = 0;
   origFilter : FilterSettingsObj;
@@ -51,8 +52,8 @@ class ExtraFilters extends Component<{
 
   componentWillMount() {
     this.origFilter = this.props.navigation.getParam('existingFilter');
-    this.updateDshBrd = this.tInfo.updateDashboard;
-    this.typeSels = this.tInfo.typeSelections;
+    this.updateDshBrd = this.mS.updateDashboard;
+    this.typeSels = this.fS.typeSelections;
     this.setRadioPickerOpen(false);
     this.setOpenItems(false);
     this.setHeaderTitle(this.props.navigation.getParam('title', ''))
@@ -67,7 +68,7 @@ class ExtraFilters extends Component<{
 
   componentWillUnmount() {
     this.fS.removeAfterFilterFn(this.AFFIndex - 1);
-    this.tInfo.updateDashboard = this.updateDshBrd;
+    this.mS.updateDashboard = this.updateDshBrd;
     if (this.fS.filterMode !== FILTERMODE_DASHBOARD) {
       this.fS.buildAfterFilter();
     }
@@ -122,9 +123,9 @@ class ExtraFilters extends Component<{
     let selValues = TIME_FRAMES.map((item) => item.value);
 
     this.props.modalSvc.openRadioPicker({heading: 'Select A Timeframe', selectionNames: selNames,
-                              selectionValues: selValues, selection: this.tInfo.timeframe,
+                              selectionValues: selValues, selection: this.fS.timeframe,
                               openFn: this.setRadioPickerOpen})
-    .then((newTimeframe) => {
+    .then((newTimeframe : TimeFrameType) => {
       this.fS.setTimeframe(newTimeframe);
       this.fS.buildAfterFilter();
     })
@@ -135,7 +136,7 @@ class ExtraFilters extends Component<{
   @action
   resetFilter = (fName: string) => {
     if(this.fS.filterMode === FILTERMODE_DASHBOARD) { 
-      this.tInfo.setTypeSelections(ALL_SELECT_BITS); 
+      this.fS.setTypeSelections(ALL_SELECT_BITS); 
     }
     switch(fName){
       case 'Date':
@@ -168,16 +169,17 @@ class ExtraFilters extends Component<{
     const { cardLayout, navItem, navIcon, fontRegular,
             formTextInput, formNumberInput } = this.props.uiTheme;
     const { highTextColor, pageBackground, secondaryColor, trekLogBlue, listIconColor,
-            primaryColor, dividerColor, rippleColor, navItemBorderColor, mediumTextColor
-             } = this.props.uiTheme.palette[this.tInfo.colorTheme];
+            primaryColor, rippleColor, navItemBorderColor, mediumTextColor,
+            altCardBackground, shadow1
+             } = this.props.uiTheme.palette[this.mS.colorTheme];
     const cardHeight = 130;
-    const settingIconSize = 24;
+    const settingIconSize = 26;
     const resetIconColor = secondaryColor;
     const timeframeSelectIconSize = 26;
     const timeframeSelectButtonSize = 40;
     const resetButtonSize = 30;
     const timeframeChanged = 
-                        (this.tInfo.timeframe !== this.origFilter.timeframe) ||
+                        (this.fS.timeframe !== this.origFilter.timeframe) ||
                         (this.origFilter.dateMax !== this.fS.dateMax || this.origFilter.dateMin !== this.fS.dateMin);
 
     const styles=StyleSheet.create({
@@ -189,12 +191,12 @@ class ExtraFilters extends Component<{
       },
       cardCustom: {
         minHeight: cardHeight,
-        borderBottomWidth: 1,
-        borderColor: dividerColor,
         marginTop: 0,
         marginBottom: 0,
         paddingTop: 10,
         paddingBottom: 15,
+        backgroundColor: altCardBackground,
+        ...shadow1
       },
       labelText: {
         fontFamily: fontRegular,
@@ -254,6 +256,7 @@ class ExtraFilters extends Component<{
         width: resetButtonSize,
         height: resetButtonSize,
         borderRadius: resetButtonSize/2,
+        backgroundColor: altCardBackground,
       },
       resetIconLabel: {
         marginTop: -3,
@@ -280,6 +283,7 @@ class ExtraFilters extends Component<{
         height: timeframeSelectButtonSize,
         width: timeframeSelectButtonSize,
         borderRadius: timeframeSelectButtonSize / 2,
+        backgroundColor: altCardBackground,
       }
   })
 
@@ -293,7 +297,7 @@ class ExtraFilters extends Component<{
           <RadioPicker pickerOpen={this.radioPickerOpen}/>
           <View style={[cardLayout, {paddingBottom: 0}]}>
             <PageTitle titleText="Filter Settings" style={{paddingLeft: 0}}
-                       colorTheme={this.tInfo.colorTheme}/>
+                       colorTheme={this.mS.colorTheme}/>
           </View>
           <ScrollView>
             {this.fS.filterMode !== FILTERMODE_DASHBOARD &&
@@ -316,7 +320,7 @@ class ExtraFilters extends Component<{
                       <View style={styles.resetIconArea}>
                         <IconButton
                           icon="History"
-                          disabled={this.tInfo.typeSelections ===  this.origFilter.typeSels}
+                          disabled={this.fS.typeSelections ===  this.origFilter.typeSels}
                           color={resetIconColor}
                           onPressFn={this.resetTypeSels}
                           onPressArg={true}
@@ -324,11 +328,13 @@ class ExtraFilters extends Component<{
                         />
                       </View>
                     </View>
+                    <View style={{marginTop: 10}}>
                       <TrekTypeSelect
-                        size={40}
-                        selected={this.tInfo.typeSelections}
+                        size={30}
+                        selected={this.fS.typeSelections}
                         onChangeFn={this.fS.setType}
                       />
+                    </View>
                   </View>    
                 </SlideDownView>
               </FadeInView>       
@@ -367,7 +373,7 @@ class ExtraFilters extends Component<{
                         rippleColor={rippleColor}
                         onPress={this.openRadioPicker}
                       >
-                        <Text style={styles.timeFrameName}>{TIME_FRAME_DISPLAY_NAMES[this.tInfo.timeframe]}</Text>
+                        <Text style={styles.timeFrameName}>{TIME_FRAME_DISPLAY_NAMES[this.fS.timeframe]}</Text>
                       </RectButton>
                       <IconButton 
                         iconSize={timeframeSelectIconSize}
@@ -446,7 +452,7 @@ class ExtraFilters extends Component<{
                       placeholderValue={this.fS.distMax !== '' ? this.fS.distMax : this.fS.distDefMax}
                       pvDisplayOnly={this.fS.distMax === ''}
                     />
-                    <Text style={styles.toText}> {this.tInfo.distUnits()}.</Text>
+                    <Text style={styles.toText}> {this.mS.distUnits()}.</Text>
                   </View>
                 </View>           
               </SlideDownView>
@@ -538,7 +544,7 @@ class ExtraFilters extends Component<{
                       placeholderValue={this.fS.speedMax ? this.fS.speedMax : this.fS.speedDefMax}
                       pvDisplayOnly={this.fS.speedMax === ''}
                     />
-                    <Text style={styles.toText}> {this.tInfo.speedUnits()}.</Text>
+                    <Text style={styles.toText}> {this.mS.speedUnits()}.</Text>
                   </View>
                 </View>           
                 </SlideDownView>

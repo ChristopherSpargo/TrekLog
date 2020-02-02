@@ -1,11 +1,11 @@
 import React, { useContext, useState, useEffect } from "react";
 import { View, Text, StyleSheet } from "react-native";
 
-import { UiThemeContext, TrekInfoContext, ToastSvcContext, UtilsSvcContext } from "./App";
-import { TrekInfo } from './TrekInfoModel';
+import { UiThemeContext, MainSvcContext, ToastSvcContext, UtilsSvcContext } from "./App";
 import { TextInput } from "react-native-gesture-handler";
 import { ToastModel } from "./ToastModel";
 import { UtilsSvc } from "./UtilsService";
+import { MainSvc } from "./MainSvc";
 
 function TimeInput({
   onChangeFn = undefined, // call this when done editign the time value
@@ -14,7 +14,7 @@ function TimeInput({
   const uiTheme: any = useContext(UiThemeContext);
   const toastSvc: ToastModel = useContext(ToastSvcContext);
   const uSvc: UtilsSvc = useContext(UtilsSvcContext);
-  const trekInfo: TrekInfo = useContext(TrekInfoContext);
+  const mainSvc: MainSvc = useContext(MainSvcContext);
 
   const [time, setTime] = useState('');
   const [hours, setHours] = useState('00');
@@ -22,7 +22,7 @@ function TimeInput({
   const [seconds, setSeconds] = useState('00');
 
   const { highTextColor, mediumTextColor, disabledTextColor
-        } = uiTheme.palette[trekInfo.colorTheme];
+        } = uiTheme.palette[mainSvc.colorTheme];
   const { fontRegular } = uiTheme;
   const zeros = '000000';
   const styles = StyleSheet.create({

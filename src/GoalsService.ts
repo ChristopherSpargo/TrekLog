@@ -1,14 +1,7 @@
 import { observable, action } from "mobx";
 import { DatePickerAndroid } from "react-native";
 import { uiTheme } from "./App";
-import {
-  TrekInfo,
-  TrekType,
-  TrekObj,
-  NumericRange,
-  SortByTypes, ShowTypes,
-  DIST_UNIT_LONG_NAMES
-} from "./TrekInfoModel";
+import { TrekObj, NumericRange } from "./TrekInfoModel";
 import {
   UtilsSvc,
   SortDate,
@@ -18,6 +11,8 @@ import {
 import { ToastModel } from "./ToastModel";
 import { StorageSvc } from "./StorageService";
 import { BarData, BarGraphInfo } from "./BarDisplayComponent";
+import { MainSvc, SortByTypes, ShowTypes,
+        TrekType, DIST_UNIT_LONG_NAMES } from "./MainSvc";
 
 export const SORT_DIRECTIONS = ["Ascend", "Descend"];
 export const SORT_DIRECTION_OTHER = { Ascend: "Descend", Descend: "Ascend" };
@@ -154,8 +149,8 @@ export class GoalsSvc {
   filter: GoalsFilterObj;
 
   constructor(
+    private mainSvc: MainSvc,
     private utilsSvc: UtilsSvc,
-    private trekInfo: TrekInfo,
     private toastSvc: ToastModel,
     private storageSvc: StorageSvc
   ) {
@@ -251,7 +246,7 @@ export class GoalsSvc {
   };
 
   // read the list of group's goals from the database
-  getGoalList = (group = this.trekInfo.group) => {
+  getGoalList = (group = this.mainSvc.group) => {
     this.setGoalList();
     return new Promise((resolve, reject) => {
       this.storageSvc
@@ -267,7 +262,7 @@ export class GoalsSvc {
   };
 
   // save the list of group's goals to the database
-  saveGoalList = (group = this.trekInfo.group) => {
+  saveGoalList = (group = this.mainSvc.group) => {
     this.updateDataReady(false);
     return new Promise((resolve, reject) => {
       this.storageSvc
@@ -363,8 +358,8 @@ export class GoalsSvc {
   // Compare the dates for an decending sort (newest first)
   sortFunc = (a: number, b: number): number => {
     return (
-      parseInt(this.trekInfo.allTreks[b].sortDate, 10) -
-      parseInt(this.trekInfo.allTreks[a].sortDate, 10)
+      parseInt(this.mainSvc.allTreks[b].sortDate, 10) -
+      parseInt(this.mainSvc.allTreks[a].sortDate, 10)
     );
   };
 
@@ -373,10 +368,10 @@ export class GoalsSvc {
     let treks: number[] = [];
     let ft;
 
-    if (this.trekInfo.allTreks.length) {
+    if (this.mainSvc.allTreks.length) {
       this.updateFSO();
       ft = this.filter.type;
-      this.trekInfo.allTreks.forEach((t, index) => {
+      this.mainSvc.allTreks.forEach((t, index) => {
         if ((ft === "" || t.type === ft) && 
             (t.sortDate >= this.filter.dateMin) &&
             (t.sortDate <= this.filter.dateMax) &&
@@ -392,7 +387,7 @@ export class GoalsSvc {
   // set the dataReady flag based on the displayList contents
   @action
   updateDataReady = (status: boolean) => {
-    this.dataReady = status && this.trekInfo.dataReady;
+    this.dataReady = status && this.mainSvc.dataReady;
   };
 
   // return true if the data in the goal editing fields represents a valid goal
@@ -496,10 +491,10 @@ export class GoalsSvc {
         this.setEditObjFields({
           dateSet: this.utilsSvc.formatShortSortDate() + "0000",
           category: val,
-          activity: this.trekInfo.defaultTrekType,
+          activity: this.mainSvc.defaultTrekType,
           timeframe: DITTimeframe,
           metric: DITMetric,
-          metricUnits: DIST_UNIT_LONG_NAMES[this.trekInfo.measurementSystem],
+          metricUnits: DIST_UNIT_LONG_NAMES[this.mainSvc.measurementSystem],
           metricValue: 0,
           testUnits: "time",
           testValue: 0,
@@ -510,7 +505,7 @@ export class GoalsSvc {
         this.setEditObjFields({
           dateSet: this.utilsSvc.formatShortSortDate() + "0000",
           category: val,
-          activity: this.trekInfo.defaultTrekType,
+          activity: this.mainSvc.defaultTrekType,
           timeframe: CATimeframe,
           metric: CAMetric,
           metricUnits: "times",
@@ -668,12 +663,12 @@ export class GoalsSvc {
     let meets = false;
     let sd : string;
 
-    if (t && seDate && this.trekInfo.allTreks[t].sortDate > seDate) {
+    if (t && seDate && this.mainSvc.allTreks[t].sortDate > seDate) {
       return { newInterval: false, count: 0 };
     }
     if (t !== undefined) {
-      v = this.getCAGoalTrekValue(this.trekInfo.allTreks[t], gdo.goal);
-      sd = this.trekInfo.allTreks[t].sortDate;
+      v = this.getCAGoalTrekValue(this.mainSvc.allTreks[t], gdo.goal);
+      sd = this.mainSvc.allTreks[t].sortDate;
     } else {
       sd = seDate || this.utilsSvc.formatShortSortDate() + "0000";
     }
@@ -685,7 +680,7 @@ export class GoalsSvc {
       if (meets) {
         gdo.timesMet++;
         if (gdo.mostRecentDate === '0') { 
-          gdo.mostRecentDate = this.trekInfo.allTreks[this.getFirstTrekInInterval(gdo.items)].sortDate; 
+          gdo.mostRecentDate = this.mainSvc.allTreks[this.getFirstTrekInInterval(gdo.items)].sortDate; 
         }
       }
       gdo.items.push({
@@ -706,7 +701,7 @@ export class GoalsSvc {
       if (meets) {
         gdo.timesMet++;
         if (gdo.mostRecentDate === '0') { 
-          gdo.mostRecentDate = this.trekInfo.allTreks[this.getFirstTrekInInterval(gdo.items)].sortDate; 
+          gdo.mostRecentDate = this.mainSvc.allTreks[this.getFirstTrekInInterval(gdo.items)].sortDate; 
         }
       }
       gdo.items.push({
@@ -760,7 +755,7 @@ export class GoalsSvc {
   // Add a trek item to the display item list.
   processTrekDIT = (t: number, gdo: GoalDisplayObj) => {
     let qualifies = false;
-    let trek = this.trekInfo.allTreks[t];
+    let trek = this.mainSvc.allTreks[t];
 
     switch(gdo.goal.metricUnits){
       case 'course':
@@ -843,7 +838,7 @@ export class GoalsSvc {
       if (selInt === curInt || this.intervalGraph) {
         // in the right interval?
         if (item.trek !== undefined) {
-          let t = this.trekInfo.allTreks[item.trek];
+          let t = this.mainSvc.allTreks[item.trek];
           switch (metric) {
             case "miles":
             case "meters":
@@ -967,7 +962,7 @@ export class GoalsSvc {
     let intSum = 0;
     let v;
     const DITGoal = gdo.goal.category === DIT_GOAL_CAT;
-    const { trekLogGreen } = uiTheme.palette[this.trekInfo.colorTheme];
+    const { trekLogGreen } = uiTheme.palette[this.mainSvc.colorTheme];
 
     if (DITGoal && gdo.goal.metricUnits !== 'course') {
       metric = "rate";
@@ -978,8 +973,8 @@ export class GoalsSvc {
     switch(metric){
       case 'times':
         if (!this.intervalGraph) {
-          metric = this.trekInfo.longDistUnits();
-          graphData.title = this.trekInfo.longDistUnitsCaps();
+          metric = this.mainSvc.longDistUnits();
+          graphData.title = this.mainSvc.longDistUnitsCaps();
         } else {
           graphData.title = 'Occurrences';
         }
@@ -987,7 +982,7 @@ export class GoalsSvc {
       case "miles":
       case "meters":
       case "kilometers":
-        graphData.title = this.trekInfo.longDistUnitsCaps();
+        graphData.title = this.mainSvc.longDistUnitsCaps();
         break;
       case "calories":
         graphData.title = 'Calories';
@@ -1011,7 +1006,7 @@ export class GoalsSvc {
       if (selectedInterval === currInt || this.intervalGraph) {
         if (item.trek !== undefined) {
           // is this a trek item?
-          let t = this.trekInfo.allTreks[item.trek];
+          let t = this.mainSvc.allTreks[item.trek];
           barItem.type = t.type;
           barItem.index = index;
           barItem.images = t.trekImages !== undefined;
@@ -1201,7 +1196,7 @@ export class GoalsSvc {
           let iDates = this.getIntervalDates(gdo.items, interval);
           let metric = g.metricUnits;
           if (g.metricUnits === "times") {
-            metric = this.trekInfo.longDistUnits();
+            metric = this.mainSvc.longDistUnits();
           }
           if(g.metricUnits === 'course'){
             msg =
@@ -1309,14 +1304,14 @@ export class GoalsSvc {
           });
           if (goalsOfType.length) {
             // are there any goals that involve this kind of trek?
-            this.trekInfo.popAllTreksEntry(); // remove trek from allTreks list
+            this.mainSvc.popAllTreksEntry(); // remove trek from allTreks list
             targetGoals = this.processGoalList(goalsOfType); // see what goals looked like before this trek
-            this.trekInfo.addAllTreksEntry(trek); // put trek back in list
+            this.mainSvc.addAllTreksEntry(trek); // put trek back in list
             targetGoals.forEach(gdo => {
               switch (gdo.goal.category) {
                 case DIT_GOAL_CAT:
                   let tMet = gdo.timesMet;
-                  this.processTrekDIT(this.trekInfo.allTreks.length - 1, gdo); // this will increment timesMet if this trek achieves the goal
+                  this.processTrekDIT(this.mainSvc.allTreks.length - 1, gdo); // this will increment timesMet if this trek achieves the goal
                   if (gdo.timesMet > tMet) {
                     result.push({ goal: gdo.goal, item: undefined });
                   }

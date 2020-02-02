@@ -6,10 +6,11 @@ import { useObserver } from "mobx-react-lite";
 import SvgGraphLabel from './SvgGraphLabelsComponent';
 
 import { APP_ICONS } from './SvgImages';
-import { TREK_TYPE_COLORS_OBJ, TREK_TYPE_DIM_COLORS_OBJ, UiThemeContext, TrekInfoContext } from './App'
+import { TREK_TYPE_COLORS_OBJ, TREK_TYPE_DIM_COLORS_OBJ, UiThemeContext, MainSvcContext } from './App'
 import SvgIcon from './SvgIconComponent';
-import { TrekInfo, NumericRange } from './TrekInfoModel';
+import { NumericRange } from './TrekInfoModel';
 import ExpandViewY from './ExpandYComponent';
+import { MainSvc } from './MainSvc';
 
 export interface BarData  {
   value: any,         // value that determines the size (height) of the bar
@@ -52,7 +53,7 @@ function BarItem({
   iAngle,
 }) {
   const uiTheme: any = useContext(UiThemeContext);
-  const trekInfo: TrekInfo = useContext(TrekInfoContext);
+  const mainSvc: MainSvc = useContext(MainSvcContext);
 
   function barPressed (idx: number, itemNumber: number) {
       pressed(idx, itemNumber);
@@ -62,7 +63,7 @@ function BarItem({
             itemNotSelected, rippleColor, mediumTextColor, gradientEndColor, gradientEndSelected,
             itemMissesGoalEnd, itemMeetsGoalEnd, itemMissesGoalText, itemMeetsGoalText,
             barGraphValueColor
-          } = uiTheme.palette[trekInfo.colorTheme];
+          } = uiTheme.palette[mainSvc.colorTheme];
     const { fontRegular, fontBold } = uiTheme
     const iconPaths = item.icon ? APP_ICONS[item.icon] : undefined;
     const barWidth = style.width;
@@ -87,7 +88,6 @@ function BarItem({
     }
     const useDimColor = item.typeSelected !== undefined && item.typeSelected === false;
     const barPad = style.paddingHorizontal || 0;
-
 
     const styles = StyleSheet.create({
       itemArea: {
@@ -340,7 +340,6 @@ function BarDisplay({
       }
     };
   renderCount.current = initRender;
-    // alert("rendering graph " + ++updateCount.current)
   return useObserver(() => (
         <FlatList
           ref={scrollRef}

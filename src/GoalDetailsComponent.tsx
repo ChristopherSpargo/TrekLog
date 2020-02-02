@@ -9,8 +9,7 @@ import { ProgressCircle } from 'react-native-svg-charts';
 import { HEADER_HEIGHT, INVISIBLE_Z_INDEX,
          PAGE_TITLE_HEIGHT, PROGRESS_COLORS } from './App';
 import { GoalsSvc } from './GoalsService';
-import { TrekInfo, TrekObj, RESP_CANCEL, MSG_HAS_LINK, RESP_OK, MSG_LINK_ADDED,
-  MSG_NO_LIST, MSG_NEW_COURSE_RECORD, MSG_NEW_COURSE } from './TrekInfoModel';
+import { TrekObj } from './TrekInfoModel';
 import { UtilsSvc, M_PER_MILE } from './UtilsService';
 import { GoalDisplayObj, GoalObj, PROGRESS_RANGES } from './GoalsService';
 import { DIT_GOAL_CAT, CA_GOAL_CAT } from './GoalsService';
@@ -27,11 +26,14 @@ import { CourseSvc } from './CourseService';
 import { ToastModel } from './ToastModel';
 import RadioPicker from "./RadioPickerComponent";
 import { FilterSvc } from './FilterService';
+import { MainSvc, RESP_CANCEL, MSG_HAS_LINK, RESP_OK, MSG_LINK_ADDED,
+         MSG_NO_LIST, MSG_NEW_COURSE_RECORD, MSG_NEW_COURSE, MSG_NONE_NEARBY, TREK_TYPE_HIKE } from './MainSvc';
+import { TrekSvc } from './TrekSvc';
 
 const pageTitleFormat = {marginBottom: 10};
 const goBack = NavigationActions.back() ;
 
-@inject('trekInfo', 'utilsSvc', 'uiTheme', 'goalsSvc', 'courseSvc', 'toastSvc', 'filterSvc')
+@inject('mainSvc', 'trekSvc', 'utilsSvc', 'uiTheme', 'goalsSvc', 'courseSvc', 'toastSvc', 'filterSvc')
 @observer
 class GoalDetails extends Component<{ 
   goalsSvc ?: GoalsSvc,
@@ -41,14 +43,17 @@ class GoalDetails extends Component<{
   filterSvc ?: FilterSvc,
   uiTheme ?: any,
   navigation ?: any,
-  trekInfo ?: TrekInfo         // object with all non-gps information about the Trek
+  mainSvc ?: MainSvc,
+  trekSvc ?: TrekSvc         // object with all non-gps information about the Trek
 }, {} > {
 
+  mS = this.props.mainSvc;
   cS = this.props.courseSvc;
-  tInfo = this.props.trekInfo;
+  tS = this.props.trekSvc;
   gS = this.props.goalsSvc;
   fS = this.props.filterSvc;
   uSvc = this.props.utilsSvc;
+  tInfo = this.fS.tInfo;
   activeNav : string = '';
   detailObj : GoalDisplayObj;
   displayChoice : string;
@@ -56,6 +61,7 @@ class GoalDetails extends Component<{
   trekGraphData : BarGraphInfo;
   intervalGraphData : BarGraphInfo;
   emptyIntervals = 0;
+
 
   @observable selectedTrekIndex : number;
   @observable selectedTrekBar;
@@ -104,7 +110,6 @@ class GoalDetails extends Component<{
   }
 
   componentWillUnmount() {
-    this.tInfo.clearTrek();
     this._didFocusSubscription && this._didFocusSubscription.remove();
     this._willBlurSubscription && this._willBlurSubscription.remove();
   }
@@ -343,18 +348,19 @@ class GoalDetails extends Component<{
 
   // switch measurements system then update the bar graph
   switchMeasurementSystem = () => {
-    this.tInfo.switchMeasurementSystem();
+    this.mS.switchMeasurementSystem();
     this.gS.buildGraphData(this.detailObj, this.selectedIntervalIndex, this.displayChoice);
     this.forceUpdate();
   };
 
   // Display the map for the Trek at the given index in the items list of the given display object
   showTrekMap = () => {
-    this.tInfo.setShowMapControls(false);
+    this.mS.setShowMapControls(false);
     requestAnimationFrame(() => {
       this.props.navigation.navigate({routeName: 'SelectedTrek', 
         params: { title: this.props.utilsSvc.formattedLocaleDateAbbrDay(this.tInfo.date) + 
-                        '  ' + this.tInfo.startTime,
+                        '  ' + this.tInfo.startTime.toLowerCase(),
+                  trek: this.tInfo,
                   changeTrekFn: this.changeTrek,
                   checkTrekChangeFn: this.checkTrekChange,
                   switchSysFn: this.switchMeasurementSystem,
@@ -422,15 +428,17 @@ class GoalDetails extends Component<{
           this.intervalSelected(newInterval, false);  // this builds trekGraphData for the new interval
         }
         trek = this.setCurrentTrek(index);        // this sets the selectedTrekBar property
-        this.tInfo.setShowMapControls(false);
-        resolve(this.props.utilsSvc.formattedLocaleDateAbbrDay(trek.date) + '  ' + trek.startTime);
+        this.mS.setShowMapControls(false);
+        resolve(this.props.utilsSvc.formattedLocaleDateAbbrDay(trek.date) + '  ' + trek.startTime.toLowerCase());
       }
     }) 
   }
 
   setCurrentTrek = (trekIndex: number) : TrekObj => {
-    let trek = this.tInfo.allTreks[this.detailObj.items[trekIndex].trek];      
-    this.tInfo.setTrekProperties(trek);
+    let trek = this.mS.allTreks[this.detailObj.items[trekIndex].trek];      
+    this.tS.setTrekProperties(this.tInfo, trek, false);
+    this.mS.setCurrentMapType(trek.type === TREK_TYPE_HIKE ? 'terrain' 
+                                                                : this.mS.defaultMapType)
     this.setSelectedTrekIndex(trekIndex);
     return trek;
   }
@@ -496,10 +504,9 @@ class GoalDetails extends Component<{
         this.props.navigation.dispatch(goBack);
         break;
       case 'Help':
-        this.tInfo.showCurrentHelp();
+        this.props.navigation.navigate({routeName: 'ShowHelp', key: 'Key-ShowHelp'});
         break;
       case "Home":
-        this.tInfo.clearTrek();
         this.props.navigation.dispatch(StackActions.popToTop());
         break;
       case 'Course':
@@ -510,24 +517,22 @@ class GoalDetails extends Component<{
   }
 
   // Display the map for the effort at the given index in trekList
-  showCourseEffort = () => {
-    let trek = this.tInfo.getSaveObj();
+  showCourseEffort = (trek: TrekObj) => {
     this.cS.getCourse(trek.course)
     .then((course) => {
       let effort = this.cS.getTrekEffort(course, trek);
-      this.tInfo.setTrackingMethod(effort.subject.method);
-      this.tInfo.setTrackingValue(effort.subject.goalValue);      
-      this.tInfo.setShowMapControls(true)
-      this.cS.initCourseTrackingSnapshot(course, trek, effort)
+      this.mS.setShowMapControls(true)
+      this.cS.initCourseTrackingSnapshot(course, trek, effort, 
+                              effort.method, effort.goalValue)
       .then(() => {        
-        // alert(JSON.stringify({...this.cS.trackingSnapshot, ...{coursePath: undefined, trekPath: undefined}},null,2))
         this.props.navigation.navigate("SelectedTrek", {
+          trek: this.tInfo,
           title:
             this.props.utilsSvc.formattedLocaleDateAbbrDay(trek.date) +
             "  " +
-            trek.startTime,
+            trek.startTime.toLowerCase(),
           icon: this.tInfo.type,
-          switchSysFn: this.tInfo.switchMeasurementSystem,
+          switchSysFn: this.mS.switchMeasurementSystem,
         })
       })
       .catch(() => {})
@@ -537,19 +542,21 @@ class GoalDetails extends Component<{
 
 // show the selected trek image
   showTrekImage = (set: number, image = 0) => {
-    let title = this.tInfo.formatImageTitle(set, image);
-    this.props.navigation.navigate('Images', {cmd: 'show', setIndex: set, imageIndex: image, title: title});
+    let title = this.tS.formatImageTitle(this.tInfo, set, image);
+    this.props.navigation.navigate({
+      routeName: 'Images', 
+      params:  {cmd: 'show', 
+                setIndex: set, 
+                imageIndex: image, 
+                trek: this.tInfo,
+                title: title},
+      key: 'Key-Images'
+    });
   }
 
   // toggle the selected flag
   toggleShowValue = (type: string) => {
     this.fS.toggleShowValue(type);
-    // if(type === this.fS.show){
-    //   if(this.fS.show === 'Speed'){
-    //     this.fS.toggleSortDirection();
-    //   }
-    //   this.fS.sortAndBuild();
-    // }
   }
 
   // set the open status of the coursePickerOpen component
@@ -560,13 +567,14 @@ class GoalDetails extends Component<{
 
   // make this trek an effort of some course or use it to create a new course
   addCourseOrEffort = () => {
-    let trek = this.tInfo.getSaveObj();
+    let trek = this.tInfo;
     if(!trek.course || !this.cS.isCourse(trek.course)) {
       this.cS.newCourseOrEffort(trek, this.setCoursePickerOpen)
       .then((sel) => {
         switch(sel.resp){
           case RESP_CANCEL:
             break;
+            case MSG_NONE_NEARBY:
             case MSG_NO_LIST:
               this.props.toastSvc.toastOpen({
                 tType: "Error",
@@ -584,6 +592,7 @@ class GoalDetails extends Component<{
             break;
           case MSG_NEW_COURSE:
             this.props.navigation.navigate("SelectedTrek", {
+              trek: this.tInfo,
               title:
                 this.props.utilsSvc.formattedLocaleDateAbbrDay(trek.date) +
                 "  " +
@@ -616,15 +625,15 @@ class GoalDetails extends Component<{
     const {height, width} = Dimensions.get('window');
     this.detailObj = this.props.navigation.getParam('detailObj');
 
-    const { mediumTextColor, pageBackground, dividerColor, highTextColor,
-            itemMeetsGoal, itemMissesGoal, listIconColor, progressBackground
-          } = this.props.uiTheme.palette[this.props.trekInfo.colorTheme];
-    const { cardLayout, fontRegular, fontBold, fontLightItalic
+    const { mediumTextColor, pageBackground, dividerColor, highTextColor, bottomBorder,
+            itemMeetsGoal, itemMissesGoal, listIconColor, progressBackground, altCardBackground,
+            shadow1
+          } = this.props.uiTheme.palette[this.mS.colorTheme];
+    const { cardLayout, fontRegular, fontLightItalic
           } = this.props.uiTheme;
     const dObj = this.detailObj;
     const validDisplayObj = dObj !== undefined && dObj.items.length > 0;
-    const statusBarHt = 0;
-    const pageTitleSpacing = 30;
+    const pageTitleSpacing = 20;
     const titleHt = 20;
     const chartForTreks = (dObj.goal.category === DIT_GOAL_CAT) || (!this.gS.intervalGraph);
     const showEmpties = !chartForTreks && (this.emptyIntervals !== 0);
@@ -635,13 +644,14 @@ class GoalDetails extends Component<{
     const graphWidth = graphAreaWidth - yAxisWidth - 10;
     const maxBarHeightInterval = 155;
     const maxBarHeightTrek = 145;
-    const infoItemHeight = 45;
+    const infoItemHeight = 70;
     const infoIconSize = 24;
     const showLegend = this.gS.intervalGraph;
     const legendHt = showLegend ? 30 : 0;
     const pTitle = this.formatDetailsTitle(dObj, this.selectedIntervalIndex, "page");
     const graphTitle = this.formatDetailsTitle(dObj, this.selectedIntervalIndex, "graph");
-    const areaHt = height - (statusBarHt + HEADER_HEIGHT + PAGE_TITLE_HEIGHT + pageTitleSpacing);
+    const areaHt = height - 
+          (graphHeight + titleHt + 5 + miHt + legendHt + HEADER_HEIGHT + PAGE_TITLE_HEIGHT + pageTitleSpacing);
     const prog = this.gS.computeProgress(dObj);
     const progPct = Math.round(prog * 100);
     const ind = this.uSvc.findRangeIndex(progPct, PROGRESS_RANGES);
@@ -687,8 +697,12 @@ class GoalDetails extends Component<{
         flexDirection: "row",
         alignItems: "center",
         justifyContent: "space-between",
+        backgroundColor: altCardBackground,
+        borderColor: dividerColor,
+        borderStyle: "solid",
         paddingHorizontal: 15,
         height: infoItemHeight,
+        ...shadow1
       },
       titleArea: {
         height: titleHt + miHt,
@@ -713,8 +727,8 @@ class GoalDetails extends Component<{
         fontSize: 22
       },
       graphAndStats: {
-        marginBottom: 5,
-        marginRight: 10,
+        paddingBottom: 5,
+        paddingRight: 10,
         height: graphHeight,
       },
       graphArea: {
@@ -728,7 +742,7 @@ class GoalDetails extends Component<{
         width: infoIconSize,
         height: infoIconSize,
         backgroundColor: "transparent",
-        marginRight: 6,
+        marginRight: 10,
       },
       legendBox: {
         height: 10,
@@ -741,22 +755,20 @@ class GoalDetails extends Component<{
         color: mediumTextColor,
       },
       infoLabel: {
-        fontSize: 18,
+        fontSize: 20,
         fontFamily: fontRegular,
         color: highTextColor,
       },
       infoValue: {
-        fontSize: 18,
-        fontFamily: fontBold,
+        fontSize: 22,
+        fontFamily: fontRegular,
         color: highTextColor,
       },
       divider: {
         flex: 1,
-        marginRight: 15,
-        marginLeft: 45,
-        borderBottomWidth: 1,
-        borderStyle: "solid",
-        borderColor: dividerColor,
+        marginRight: 0,
+        marginLeft: 0,
+        ...bottomBorder
       },
       hidden: {
         zIndex: INVISIBLE_Z_INDEX,
@@ -804,165 +816,160 @@ class GoalDetails extends Component<{
             <View style={styles.listArea}>
               <PageTitle titleText={pTitle} 
                   style={pageTitleFormat}
-                  colorTheme={this.tInfo.colorTheme}/>
+                  colorTheme={this.mS.colorTheme}/>
               {(validDisplayObj) && 
-                <View style={styles.scrollArea}>
-                  <ScrollView>
-                    <View style={[cardLayout, {paddingTop: 0, paddingBottom: 0, paddingLeft: 2, 
-                                                paddingRight: 2, marginTop: 0}]}>
-                      <View style={[styles.titleArea]}>
-                        <Text style={styles.titleText}>{graphTitle}</Text>
-                        {showEmpties &&
-                          <View>
-                            <Text style={styles.miText}>
-                            {this.gS.formatMissingIntsMsg(dObj, this.emptyIntervals)}</Text>
-                          </View>
-                        }
+                <View style={[cardLayout, {paddingTop: 0, paddingBottom: 0, paddingLeft: 2, 
+                                            paddingRight: 2, marginTop: 0}]}>
+                  <View style={[styles.titleArea]}>
+                    <Text style={styles.titleText}>{graphTitle}</Text>
+                    {showEmpties &&
+                      <View>
+                        <Text style={styles.miText}>
+                        {this.gS.formatMissingIntsMsg(dObj, this.emptyIntervals)}</Text>
                       </View>
-                      <View style={styles.graphAndStats}>
-                        {this.trekGraphData &&
-                          <View style={[styles.graphArea]}>
-                            <View style={!chartForTreks ? styles.hidden : {}}>
-                              <SvgYAxis
-                                graphHeight={graphHeight}
-                                axisTop={maxBarHeightTrek}
-                                axisBottom={20}
-                                axisWidth={yAxisWidth}
-                                color={mediumTextColor}
-                                lineWidth={1}
-                                majorTics={5}
-                                title={this.trekGraphData.title}
-                                dataRange={this.trekGraphData.range}
-                                dataType={YAXIS_TYPE_MAP[showType]}
-                              />
-                              <View style={styles.graph}>
-                                <SvgGrid
-                                  graphHeight={graphHeight}
-                                  gridWidth={graphWidth}
-                                  lineCount={3}
-                                  colorTheme={this.tInfo.colorTheme}
-                                  maxBarHeight={maxBarHeightTrek}
-                                  minBarHeight={20}
-                                />
-                                <BarDisplay 
-                                  data={this.trekGraphData.items} 
-                                  dataRange={this.trekGraphData.range}
-                                  selected={this.selectedTrekBar}
-                                  selectFn={this.trekSelected} 
-                                  maxBarHeight={maxBarHeightTrek}
-                                  style={styles.graphStyle}
-                                  barStyle={styles.barStyle}
-                                  minBarHeight={20}
-                                  scrollToBar={this.scrollToTrek}
-                                />
-                              </View>
-                            </View>
+                    }
+                  </View>
+                  <View style={styles.graphAndStats}>
+                    {this.trekGraphData &&
+                      <View style={styles.graphArea}>
+                        <View style={!chartForTreks ? styles.hidden : {}}>
+                          <SvgYAxis
+                            graphHeight={graphHeight}
+                            axisTop={maxBarHeightTrek}
+                            axisBottom={20}
+                            axisWidth={yAxisWidth}
+                            color={mediumTextColor}
+                            lineWidth={1}
+                            majorTics={5}
+                            title={this.trekGraphData.title}
+                            dataRange={this.trekGraphData.range}
+                            dataType={YAXIS_TYPE_MAP[showType]}
+                          />
+                          <View style={styles.graph}>
+                            <SvgGrid
+                              graphHeight={graphHeight}
+                              gridWidth={graphWidth}
+                              lineCount={3}
+                              colorTheme={this.mS.colorTheme}
+                              maxBarHeight={maxBarHeightTrek}
+                            />
+                            <BarDisplay 
+                              data={this.trekGraphData.items} 
+                              dataRange={this.trekGraphData.range}
+                              selected={this.selectedTrekBar}
+                              selectFn={this.trekSelected} 
+                              maxBarHeight={maxBarHeightTrek}
+                              style={styles.graphStyle}
+                              barStyle={styles.barStyle}
+                              scrollToBar={this.scrollToTrek}
+                            />
                           </View>
-                        }
-                        {this.intervalGraphData &&
-                          <View style={[styles.graphArea]}>
-                            <View style={chartForTreks ? styles.hidden : {}}>
-                              <SvgYAxis
-                                graphHeight={graphHeight}
-                                axisTop={maxBarHeightInterval}
-                                axisBottom={20}
-                                axisWidth={yAxisWidth}
-                                color={mediumTextColor}
-                                lineWidth={1}
-                                majorTics={5}
-                                title={this.intervalGraphData.title}
-                                dataRange={this.intervalGraphData.range}
-                                dataType={YAXIS_TYPE_MAP[showType]}
-                              />
-                              <View style={styles.graph}>
-                                <SvgGrid
-                                  graphHeight={graphHeight}
-                                  gridWidth={graphWidth}
-                                  lineCount={3}
-                                  colorTheme={this.tInfo.colorTheme}
-                                  maxBarHeight={maxBarHeightInterval}
-                                  minBarHeight={20}
-                                />
-                                <BarDisplay 
-                                  data={this.intervalGraphData.items} 
-                                  dataRange={this.intervalGraphData.range}
-                                  selected={this.selectedIntervalBar}
-                                  selectFn={this.intervalSelected} 
-                                  maxBarHeight={maxBarHeightInterval}
-                                  style={styles.graphStyle}
-                                  barStyle={styles.barStyle}
-                                  minBarHeight={20}
-                                  scrollToBar={this.scrollToInterval}
-                                />
-                              </View>
-                            </View>
                         </View>
-                      }
                       </View>
-                      {showLegend &&
-                        <View>
-                          <View style={[styles.rowAround, {height: legendHt, alignItems: "flex-start"}]}>
-                            <View style={styles.rowStart}>
-                              <LinearGradient colors={[itemMeetsGoal, pageBackground]} style={styles.legendBox}/>
-                              <Text style={styles.legendText}>Meets Goal</Text>
-                            </View>
-                            <View style={styles.rowStart}>
-                              <LinearGradient colors={[itemMissesGoal, pageBackground]} style={styles.legendBox}/>
-                              <Text style={styles.legendText}>Misses Goal</Text>
-                            </View>
+                    }
+                    {this.intervalGraphData &&
+                      <View style={[styles.graphArea]}>
+                        <View style={chartForTreks ? styles.hidden : {}}>
+                          <SvgYAxis
+                            graphHeight={graphHeight}
+                            axisTop={maxBarHeightInterval}
+                            axisBottom={20}
+                            axisWidth={yAxisWidth}
+                            color={mediumTextColor}
+                            lineWidth={1}
+                            majorTics={5}
+                            title={this.intervalGraphData.title}
+                            dataRange={this.intervalGraphData.range}
+                            dataType={YAXIS_TYPE_MAP[showType]}
+                          />
+                          <View style={styles.graph}>
+                            <SvgGrid
+                              graphHeight={graphHeight}
+                              gridWidth={graphWidth}
+                              lineCount={3}
+                              colorTheme={this.mS.colorTheme}
+                              maxBarHeight={maxBarHeightInterval}
+                            />
+                            <BarDisplay 
+                              data={this.intervalGraphData.items} 
+                              dataRange={this.intervalGraphData.range}
+                              selected={this.selectedIntervalBar}
+                              selectFn={this.intervalSelected} 
+                              maxBarHeight={maxBarHeightInterval}
+                              style={styles.graphStyle}
+                              barStyle={styles.barStyle}
+                              scrollToBar={this.scrollToInterval}
+                            />
                           </View>
                         </View>
-                      }
-                      {(!chartForTreks) &&
-                        <View>
-                          <View style={styles.rowBetween}>
-                            <View style={styles.rowStart}>
-                              <ProgressCircle
-                                style={styles.infoIcon}
-                                backgroundColor={progressBackground}
-                                strokeWidth={2}
-                                progress={prog}
-                                progressColor={pColor}
-                              />                         
-                              <Text style={styles.infoLabel}>Achievement Rate</Text>
-                            </View>
-                            <Text style={styles.infoValue}>
-                              {progPct + '%'}
-                            </Text>
-                          </View>
-                          <View style={styles.divider}/>
-                          <View style={styles.rowBetween}>
-                            <View style={styles.rowStart}>
-                              <SvgIcon
-                                style={styles.infoIcon}
-                                size={infoIconSize}
-                                paths={APP_ICONS['CalendarCheck']}
-                                fill={listIconColor}
-                              />
-                              <Text style={styles.infoLabel}>Activity For:</Text>
-                            </View>
-                            <Text style={styles.infoValue}>{dObj.dateRange.start + ' - ' + dObj.dateRange.end}</Text>
-                          </View>
-                          <View style={styles.divider}/>
+                      </View>
+                    }
+                  </View>
+                  {showLegend &&
+                    <View>
+                      <View style={[styles.rowAround, {height: legendHt, alignItems: "flex-start"}]}>
+                        <View style={styles.rowStart}>
+                          <LinearGradient colors={[itemMeetsGoal, pageBackground]} style={styles.legendBox}/>
+                          <Text style={styles.legendText}>Meets Goal</Text>
                         </View>
-                      }
-                      {chartForTreks &&
-                        <TrekDetails
-                          showImagesFn={this.showTrekImage}
-                          showCourseEffortFn={this.showCourseEffort}
-                          toggleShowValueFn={this.toggleShowValue}
-                        />
-                      }
+                        <View style={styles.rowStart}>
+                          <LinearGradient colors={[itemMissesGoal, pageBackground]} style={styles.legendBox}/>
+                          <Text style={styles.legendText}>Misses Goal</Text>
+                        </View>
+                      </View>
                     </View>
-                  </ScrollView>
+                  }
+                  <View style={styles.divider}/>
+                  {(!chartForTreks) &&
+                    <View>
+                      <View style={styles.rowBetween}>
+                        <View style={styles.rowStart}>
+                          <ProgressCircle
+                            style={styles.infoIcon}
+                            backgroundColor={progressBackground}
+                            strokeWidth={2}
+                            progress={prog}
+                            progressColor={pColor}
+                          />                         
+                          <Text style={styles.infoLabel}>Achievement Rate</Text>
+                        </View>
+                        <Text style={styles.infoValue}>
+                          {progPct + '%'}
+                        </Text>
+                      </View>
+                      <View style={styles.rowBetween}>
+                        <View style={styles.rowStart}>
+                          <SvgIcon
+                            style={styles.infoIcon}
+                            size={infoIconSize}
+                            paths={APP_ICONS['CalendarCheck']}
+                            fill={listIconColor}
+                          />
+                          <Text style={styles.infoLabel}>Activity For:</Text>
+                        </View>
+                        <Text style={styles.infoValue}>{dObj.dateRange.start + ' - ' + dObj.dateRange.end}</Text>
+                      </View>
+                    </View>
+                  }
+                  {chartForTreks &&
+                    <View style={styles.scrollArea}>
+                      <ScrollView>
+                          <TrekDetails
+                              showImagesFn={this.showTrekImage}
+                              showCourseEffortFn={this.showCourseEffort}
+                              toggleShowValueFn={this.toggleShowValue}
+                            />
+                      </ScrollView>
+                    </View>
+                  }
+                </View>
+              }
+              {!validDisplayObj &&
+                <View style={styles.centered}>
+                  <Text style={styles.nothingText}>Nothing to Display</Text>
                 </View>
               }
             </View>
-            {!validDisplayObj &&
-              <View style={styles.centered}>
-                <Text style={styles.nothingText}>Nothing to Display</Text>
-              </View>
-            }
           </View>
         </View>    
       </NavMenu>

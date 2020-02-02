@@ -1,11 +1,13 @@
 import { observable, action } from "mobx"
 import { DatePickerAndroid } from 'react-native'
-import { TrekInfo, TrekType, TrekObj, DIST_UNIT_CHOICES, SortByTypes, ShowTypes,
+import { TrekInfo, TrekObj } from './TrekInfoModel';
+import { MainSvc, TrekType, DIST_UNIT_CHOICES, SortByTypes, ShowTypes,
          MeasurementSystemType, TREK_SELECT_BITS, ALL_SELECT_BITS, TREK_TYPE_HIKE, 
-         RESP_OK, RESP_CANCEL } from './TrekInfoModel'
-import { UtilsSvc, TimeFrame, TIME_FRAMES_NEXT, TIME_FRAME_CUSTOM  } from './UtilsService';
+         RESP_OK, RESP_CANCEL } from './MainSvc'
+import { UtilsSvc, TimeFrame, TimeFrameType, TIME_FRAMES_NEXT, TIME_FRAME_CUSTOM  } from './UtilsService';
 import { ToastModel } from "./ToastModel";
 import { BarData, BarGraphInfo } from './BarDisplayComponent';
+import { TrekSvc } from "./TrekSvc";
 
 export type SortDirection = "Ascend" | "Descend";
 export const SORTDIRECTION_ASCEND = "Ascend";
@@ -35,7 +37,7 @@ export interface FilterSettingsObj {
   stepsMax: number,
   sortBy: SortByTypes,
   sortDirection: string,
-  timeframe: string
+  timeframe: TimeFrameType
 }
 
 export class FilterSvc {
@@ -44,7 +46,6 @@ export class FilterSvc {
   @observable scrollToBar;
   @observable dataReady;
   selectedTrekDate = '';
-  trekType : TrekType;
 
   // filter values
   @observable distMin;
@@ -86,6 +87,10 @@ export class FilterSvc {
   @observable filterRuns : number;
   @observable foundType : boolean;
   @observable groupList : string[];
+  @observable timeframe : TimeFrameType;  // time frame used to select summaries and reviews
+  @observable typeSelections : number;
+
+  tInfo: TrekInfo;
 
   filterMode = '';
   barGraphData: BarGraphInfo = {items: [], range: {max: 0, min: 0, range: 0}};
@@ -94,8 +99,9 @@ export class FilterSvc {
 
   runAfterFilterTreks : Function[] = [];    // functions to run each time a new filtered treks list is made
 
-  constructor ( private utilsSvc: UtilsSvc, private trekInfo: TrekInfo, 
+  constructor ( private mainSvc: MainSvc, private utilsSvc: UtilsSvc, private trekSvc: TrekSvc, 
                 private toastSvc: ToastModel ) {
+    this.tInfo = new TrekInfo();
     this.initializeObservables();
   }
 
@@ -134,6 +140,8 @@ export class FilterSvc {
     this.setFoundType(false);
     this.setFilterRuns(0);
     this.clearGroupList();
+    this.timeframe = 'TMonth';
+    this.typeSelections = TREK_SELECT_BITS.All;
   }
 
   @action
@@ -198,24 +206,24 @@ export class FilterSvc {
 
     return {
       typeSels:      this.filterMode === FILTERMODE_DASHBOARD ? ALL_SELECT_BITS 
-                                                              : this.trekInfo.typeSelections,
+                                                              : this.typeSelections,
       distMin:       this.getFlt(this.distMin, 100),
       distMax:       this.getFlt(this.distMax, 100),
-      distUnits:     this.trekInfo.distUnits(),
+      distUnits:     this.mainSvc.distUnits(),
       timeMin:       this.getFlt(this.timeMin, 100),
       timeMax:       this.getFlt(this.timeMax, 100),
       dateMin:       dMin,
       dateMax:       dMax,
       speedMin:      this.getFlt(this.speedMin, 100),
       speedMax:      this.getFlt(this.speedMax, 100),
-      speedUnits:    this.trekInfo.speedUnits(),
+      speedUnits:    this.mainSvc.speedUnits(),
       calsMin:       this.getFlt(this.calsMin),
       calsMax:       this.getFlt(this.calsMax),
       stepsMin:      this.getFlt(this.stepsMin),
       stepsMax:      this.getFlt(this.stepsMax),
       sortBy:        this.sortByDate ? 'Date' : this.sortBy,
       sortDirection: this.sortDirection,
-      timeframe:     this.trekInfo.timeframe
+      timeframe:     this.timeframe
     }
   }
 
@@ -229,7 +237,7 @@ export class FilterSvc {
            )
   }
 
-  getTitleActivity = (sels = this.trekInfo.typeSelections) => {
+  getTitleActivity = (sels = this.typeSelections) => {
     switch(sels){
       case TREK_SELECT_BITS['Walk']:
         return 'Walk';
@@ -253,27 +261,18 @@ export class FilterSvc {
     return ((this.filteredTreks === undefined) || (this.filteredTreks.length === 0));
   }
 
-  formatTitleMessage = (titleMsg: string, sels = this.trekInfo.typeSelections) => {
+  formatTitleMessage = (titleMsg: string, sels = this.typeSelections) => {
     let plural = this.filteredTreks.length === 1 ? '' : 's';
-    return (titleMsg + '  ' +  this.filteredTreks.length + ' ' + this.getTitleActivity(sels) + plural);
+    let withFilters = this.extraFilterSet() ? ' *' : '';
+    return (titleMsg + '  ' +  this.filteredTreks.length + ' ' + 
+              this.getTitleActivity(sels) + plural + withFilters);
   }
 
-  // set the trek type for filtering data
-  @action
-  setTrekType = (value?: TrekType) => {
-    if (value !== undefined){
-      this.trekType = value;
-    }
-    else {
-      this.trekType = this.trekInfo.type;
-    }
-  }
-  
   // set the timeframe for review data
   @action
-  setTimeframe = (value: string) => {
+  setTimeframe = (value: TimeFrameType) => {
 
-    this.trekInfo.updateTimeframe(value);
+    this.updateTimeframe(value);
     if (value !== TIME_FRAME_CUSTOM) {
       let dates : TimeFrame = this.utilsSvc.getTimeFrame(value);
       this.dateMin = dates.start;
@@ -285,7 +284,7 @@ export class FilterSvc {
   }
 
   // find a timeframe that has some treks in it starting with the given timeframe
-  findActiveTimeframe = (startTF = 'TMonth') => {
+  findActiveTimeframe = (startTF : TimeFrameType = 'TMonth') => {
     let tf = startTF;
 
     this.setTimeframe(tf);
@@ -302,13 +301,37 @@ export class FilterSvc {
       this.filter = this.getFilterSettingsObj();
   }
 
+  // set/toggle the bit in typeSelections representing the given type
+  // if the set parameter is true then unconditionally set the given bit
+  // otherwise toggle the bit.
+  @action
+  updateTypeSelections = (value: TrekType, set: boolean) => {
+    if (set) {
+      this.typeSelections = this.typeSelections | TREK_SELECT_BITS[value];
+    } else {
+      this.typeSelections = this.typeSelections ^ TREK_SELECT_BITS[value];
+    }
+  }
+
+  // set the typeSelections property to the given value
+  @action
+  setTypeSelections = (value: number) => {
+    this.typeSelections = value;
+  }
+
+  // Set timeframe to the given value
+  @action
+  updateTimeframe = (value: TimeFrameType) => {
+    this.timeframe = value;
+  }
+
   // Set the Trek type filter property.
   @action
   setType = (value: TrekType, toggle: boolean) => {
     if (!toggle) {  // set selection to value
-      this.trekInfo.setTypeSelections(TREK_SELECT_BITS[value]);
+      this.setTypeSelections(TREK_SELECT_BITS[value]);
     } else {    // toggle bit value within selection
-      this.trekInfo.updateTypeSelections(value, !(this.trekInfo.typeSelections & TREK_SELECT_BITS[value]));
+      this.updateTypeSelections(value, !(this.typeSelections & TREK_SELECT_BITS[value]));
     }
     requestAnimationFrame(() => {
       this.filterTreks();      
@@ -318,7 +341,7 @@ export class FilterSvc {
   // Set the Trek type selections filter property to the given value.
   @action
   setTypeSels = (value: number) => {
-    this.trekInfo.setTypeSelections(value );
+    this.setTypeSelections(value );
     this.filterTreks();      
   }
 
@@ -454,7 +477,7 @@ export class FilterSvc {
 
   @action
   setDateMin = (value: string, filter : "Select" | "Filter" | "None") => {
-    this.trekInfo.dtMin = value;
+    this.mainSvc.dtMin = value;
     this.dateMin = value;
     switch(filter){
       case 'Select':
@@ -497,7 +520,7 @@ export class FilterSvc {
   
   @action
   setDateMax = (value: string, filter : "Select" | "Filter" | "None" ) => {
-    this.trekInfo.dtMax = value;
+    this.mainSvc.dtMax = value;
     this.dateMax = value;
     switch(filter){
       case 'Select':
@@ -590,7 +613,7 @@ export class FilterSvc {
 
   @action
   setDataReady = (value: boolean) => {
-    this.dataReady = value && this.trekInfo.dataReady;
+    this.dataReady = value && this.mainSvc.dataReady;
   }
 
   setFilteredTreks = (list: number[]) => {
@@ -604,7 +627,7 @@ export class FilterSvc {
   // Check the given trek aginst the filter values.  Return true if trek passes all filters.
   checkTrek = (trek: TrekObj) => {
 
-    if (!(this.trekInfo.typeSelections & TREK_SELECT_BITS[trek.type])) { return false; }
+    if (!(this.typeSelections & TREK_SELECT_BITS[trek.type])) { return false; }
     let date = trek.sortDate;
     if (this.filter.dateMin && (date < this.filter.dateMin)) { return false; }
     if (this.filter.dateMax && (date > this.filter.dateMax)) { return false; }
@@ -630,8 +653,8 @@ export class FilterSvc {
   // Compare the appropriate properties based on the sortBy and startWith filter values
   sortFunc = (a: number, b: number) : number => {
     let uSvc = this.utilsSvc;
-    let ta = this.trekInfo.allTreks[a];
-    let tb = this.trekInfo.allTreks[b];
+    let ta = this.mainSvc.allTreks[a];
+    let tb = this.mainSvc.allTreks[b];
     let ascendingSort = this.filter.sortDirection === SORTDIRECTION_ASCEND;
 
     switch(this.filter.sortBy){
@@ -649,8 +672,8 @@ export class FilterSvc {
         let spa = (ta.duration ? (ta.trekDist / ta.duration) : 0);
         let spb = (tb.duration ? (tb.trekDist / tb.duration) : 0);
         if(!this.showAvgSpeed){
-          spa = (ta.duration / uSvc.convertDist(ta.trekDist, this.trekInfo.distUnits()))
-          spb = (tb.duration / uSvc.convertDist(tb.trekDist, this.trekInfo.distUnits()))
+          spa = (ta.duration / uSvc.convertDist(ta.trekDist, this.mainSvc.distUnits()))
+          spb = (tb.duration / uSvc.convertDist(tb.trekDist, this.mainSvc.distUnits()))
         }
         return (ascendingSort ? spa - spb : spb - spa);
       case 'Cals':
@@ -684,12 +707,12 @@ export class FilterSvc {
     this.updateFSO();
     // include the date range in the checksum
     cSum = this.getFlt(this.filter.dateMax) + this.getFlt(this.filter.dateMin);
-    if (this.trekInfo.allTreks.length) {
-      for( let i=0; i<this.trekInfo.allTreks.length; i++){
-        if (this.checkTrek(this.trekInfo.allTreks[i])){
+    if (this.mainSvc.allTreks.length) {
+      for( let i=0; i<this.mainSvc.allTreks.length; i++){
+        if (this.checkTrek(this.mainSvc.allTreks[i])){
           treks.push(i);      // push index of this TrekObj
-          cSum += this.getFlt(this.trekInfo.allTreks[i].sortDate);
-          if ((this.trekInfo.typeSelections & TREK_SELECT_BITS[this.trekInfo.allTreks[i].type])) { 
+          cSum += this.getFlt(this.mainSvc.allTreks[i].sortDate);
+          if ((this.typeSelections & TREK_SELECT_BITS[this.mainSvc.allTreks[i].type])) { 
             foundSelectedType = true; 
           } 
         }
@@ -755,17 +778,19 @@ export class FilterSvc {
 
   // Set the Trek at the given index in filteredTreks as the current Trek.
   trekSelected = (indx: number) => {
-    let trek = this.trekInfo.allTreks[this.filteredTreks[indx]];
-    this.trekInfo.setTrekProperties(trek);
+    let trek = this.mainSvc.allTreks[this.filteredTreks[indx]];
+    this.trekSvc.setTrekProperties(this.tInfo, trek, false);
+    this.mainSvc.setCurrentMapType(trek.type === TREK_TYPE_HIKE ? 'terrain' 
+                                                                : this.mainSvc.defaultMapType)
     if (trek.type === TREK_TYPE_HIKE && !trek.elevations) { // read and save elevation data for Hike if necessary
-      this.trekInfo.setElevationProperties()
+      this.trekSvc.setElevationProperties(this.tInfo)
       .then(() => {
         this.toastSvc.toastOpen({tType: 'Info', content: 'Retreived elevation data.'})
-        trek.elevations = this.trekInfo.elevations;
-        trek.elevationGain = this.trekInfo.elevationGain;
-        trek.hills = this.trekInfo.hills;
-        trek.calories = this.trekInfo.calories;
-        this.trekInfo.saveTrek(trek, 'none')
+        trek.elevations = this.tInfo.elevations;
+        trek.elevationGain = this.tInfo.elevationGain;
+        trek.hills = this.tInfo.hills;
+        trek.calories = this.tInfo.calories;
+        this.mainSvc.saveTrek(trek, 'none')
         this.setSelectedTrekIndex(indx);
       })
       .catch(() => {
@@ -777,18 +802,18 @@ export class FilterSvc {
     }
   }
 
-  // Set the property that keeps trak of whick Trek is currently in focus
+  // Set the property that keeps track of whick Trek is currently in focus
   @action
   setSelectedTrekIndex = (val: number) => {
     this.selectedTrekIndex = val;
-    this.selectedTrekDate = val < 0 ? '' : this.trekInfo.allTreks[this.filteredTreks[val]].sortDate;
+    this.selectedTrekDate = val < 0 ? '' : this.mainSvc.allTreks[this.filteredTreks[val]].sortDate;
   }
 
   // find the index for the trek with the date matching selectedTrekDate
   findCurrentSelection = () : number => {
     if (this.selectedTrekDate === '') { return 0; }
     for (let i=0; i<this.filteredTreks.length; i++) {
-      if (this.trekInfo.allTreks[this.filteredTreks[i]].sortDate === this.selectedTrekDate) {
+      if (this.mainSvc.allTreks[this.filteredTreks[i]].sortDate === this.selectedTrekDate) {
         return i;
       }
     }
@@ -880,12 +905,12 @@ export class FilterSvc {
     let stMin = 1000000,    stMax = -1;
     let spd, cals, steps;
     let uSvc = this.utilsSvc;
-    let mSys = this.trekInfo.measurementSystem;
+    let mSys = this.mainSvc.measurementSystem;
 
 
     if (tn.length !== 0){
       for(let i=0; i<tn.length; i++) {
-        let trek = this.trekInfo.allTreks[tn[i]];
+        let trek = this.mainSvc.allTreks[tn[i]];
         let d = trek.sortDate;
         if(d < dtMin) { dtMin = d; this.dateDefMin = trek.date};
         if(d > dtMax) { dtMax = d; this.dateDefMax = trek.date};
@@ -896,7 +921,7 @@ export class FilterSvc {
         spd = uSvc.computeRoundedAvgSpeed(mSys, trek.trekDist, trek.duration);
         if(this.speedMin === '' && spd < spMin) { spMin = spd};
         if(this.speedMax === '' && spd > spMax) { spMax = spd};
-        cals = trek.calories;
+        cals = trek.calories || 0;
         if(this.calsMin === '' && cals < caMin) { caMin = cals};
         if(this.calsMax === '' && cals> caMax) { caMax = cals};
         steps = uSvc.computeStepCount(trek.trekDist, trek.strideLength);
@@ -977,7 +1002,7 @@ export class FilterSvc {
     let title = undefined;
     switch(sType){
       case 'Dist':
-        title = this.trekInfo.longDistUnitsCaps();
+        title = this.mainSvc.longDistUnitsCaps();
         break;
       case 'Cals':
         title = this.showTotalCalories ? 'Calories' : 'Calories/min';
@@ -986,7 +1011,7 @@ export class FilterSvc {
         title = this.showStepsPerMin ? 'Steps/min' : 'Steps';
         break;
       case 'Speed':
-        title = this.showAvgSpeed ? this.trekInfo.speedUnits() : 'Time/' + this.trekInfo.distUnits();
+        title = this.showAvgSpeed ? this.mainSvc.speedUnits() : 'Time/' + this.mainSvc.distUnits();
         break;
     }
     return title;
@@ -998,7 +1023,7 @@ export class FilterSvc {
   // The 'show' value will be displayed on the bar and the Date value will be displayed above the bar.
   buildGraphData = (treks: number[]) => {
     let thisSortDate = this.utilsSvc.formatSortDate();
-    let dataRange = this.findDataRange(treks, this.show, this.trekInfo.measurementSystem)
+    let dataRange = this.findDataRange(treks, this.show, this.mainSvc.measurementSystem)
 
     dataRange.min = 0;
     dataRange.range = dataRange.max
@@ -1006,7 +1031,7 @@ export class FilterSvc {
     this.barGraphData.title = this.formatGraphTitle(this.show);
     this.barGraphData.range = dataRange;
     for(let tn=0; tn<treks.length; tn++) {
-      let t = this.trekInfo.allTreks[treks[tn]];
+      let t = this.mainSvc.allTreks[treks[tn]];
       let barItem : BarData = this.getBarItem(t, thisSortDate, this.show);
       this.addBarGraphData(barItem);
     }
@@ -1019,7 +1044,7 @@ export class FilterSvc {
     barItem.images = t.trekImages !== undefined;
     switch(show){
       case "Dist":
-        let d = this.utilsSvc.getRoundedDist(t.trekDist, this.trekInfo.distUnits(), true);
+        let d = this.utilsSvc.getRoundedDist(t.trekDist, this.mainSvc.distUnits(), true);
         barItem.value = d;
         barItem.label1 = d.toString();
         break;
@@ -1041,8 +1066,8 @@ export class FilterSvc {
         break;
       case "Speed":
         let speed = this.showAvgSpeed 
-            ? this.utilsSvc.computeRoundedAvgSpeed(this.trekInfo.measurementSystem, t.trekDist, t.duration)
-            : (t.duration / this.utilsSvc.convertDist(t.trekDist, this.trekInfo.distUnits()))
+            ? this.utilsSvc.computeRoundedAvgSpeed(this.mainSvc.measurementSystem, t.trekDist, t.duration)
+            : (t.duration / this.utilsSvc.convertDist(t.trekDist, this.mainSvc.distUnits()))
         barItem.value = speed; 
         barItem.label1 = this.showAvgSpeed ? speed.toString() : this.utilsSvc.timeFromSeconds(speed);
         break;
@@ -1068,8 +1093,11 @@ export class FilterSvc {
     let maxV = -999999
     let range;
 
+    if(!list.length){
+      return {max: 0, min: 0, range: 0}
+    }
     list.forEach((ti) => {
-      let trek = this.trekInfo.allTreks[ti];
+      let trek = this.mainSvc.allTreks[ti];
       switch(data){
         case 'Date':
         case 'Age':
@@ -1087,8 +1115,8 @@ export class FilterSvc {
           break;
         case 'Speed':
           let s = this.showAvgSpeed 
-            ? this.utilsSvc.computeRoundedAvgSpeed(this.trekInfo.measurementSystem, trek.trekDist, trek.duration)
-            : (trek.duration / this.utilsSvc.convertDist(trek.trekDist, this.trekInfo.distUnits()))
+            ? this.utilsSvc.computeRoundedAvgSpeed(this.mainSvc.measurementSystem, trek.trekDist, trek.duration)
+            : (trek.duration / this.utilsSvc.convertDist(trek.trekDist, this.mainSvc.distUnits()))
           if (s < minV) { minV = s; }
           if (s > maxV) { maxV = s; }
           break;
@@ -1111,8 +1139,10 @@ export class FilterSvc {
       maxV = this.utilsSvc.daysBetween(this.utilsSvc.formatSortDate(), minD);
       minV = this.utilsSvc.daysBetween(this.utilsSvc.formatSortDate(), maxD);
     }
-    maxV = Math.round(maxV*10)/10;
-    minV = Math.round(minV*10)/10;
+    maxV = Math.trunc(maxV) + 1;
+    minV = Math.trunc(minV);
+    // maxV = Math.round(maxV*10)/10;
+    // minV = Math.round(minV*10)/10;
     range = maxV - minV;
     return {max: maxV, min: minV, range: range}
   }

@@ -5,7 +5,6 @@ import { observable, action } from 'mobx';
 import { observer, inject } from 'mobx-react';
 
 import { GoalsSvc, CATestUnitsToTime } from './GoalsService'
-import { TrekInfo, TrekType, MSG_NO_LIST, RESP_CANCEL, FAKE_SELECTION, STEPS_APPLY } from './TrekInfoModel'
 import { UtilsSvc } from './UtilsService';
 import { 
   GoalObj, GoalTypesArray, DIT_GOAL_CAT, CA_GOAL_CAT, CABurnGoalMetricUnitsArray,
@@ -28,10 +27,11 @@ import RadioPicker from './RadioPickerComponent';
 import { CourseSvc } from './CourseService';
 import PageTitle from './PageTitleComponent';
 import NavMenu, { NavMenuItem } from './NavMenuComponent';
+import { MainSvc, TrekType, MSG_NO_LIST, RESP_CANCEL, FAKE_SELECTION, STEPS_APPLY } from './MainSvc';
 
 const goBack = NavigationActions.back() ;
 
-@inject('trekInfo', 'utilsSvc', 'uiTheme', 'goalsSvc', 'toastSvc', 'courseSvc')
+@inject('mainSvc', 'utilsSvc', 'uiTheme', 'goalsSvc', 'toastSvc', 'courseSvc')
 @observer
 class GoalEditor extends Component<{ 
   action: string,           // Action being performed 'Edit' or 'New'
@@ -42,7 +42,7 @@ class GoalEditor extends Component<{
   utilsSvc ?: UtilsSvc,
   uiTheme ?: any,
   toastSvc ?: ToastModel,
-  trekInfo ?: TrekInfo,        // object with all non-gps information about the Trek
+  mainSvc ?: MainSvc,
   navigation ?: any
 }, {} > {
 
@@ -56,7 +56,7 @@ class GoalEditor extends Component<{
   @observable openNavMenu : boolean;
   @observable radioPickerOpen;
 
-  tInfo = this.props.trekInfo;
+  mS = this.props.mainSvc;
   gS = this.props.goalsSvc;
   uSvc = this.props.utilsSvc;
   cS = this.props.courseSvc;
@@ -307,10 +307,9 @@ setActiveNav = val => {
         this.props.navigation.dispatch(goBack);
         break;
       case 'Help':
-        this.tInfo.showCurrentHelp();
+        this.props.navigation.navigate({routeName: 'ShowHelp', key: 'Key-ShowHelp'});
         break;
       case "Home":
-        this.tInfo.clearTrek();
         this.props.navigation.dispatch(StackActions.popToTop());
         break;
       default:
@@ -323,7 +322,7 @@ setActiveNav = val => {
     const { mediumTextColor, pageBackground, trekLogBlue, highTextColor, dividerColor, secondaryColor,
             highlightedItemColor, primaryColor, rippleColor, navItemBorderColor, disabledTextColor,
             footerButtonText,
-          } = this.props.uiTheme.palette[this.tInfo.colorTheme];
+          } = this.props.uiTheme.palette[this.mS.colorTheme];
     const { cardLayout, footer, footerButton,
             navItem, navIcon, fontRegular } = this.props.uiTheme;
     const validGoal = this.gS.validGoal(); 
@@ -507,7 +506,7 @@ setActiveNav = val => {
                                 />        
             <View style={[cardLayout, {paddingBottom: 0}]}>
               <PageTitle titleText={this.getGoalPrompt()} style={{paddingLeft: 0}}
-                          colorTheme={this.tInfo.colorTheme}/>
+                          colorTheme={this.mS.colorTheme}/>
             </View>
               {validCat &&
                 <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
