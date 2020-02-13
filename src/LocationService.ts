@@ -112,13 +112,19 @@ export class LocationSvc {
         else {
           if ([0,1,2].indexOf(authorization) === -1) {
             // authorization yet to be determined
-            BackgroundGeolocation.start();
-            if (startFresh) { BackgroundGeolocation.deleteAllLocations(); }
+            if (startFresh) { 
+              BackgroundGeolocation.deleteAllLocations(() => BackgroundGeolocation.start()); 
+            } else {
+              BackgroundGeolocation.start();
+            }
           } else if (authorization == BackgroundGeolocation.AUTHORIZED) {
             // calling start will also ask user for permission if needed
             // permission error will be handled in permisision_denied event
-            BackgroundGeolocation.start();
-            if (startFresh) { BackgroundGeolocation.deleteAllLocations(); }
+            if (startFresh) { 
+              BackgroundGeolocation.deleteAllLocations(() => BackgroundGeolocation.start()); 
+            } else {
+              BackgroundGeolocation.start();
+            }
           } else {
             Alert.alert(
               'App requires location tracking',
@@ -150,7 +156,7 @@ export class LocationSvc {
       stopOnStillActivity: false,
       distanceFilter: 3,
       interval: GPS_EVENT_INTERVAL * 1000,
-      fastestInterval: GPS_EVENT_INTERVAL * 1000 / 2,
+      fastestInterval: GPS_EVENT_INTERVAL * 1000,
       activitiesInterval: GPS_EVENT_INTERVAL * 1000,
       startForeground: true,
       debug: false,
@@ -183,7 +189,7 @@ export class LocationSvc {
   }
 
   // stop the geolocation service
-  stopGeolocation() {
+  stopGeolocation = () => {
     this.geolocationIsRunning = false;
     this.removeGeolocationListeners();
     BackgroundGeolocation.stop();

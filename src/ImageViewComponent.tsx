@@ -27,6 +27,7 @@ class ImageView extends Component<{
   imageWidth ?: number,
   imageHeight ?: number,
   clearTimeoutFn ?: Function,   // function to call when image loads
+  setShowVideoControlsFn ?: Function, // call to propogate toggleShowControls
   uiTheme ?: any,
   utilsSvc ?: UtilsSvc,
   trekSvc ?: TrekSvc,
@@ -141,13 +142,16 @@ class ImageView extends Component<{
   @action
   setShowVideoControls = (status: boolean) => {
     this.showVideoControls = status;
+    if(this.props.setShowVideoControlsFn){ this.props.setShowVideoControlsFn(status)}
     this.cancelHideControlsTimer();
   }
 
   // the user touched the video display screen
   toggleShowVideoContols = () => {
+
     if (this.props.imageType === IMAGE_TYPE_VIDEO) {
       if (this.videoPaused){
+
         this.setShowVideoControls(!this.showVideoControls);
       }
       else {
@@ -206,10 +210,10 @@ class ImageView extends Component<{
   render () {
     const { pageBackground, matchingMask_8, highTextColor
           } = this.props.uiTheme.palette[this.mS.colorTheme];
-    const { navIcon, fontRegular } = this.props.uiTheme;
+    const { navIcon, fontRegular, fontBold } = this.props.uiTheme;
     const cameraControlButtonSize = 72;
     const cameraControlIconSize = 48;
-    const controlsColor = semitransWhite_8;
+    const controlsColor = "black";
     const cWidth = Dimensions.get('window').width;
     const cHeight = Dimensions.get('window').height;
     const iHeight = (this.props.imageWidth !== undefined)
@@ -236,7 +240,7 @@ class ImageView extends Component<{
         height: cameraControlButtonSize,
         justifyContent: "center",
         alignItems: "center",
-        backgroundColor: semitransBlack_2, 
+        backgroundColor: semitransWhite_8, 
         borderWidth: 1,
         borderStyle: "solid",
         borderColor: buttonBorderColor,
@@ -274,12 +278,12 @@ class ImageView extends Component<{
         flexDirection: "row",
         alignItems: "center",
         paddingHorizontal: 5,
-        backgroundColor: semitransBlack_5,
+        backgroundColor: semitransWhite_8,
       },
       sliderText: {
         fontSize: 14,
-        fontFamily: fontRegular,
-        color: "white",
+        fontFamily: fontBold,
+        color: "black",
       },
       imageLabelArea: {
         position: "absolute",
@@ -400,7 +404,7 @@ class ImageView extends Component<{
               <Slider
                 style={{flex: 1}}
                 step={1}
-                maximumTrackTintColor="rgba(255, 255, 102, .8)"
+                maximumTrackTintColor={semitransBlack_5}
                 maximumValue={this.videoDuration}
                 onValueChange={this.setNewVideoPos}
                 value={this.currentVideoPos}

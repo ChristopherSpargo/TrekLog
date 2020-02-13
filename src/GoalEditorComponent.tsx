@@ -303,9 +303,6 @@ getCourse = () => {
 setActiveNav = val => {
   requestAnimationFrame(() => {
     switch (val) {
-      case "GoBack":
-        this.props.navigation.dispatch(goBack);
-        break;
       case 'Help':
         this.props.navigation.navigate({routeName: 'ShowHelp', key: 'Key-ShowHelp'});
         break;
@@ -339,7 +336,6 @@ setActiveNav = val => {
     let navMenuItems : NavMenuItem[] = 
     [ 
       {icon: 'Home', label: 'Home', value: 'Home'},
-      {icon: 'ArrowBack', label: 'Back', value: 'GoBack'},
       {icon: 'InfoCircleOutline', label: 'Help', value: 'Help'}  
     ]  
   

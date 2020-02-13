@@ -4,7 +4,6 @@ import { RectButton } from 'react-native-gesture-handler'
 import { action, observable } from 'mobx'
 import { observer, inject } from 'mobx-react'
 import { NavigationActions, StackActions } from 'react-navigation';
-import { LatLng } from 'react-native-maps';
 
 import Waiting from './WaitingComponent';
 import { TrekInfo } from './TrekInfoModel'
@@ -35,7 +34,7 @@ class Courses extends Component<{
   modalSvc ?: ModalModel,
   toastSvc ?: ToastModel,
   trekSvc ?: TrekSvc,    
-  navigation ?: any,
+  navigation ?: any
 }, {} > {
 
   @observable openItems;
@@ -50,7 +49,6 @@ class Courses extends Component<{
   cS = this.props.courseSvc;
   uSvc = this.props.utilsSvc;
   APCIndex = -1;
-  mapViewRefs : any[];
   headerActions = [];
 
   renderCount = 0;
@@ -61,6 +59,7 @@ class Courses extends Component<{
 
   constructor(props) {
     super(props);
+    this.initializeObservables();
     this.setHeaderActions();
     this._didFocusSubscription = props.navigation.addListener(
       "didFocus",
@@ -68,13 +67,9 @@ class Courses extends Component<{
         this.setOpenItems(true)
       }
     );
-    this.initializeObservables();
   }
 
   componentDidMount() {
-    requestAnimationFrame(() => {
-      this.setOpenItems(true);
-    })
     this.setTitleParam();
     this._willBlurSubscription = this.props.navigation.addListener(
       "willBlur",
@@ -84,6 +79,7 @@ class Courses extends Component<{
   }
 
   componentWillMount() {
+    this.setOpenItems(false);
     // read the Course list from the database
     this.cS.getCourseList()
     .then(() => {
@@ -98,14 +94,12 @@ class Courses extends Component<{
         // Course List is there but empty
         this.props.toastSvc.toastOpen({tType: "Error", content: "Course list is empty."});
       }
-      this.setOpenItems(false);
       this.setDataReady(true);
     })
     .catch(() => {
       // Failed to read Course List
       this.props.toastSvc.toastOpen({tType: "Error", content: "No course list found."});
       this.setTitleParam();
-      this.setOpenItems(false);
       this.setDataReady(true);
     })
   }
@@ -117,9 +111,9 @@ class Courses extends Component<{
     this.setDataReady(false);
   }
 
+  @action
   initializeObservables = () => {
     this.setOpenNavMenu(false);
-    this.setDataReady(false);
     this.setHeaderTitle("Scanning...");
   }
 
@@ -203,7 +197,6 @@ class Courses extends Component<{
 
   // Show the details of the given Course object
   showCourseDetails = (course: string) => {
-    // this.setOpenItems(false);        
     this.props.navigation.navigate({ routeName: 'CourseDetails', params: {focusCourse: course}, 
                                      key: 'Key-CourseDetails'});
   }
@@ -237,7 +230,7 @@ class Courses extends Component<{
           trek: tInfo,
           title: this.cS.courseList[index].name,
           icon: 'Course',
-          switchSysFn: this.mainSvc.switchMeasurementSystem,
+          switchSysFn: () => this.tS.switchMeasurementSystem(tInfo, false, false),
           mapDisplayMode: 'noSpeeds'
         })
       })
@@ -250,20 +243,8 @@ class Courses extends Component<{
     })
   }
 
-  layoutMap = ( path: LatLng[], idx: number) => {
-    // requestAnimationFrame(() => {
-      if (this.mapViewRefs[idx]) { 
-        this.mapViewRefs[idx].fitToCoordinates(path,
-                                        {edgePadding: {top: 5, right: 5, 
-                                                        bottom: 5, left: 5}, 
-                                        animated: true});
-      }
-    // })
-  }
-
   // Show the details of the given Course object
   scanForEfforts = (index: number) => {
-    // this.setOpenItems(false);        
     let c = this.cS.courseList[index];
     this.props.toastSvc.toastOpen({
       tType: "Warning",
@@ -310,10 +291,11 @@ class Courses extends Component<{
   render() {
 
     const { mediumTextColor, disabledTextColor, dividerColor, highlightedItemColor, cardItemTitleColor,
-            pageBackground, highTextColor, rippleColor, primaryColor, altCardBackground, shadow2
+            pageBackground, highTextColor, rippleColor, textOnSecondaryColor, altCardBackground,
+            shadow2, secondaryColor
           } = this.props.uiTheme.palette[this.mainSvc.colorTheme];
     const { cardLayout, fontRegular } = this.props.uiTheme;
-    const displayList = this.cS.courseList && this.cS.courseList.length > 0;
+    const displayList = this.cS.haveCourses();
     const courseCardHeight = 219 + 2;
     const courseImageHt = 165;
     const navMenuItems : NavMenuItem[] = 
@@ -446,7 +428,6 @@ class Courses extends Component<{
                        {icon: 'Edit', label: 'Rename', value: 'Rename'},
                        {icon: 'Delete', label: 'Delete', value: 'Delete'}];
 
-
     return(
       <NavMenu
         selectFn={this.setActiveNav}
@@ -560,8 +541,8 @@ class Courses extends Component<{
                                   style={styles.speedDialTrigger}
                                   horizontal={true}
                                   menuColor="transparent"
-                                  itemIconsStyle={{backgroundColor: pageBackground}}
-                                  itemIconsColor={primaryColor}
+                                  itemIconsStyle={{backgroundColor: secondaryColor}}
+                                  itemIconsColor={textOnSecondaryColor}
                                   iconSize="Small"
                                 />
                               </RectButton>

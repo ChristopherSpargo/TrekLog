@@ -13,7 +13,7 @@ import { APP_ICONS } from './SvgImages';
 import { MainSvc } from './MainSvc';
 
 export interface SpeedDialItem  {
-  label: string,
+  label?: string,
   icon: string,
   value: string,
   bColor ?: string,
@@ -124,12 +124,12 @@ class SpeedDial extends Component<{
     const bigItems = this.props.itemSize === "Big";
     const triggerIconSize = smallIcons ? 24 : 30;
     const triggerIconArea = smallIcons ? 40 : 56;
-    const itemIconSize = !bigItems ? 16 : 24;
-    const itemIconArea = smallIcons ? 24 : 36;
+    const itemIconSize = !bigItems ? 16 : 28;
+    const itemIconArea = smallIcons ? 24 : 50;
     const SD_ITEM_SIZE = bigItems ? 64 : 54;
     const SD_TRIGGER_HEIGHT = this.props.triggerHeight || 56;
-    const SD_MENU_WIDTH = smallIcons ? 54 : 64;
-    const labelAdj = bigItems ? -20 : -14;
+    const SD_MENU_WIDTH = smallIcons ? 54 : 66;
+    const labelAdj = bigItems ? 0 : -14;
     const { highTextColor, textOnSecondaryColor, secondaryColor, primaryColor,
             matchingMask_7, rippleColor } = this.props.uiTheme.palette[this.props.mainSvc.colorTheme];
     const { fontLight } = this.props.uiTheme;
@@ -203,6 +203,7 @@ class SpeedDial extends Component<{
       },
       hMenuArea: {
         flexDirection: "row",
+        alignItems: "center",
         width: menuSize,
         height: SD_MENU_WIDTH,
         zIndex: this.zValue,
@@ -226,8 +227,8 @@ class SpeedDial extends Component<{
       },
       hBar: {
         width: SD_ITEM_SIZE,
-        paddingTop:    smallIcons ? 3 : 3,
-        paddingBottom: smallIcons ? 5 : 8,
+        paddingTop:    smallIcons ? 3 : 0,
+        paddingBottom: smallIcons ? 5 : 0,
         paddingLeft: 5,
         paddingRight: 5,
         flexDirection: "column",
@@ -276,7 +277,7 @@ class SpeedDial extends Component<{
               afterCloseFn={this.setNotVisible}
             >
               {this.props.items.map((item, index) =>
-                <View key={item.label}
+                <View key={index}
                       style={[styles.vBar, (index === 0) ? styles.firstVItem : {},
                                           (index === this.props.items.length-1) ? styles.lastVItem : {}]}>
                   <IconButton 
@@ -309,7 +310,7 @@ class SpeedDial extends Component<{
             >
               <View style={{flexDirection: "row"}}>
                 {this.props.items.map((item, index) =>
-                  <View key={item.label}
+                  <View key={index}
                         style={[styles.hBar, (index === 0) ? styles.firstHItem : {},
                                             (index === this.props.items.length-1) ? styles.lastHItem : {}]}>
                     <IconButton 

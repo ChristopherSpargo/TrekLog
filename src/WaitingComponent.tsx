@@ -18,7 +18,7 @@ function Waiting({
 
   const mainSvc: MainSvc = useContext(MainSvcContext);
   
-  const { contrastingMask_9, textOffTheme, secondaryColor } = uiTheme.palette[mainSvc.colorTheme];
+  const { contrastingMask_9, textOffTheme, trekLogBlue } = uiTheme.palette[mainSvc.colorTheme];
   const { fontBold } = uiTheme;
   const textColor = textOffTheme;
   const bot = bottom || CONTROLS_HEIGHT;
@@ -53,7 +53,7 @@ function Waiting({
             <Text style={styles.msgText}>{msg}</Text>
           </View>
         )}
-        <ActivityIndicator size="large" color={secondaryColor} />
+        <ActivityIndicator size="large" color={trekLogBlue} />
       </View>
     </View>
   );

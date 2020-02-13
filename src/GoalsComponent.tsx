@@ -75,9 +75,6 @@ class Goals extends Component<{
   }
 
   componentDidMount() {
-    // requestAnimationFrame(() => {
-    //   this.setOpenGoals(true);
-    // })
     this._willBlurSubscription = this.props.navigation.addListener(
       "willBlur",
       () =>
@@ -132,7 +129,6 @@ class Goals extends Component<{
           this.gS.afterProcessGoals();
           this.gS.setDisplayList(gl);
           this.gS.sortGoals();
-          // this.setSelectedGoal(0);
           this.gS.updateDataReady(true);  
           this.setOpenGoals(false);        
         }
@@ -361,7 +357,6 @@ class Goals extends Component<{
     [ {icon: 'Home', label: 'Home', value: 'Home'},
       {icon: 'InfoCircleOutline', label: 'Help', value: 'Help'}
     ]  
-    
 
     const styles=StyleSheet.create({
       container: { ... StyleSheet.absoluteFillObject, backgroundColor: pageBackground },
@@ -426,13 +421,6 @@ class Goals extends Component<{
       },
       addGoalFab: {
         backgroundColor: secondaryColor,
-      },
-      itemsArea: {
-        position: "absolute",
-        left: 0,
-        right: 0,
-        top: 0,
-        bottom: 0,
       },
       speedDialTrigger: {
         backgroundColor: "transparent",

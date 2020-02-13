@@ -5,10 +5,11 @@ import { UtilsSvc,LB_PER_KG, M_PER_FOOT} from './UtilsService';
 import { GroupsObj, GroupSvc, SettingsObj } from './GroupService';
 import { StorageSvc } from './StorageService';
 import { ModalModel, CONFIRM_INFO } from './ModalModel';
-import { COLOR_THEME_DARK, ThemeType, COLOR_THEME_LIGHT } from './App';
-import { ImageSvc } from './ImageService';
-import { TrekObj, TrekTypeDataNumeric } from './TrekInfoModel';
+import { COLOR_THEME_DARK, ThemeType, COLOR_THEME_LIGHT, MapViewPitchType, MAP_VIEW_PITCH_VALUES, _3D_CAMERA_PITCH_STR, _2D_CAMERA_PITCH_STR } from './App';
+import { ImageSvc, HomeScreenImage } from './ImageService';
+import { TrekObj, TrekTypeDataNumeric, TrekPoint } from './TrekInfoModel';
 import { RestoreObject } from './LogStateModel';
+import { STATIONARY_DIST_FILTER_VALUE } from './LoggingService';
 
 // Class containing properties and service functions for the TrekLog App
 
@@ -134,9 +135,11 @@ export interface MainStateProperties
 {
   group ?:              string,
   measurementSystem ?:  MeasurementSystemType,
+  mapViewPitch ?:       number,
   strideLengths ?:      TrekTypeDataNumeric,
   initialLoc ?:         LatLng;
   layoutOpts ?:         string,
+  showMapControls ?:    boolean,
   dtMin ?:              string,
   dtMax ?:              string,
   defaultTrekType ?:    TrekType,
@@ -146,6 +149,7 @@ export interface MainStateProperties
   trekLabelFormOpen ?:  boolean,
   colorTheme ?:         ThemeType,
   groups ?:             GroupsObj,
+  allImages ?:          HomeScreenImage[],
 }
 
 export class MainSvc {
@@ -156,6 +160,7 @@ export class MainSvc {
   @observable group: string;
   @observable waitingForSomething: boolean;
   @observable measurementSystem : MeasurementSystemType;
+  @observable mapViewPitch : number;
   @observable layoutOpts;
   @observable currentMapType : MapType;
   @observable trekCount;
@@ -176,7 +181,7 @@ export class MainSvc {
   dtMax = '';
   defaultTrekType : TrekType;
   strideLength: number;
-  minPointDist = 1;
+  minPointDist = STATIONARY_DIST_FILTER_VALUE;
   currSpeedRange = 0;                             // current speed range for user (used to compute calories)
   updateDashboard : string = '';
   settingsFound = '';
@@ -187,6 +192,8 @@ export class MainSvc {
   weight: number;
   packWeight: number;
   limitsCloseFn: Function;
+
+  @observable badPoints: TrekPoint[];
 
   currentGroupSettings = {                         // used to restore current group settings after Reviewing Treks
     weight: 0,                                     // in kg
@@ -208,6 +215,7 @@ export class MainSvc {
     this.trekCount = 0;
     this.currentMapType = 'standard';
     this.speedDialZoomedIn = true;
+    this.setShowMapControls(true);
     this.setColorTheme(COLOR_THEME_DARK);
     this.setWaitingForSomething();
     this.setDefaultMapType('standard');
@@ -219,9 +227,11 @@ export class MainSvc {
     return {
       group:              this.group,
       measurementSystem:  this.measurementSystem,
+      mapViewPitch:       this.mapViewPitch,
       strideLengths:      this.strideLengths,
       initialLoc:         this.initialLoc,
       layoutOpts:         this.layoutOpts,
+      showMapControls:    this.showMapControls,
       dtMin:              this.dtMin,
       dtMax:              this.dtMax,
       defaultTrekType:    this.defaultTrekType,
@@ -231,6 +241,7 @@ export class MainSvc {
       trekLabelFormOpen:  this.trekLabelFormOpen,
       colorTheme:         this.colorTheme,
       groups:             this.groupSvc.groups,
+      allImages:          this.imageSvc.allImages
     }
   }
 
@@ -242,11 +253,14 @@ export class MainSvc {
       this.updateStrideLengths(data.strideLengths);
       this.setColorTheme(data.colorTheme);
       this.measurementSystem =  data.measurementSystem;
+      this.mapViewPitch =       data.mapViewPitch;
       this.initialLoc =         data.initialLoc;
       this.layoutOpts =         data.layoutOpts;
+      this.showMapControls =    data.showMapControls;
       this.dtMin =              data.dtMin;
       this.dtMax =              data.dtMax;
       this.minPointDist =       data.minPointDist;
+      this.imageSvc.allImages = data.allImages;
       this.updateDefaultType(data.defaultTrekType);
       this.setCurrentMapType(data.currentMapType);
       this.setTrekLabelFormOpen(data.trekLabelFormOpen);
@@ -266,6 +280,7 @@ export class MainSvc {
               // set the current group to the most recent group
               this.setColorTheme(groups.theme || COLOR_THEME_DARK);
               this.setMeasurementSystem(groups.measurementSystem);
+              this.setMapVewPitch(groups.mapViewPitch);
               this.setTrekLogGroupProperties(groups.lastGroup || groups.groups[0], null, false)
               .then((status) => {
                 this.pendingInit = false;
@@ -337,7 +352,7 @@ export class MainSvc {
             newSettings = result;
             this.changeGroupSettings(newSettings);
             this.groupSvc.saveGroups(newSettings.group)   // set new last group in groups object
-            .then(() => resolve(readTreks ? this.readAllTreks([group]) : RESP_OK))    // revisit
+            .then(() => resolve(readTreks ? this.readAllTreks([group]) : RESP_OK))
             .catch((err) => reject('Error: SAVE_GROUPS:\n' + err))
           })
           .catch((err) => {
@@ -387,7 +402,6 @@ export class MainSvc {
         }
         this.setDataReady(true);
         this.allTreksGroup = groups.length === 1 ?  groups[0] : 'Multiple';
-        // alert(this.allTreksGroup + ' : ' + this.allTreks.length)
         resolve('OK');
       })
       .catch(() => {
@@ -564,10 +578,14 @@ export class MainSvc {
     this.minPointDist = value;
   }
 
-  // update the value of the defaultMapType property
+  // update the value of the defaultMapType (or mapViewPitch) property
   setDefaultMapType = (val: MapType) => {
-    this.defaultMapType = val;
-    this.setCurrentMapType(val);
+    if(val === _3D_CAMERA_PITCH_STR as MapType || val === _2D_CAMERA_PITCH_STR as MapType){
+      this.setMapVewPitch(val as MapViewPitchType)
+    } else {
+      this.defaultMapType = val;
+      this.setCurrentMapType(val);
+    }
   }
 
   // update the value of the currentMapType property
@@ -628,6 +646,12 @@ export class MainSvc {
   @action
   updateGroup = (value: string) => {
     this.group = value;
+  }
+
+  // Set the mapViewPitch property to the given value
+  @action
+  setMapVewPitch = (value: MapViewPitchType) => {
+    this.mapViewPitch = MAP_VIEW_PITCH_VALUES[value];
   }
 
   // Set the measurement system to the given value

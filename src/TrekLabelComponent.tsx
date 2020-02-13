@@ -1,10 +1,10 @@
-import React from 'react';
-import { observer, inject } from 'mobx-react';
-import { observable, action } from 'mobx';
-import { View, StyleSheet, Text, TextInput, Keyboard, Dimensions } from 'react-native';
+import React, {useCallback, useContext, useEffect, useRef, useState} from 'react';
+import { View, StyleSheet, Text, TextInput, Keyboard, Dimensions, BackHandler } from 'react-native';
 import { RectButton } from 'react-native-gesture-handler'
+import { useObserver } from "mobx-react-lite";
 
-import { BACKDROP_Z_INDEX, LABEL_FORM_Z_INDEX } from './App';
+import { BACKDROP_Z_INDEX, LABEL_FORM_Z_INDEX, UiThemeContext, MainSvcContext, 
+         ModalSvcContext } from './App';
 import { APP_ICONS } from './SvgImages';
 import SvgIcon from './SvgIconComponent';
 import { ModalModel } from './ModalModel'
@@ -15,129 +15,110 @@ const MAX_NOTE_LENGTH = 300;
 
 // dialog used for trek label
 
-@inject('modalSvc', 'mainSvc', 'uiTheme')
-@observer
-class TrekLabelForm extends React.Component<{   
-  modalSvc    ?: ModalModel,
-  mainSvc     ?: MainSvc,
-  uiTheme     ?: any,
-}, {} > {
+function TrekLabelForm({open =undefined}) {   
+  const uiTheme: any = useContext(UiThemeContext);
+  const mainSvc: MainSvc = useContext(MainSvcContext);
+  const modalSvc: ModalModel = useContext(ModalSvcContext);
+  const mData = modalSvc.lfData;
 
-  @observable labelValue;
-  @observable noteValue;
-  @observable keyboardOpen;
+  const [labelValue, setLabelValue] = useState('');
+  const [noteValue, setNoteValue] = useState('');
 
-  keyboardDidShowListener;
-  keyboardDidHideListener;
+  const bHandler = useRef(false);
 
-  needDefaults = true;
+  const onBackButtonPressLabel = useCallback(
+    () => {
+      dismiss();
+      return true;
+    }, [], // Tells React to memoize regardless of arguments.
+  );
 
-  constructor(props) {
-    super(props);
-    this.initializeObservables();
-  }
-
-  componentDidMount() {
-    this.keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', this.keyboardDidShow);
-    this.keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', this.keyboardDidHide);
-  }
-
-  componentWillUnmount() {
-    this.keyboardDidShowListener.remove();
-    this.keyboardDidHideListener.remove();
-  }
-
-  componentDidUpdate() {
-    if(this.needDefaults){
-      this.needDefaults = false;
-      this.setLabelValue(this.props.modalSvc.lfData.label);
-      this.setNoteValue(this.props.modalSvc.lfData.notes);
+  useEffect(() => {                       // componentDidUpdate
+    if(open && !bHandler.current) {
+      BackHandler.addEventListener('hardwareBackPress', onBackButtonPressLabel); 
+      bHandler.current = true;
     }
+  },[open])
+
+  useEffect(() => {     
+    updateLabelValue(mData.label);           // componentDidMount
+    updateNoteValue(mData.notes);
+  },[open])
+
+  // useEffect(() => {                       // DidUpdate
+  //   if (limits.units && (limits.units.indexOf(units) === -1)){
+  //     updateUnits(limits.defaultUnits);
+  //   }
+  // },[limits.units])
+
+  function removeListeners() {
+    BackHandler.removeEventListener('hardwareBackPress', onBackButtonPressLabel);
+    bHandler.current = false;
   }
 
-  @action
-  setKeyboardOpen = (status: boolean) => {
-    this.keyboardOpen = status;
-
-  }
-  keyboardDidShow = () => {
-    this.setKeyboardOpen(true);
-  }
-
-  keyboardDidHide = () => {
-    this.setKeyboardOpen(false);
-  }
-
-  // initialize all the observable properties in an action for mobx strict mode
-  @action
-  initializeObservables = () => {
-    this.labelValue = '';
-    this.noteValue = '';
-    this.keyboardOpen = false;
-  }
-
-  @action
-  setLabelValue = (val: string) => {
+  function updateLabelValue(val: string) {
     if (val !== undefined && val.length <= MAX_LABEL_LENGTH) {
-      this.labelValue = val;      
+      setLabelValue(val);      
     }
   }
 
-  @action
-  setNoteValue = (val: string) => {
+  function updateNoteValue(val: string) {
     if (val !== undefined && val.length <= MAX_NOTE_LENGTH) {
-      this.noteValue = val;      
+      setNoteValue(val);      
     }
   }
 
   // call the resolve method
-  close = () => {
+  function close() {
     Keyboard.dismiss();
     setTimeout(() => {
-      this.props.modalSvc.closeLabelForm(400)
+      modalSvc.closeLabelForm(400)
       .then(() => {
-        let result = {label: this.labelValue, notes: this.noteValue};
-        this.setLabelValue('');
-        this.setNoteValue('');
-        this.needDefaults = true;
-        this.props.modalSvc.lfData.resolve(result);
+        let result = {label: labelValue, notes: noteValue};
+        setLabelValue('');
+        setNoteValue('');
+        removeListeners();
+        modalSvc.lfData.resolve(result);
       })
-      .catch((err) => {alert(err)})
+      .catch((err) => {
+        removeListeners();
+        alert(err)})
     }, 200);
   }
 
   // call the reject method
-  dismiss = () => {
+  function dismiss() {
     Keyboard.dismiss();
     // alert("Dismiss")
     setTimeout(() => {
-      this.props.modalSvc.closeLabelForm(400)
+      modalSvc.closeLabelForm(400)
       .then(() => {
-        this.setLabelValue('');
-        this.setNoteValue('');
-        this.needDefaults = true;
-        this.props.modalSvc.lfData.reject('CANCEL');      
+        setLabelValue('');
+        setNoteValue('');
+        removeListeners();
+        modalSvc.lfData.reject('CANCEL');      
       })
-      .catch(() => {})
+      .catch((err) => {
+        removeListeners();
+        alert(err);
+      })
     }, 200);
   }
   
-  render() {
 
     const { width } = Dimensions.get('window');
     const bPadding = 10;
     const cardWidth = width - (bPadding * 2);
-    const mData = this.props.modalSvc.lfData;
     const { cardLayout, roundedTop, footer, footerButton,
-            formTextInput, formHeader, formHeaderText } = this.props.uiTheme;
+            formTextInput, formHeader, formHeaderText } = uiTheme;
     const { highTextColor, dividerColor, mediumTextColor, pageBackground,
             trekLogBlue, contrastingMask_3, textOnPrimaryColor, rippleColor, footerButtonText,
-          } = this.props.uiTheme.palette[this.props.mainSvc.colorTheme];
+          } = uiTheme.palette[mainSvc.colorTheme];
     const defHIcon = mData.headingIcon || "Edit";
     const labelPrompt = "Label:"
-    const labelChars = (MAX_LABEL_LENGTH - this.labelValue.length) + " characters left";
+    const labelChars = (MAX_LABEL_LENGTH - (labelValue ? labelValue.length : 0)) + " characters left";
     const notePrompt = "Note:";
-    const noteChars =  (MAX_NOTE_LENGTH - this.noteValue.length) + " characters left";
+    const noteChars =  (MAX_NOTE_LENGTH - (noteValue ? noteValue.length : 0)) + " characters left";
 
     const styles = StyleSheet.create({
       container: { ... StyleSheet.absoluteFillObject },
@@ -215,12 +196,12 @@ class TrekLabelForm extends React.Component<{
       }
     })
 
-    return (
+    return useObserver(() => (
       <View style={styles.container}>
-        {this.props.modalSvc.labelFormOpen &&
+        {modalSvc.labelFormOpen &&
           <View style={[styles.container]}>
             <View style={styles.background}>
-              <View style={[styles.formArea, this.keyboardOpen ? {bottom: 0} : {}]}>
+              <View style={styles.formArea}>
                 <View style={[cardLayout, styles.cardCustom, roundedTop]}>
                   <View style={styles.header}>
                     <SvgIcon 
@@ -240,8 +221,8 @@ class TrekLabelForm extends React.Component<{
                     <View style={styles.rowLayout}>
                       <TextInput
                           style={[styles.textInputItem]}
-                          onChangeText={(text) => this.setLabelValue(text)}
-                          value={this.labelValue}
+                          onChangeText={(text) => updateLabelValue(text)}
+                          value={labelValue}
                           underlineColorAndroid={mediumTextColor}
                           keyboardType="default"
                           autoFocus={mData.focus === 'Label'}
@@ -253,8 +234,8 @@ class TrekLabelForm extends React.Component<{
                     </View>
                     <TextInput
                         style={[styles.textInputItem, {height: 110}]}
-                        onChangeText={(text) => this.setNoteValue(text)}
-                        value={this.noteValue}
+                        onChangeText={(text) => updateNoteValue(text)}
+                        value={noteValue}
                         multiline
                         underlineColorAndroid={mediumTextColor}
                         numberOfLines={4}
@@ -263,12 +244,11 @@ class TrekLabelForm extends React.Component<{
                         /> 
                   </View>
                 </View>
-                {!this.keyboardOpen && 
                   <View style={[styles.footer]}>
                     <RectButton
                       rippleColor={rippleColor}
                       style={{flex: 1}}
-                      onPress={this.dismiss}>
+                      onPress={dismiss}>
                       <View style={[footerButton, {flex:0}]}>
                         <Text
                           style={footerButtonText}
@@ -280,7 +260,7 @@ class TrekLabelForm extends React.Component<{
                     <RectButton
                       rippleColor={rippleColor}
                       style={{flex: 1}}
-                      onPress={this.close}>
+                      onPress={close}>
                       <View style={[footerButton, {flex:0}]}>
                         <Text
                           style={footerButtonText}
@@ -290,14 +270,12 @@ class TrekLabelForm extends React.Component<{
                       </View>
                     </RectButton>
                   </View>
-                }
               </View>
             </View>
           </View>
         }
       </View>
-    )
-  }
+    ))
 }
 
 export default TrekLabelForm;

@@ -15,6 +15,7 @@ function RadioGroup({
   itemHeight = undefined, // height for items
   align = undefined, // style to apply to each item container
   itemStyle = undefined, // style object for items
+  item1Style = undefined, // style object for first item
   labelStyle = undefined, // style object for labels
   justify = undefined, // how to justify buttons
   values = undefined, // value for each radio choice
@@ -50,6 +51,7 @@ function RadioGroup({
   const lStyle = labelStyle || {};
   const iaStyleProp = iconAreaStyle || {};
   const iStyle = itemStyle || {};
+  const i1Style = item1Style || iStyle;
   const cStyle = commentStyle || {};
   const textInputWidth = 155;
 
@@ -60,12 +62,15 @@ function RadioGroup({
       alignItems: alignDir,
       flexWrap: vert ? "nowrap" : "wrap"
     },
+    itemArea: {
+      flexDirection: "column",
+    },
     item: {
       marginRight: vert ? 0 : 15,
       height: itemHeight,
       flexDirection: inline ? "row" : "column",
       alignItems: "center",
-      justifyContent: inline ? "flex-start" : "center"
+      justifyContent: inline ? "flex-start" : "center",
     },
     label: {
       fontSize: 18,
@@ -192,25 +197,34 @@ function RadioGroup({
                   background={TouchableNativeFeedback.Ripple(rippleColor, false)}
                   onPress={() => valueChange(indx)}
                 >
-                  <View style={{...styles.item, ...iStyle}}>
-                    {!radioFirst && (
-                      <Text style={{...styles.label, ...lStyle}}>{item}</Text>
-                    )}
-                    <SvgIcon
-                      size={24}
-                      widthAdj={0}
-                      fill={selectedIndex === indx ? secondaryColor : mediumTextColor}
-                      paths={
-                        APP_ICONS[
-                          selectedIndex === indx
-                            ? "RadioButtonChecked"
-                            : "RadioButtonUnchecked"
-                        ]
+                  <View style={styles.rowLayout}>
+                    <View style={{...(indx === 0 ? i1Style : iStyle)}}>
+                      <View style={styles.item}>
+                        {!radioFirst && (
+                          <Text style={{...styles.label, ...lStyle}}>{item}</Text>
+                        )}
+                        <SvgIcon
+                          size={24}
+                          widthAdj={0}
+                          fill={selectedIndex === indx ? secondaryColor : mediumTextColor}
+                          paths={
+                            APP_ICONS[
+                              selectedIndex === indx
+                                ? "RadioButtonChecked"
+                                : "RadioButtonUnchecked"
+                            ]
+                          }
+                        />
+                        {radioFirst && (
+                            <Text style={{...styles.label, ...lStyle}}>{item}</Text>
+                        )}
+                      </View>
+                      {vertical && comments &&
+                        <View style={styles.commentArea}>
+                          <Text style={[styles.commentText, cStyle]}>{comments[indx]}</Text>
+                        </View>
                       }
-                    />
-                    {radioFirst && (
-                      <Text style={{...styles.label, ...lStyle}}>{item}</Text>
-                    )}
+                    </View>
                   </View>
                 </TouchableNativeFeedback>
                 {enterItem && values[indx] === '#new#' &&
@@ -246,7 +260,7 @@ function RadioGroup({
                     </View>
                   </View>
                 }
-                {vertical && comments &&
+                {/* {vertical && comments &&
                 <TouchableNativeFeedback
                   background={TouchableNativeFeedback.Ripple(rippleColor, false)}
                   onPress={() => valueChange(indx)}
@@ -255,7 +269,7 @@ function RadioGroup({
                     <Text style={[styles.commentText, cStyle]}>{comments[indx]}</Text>
                   </View>
                 </TouchableNativeFeedback>
-                }
+                } */}
               </View>
             ))}
           {icons &&

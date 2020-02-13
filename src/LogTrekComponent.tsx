@@ -47,7 +47,8 @@ import { BIG_CONTROLS_HEIGHT, NAV_ICON_SIZE, BIG_NAV_ICON_SIZE, HEADER_HEIGHT,
          TREKLOG_FILENAME_REGEX, TRACKING_STATUS_BAR_HEIGHT, 
          TREK_TYPE_COLORS_OBJ, 
          TREK_TYPE_DIM_COLORS_OBJ,
-         BLACKISH} from "./App";
+         BLACKISH,
+         CONTROLS_HEIGHT} from "./App";
 import TrekLogHeader from "./TreklogHeaderComponent";
 import { StorageSvc } from "./StorageService";
 import { LocationSvc } from "./LocationService";
@@ -154,13 +155,12 @@ class LogTrek extends Component<
 
   componentWillMount() {
     this.initializeObservables();
-    this.logSvc.updateGroupProperties();
+    this.props.helpSvc.pushHelp(HELP_LOG_STAT_VIEW, true);
     this.props.navigation.setParams({ checkBackButton: this.checkBackButton });
     let ro = this.mS.resObj;
     if (ro !== undefined){
       this.logState.restoreTrekLogState(ro)
       .then(() => {
-        this.mS.setAppReady(true);
         this.mS.setDataReady(true);
         this.logSvc.smoothTrek();
         if (ro.logState.timerOn) {
@@ -176,6 +176,7 @@ class LogTrek extends Component<
         if (ro.logState.showMapInLog) {
           this.props.navigation.navigate("LogTrekMap");
         }
+        this.mS.setAppReady(true);
         if (ro.logState.saveDialogOpen) {
           this.stopLogging();
         } else {
@@ -193,9 +194,9 @@ class LogTrek extends Component<
     }
     else {
       // nothingToRestore
+      this.logSvc.updateGroupProperties();
       this.logSvc.setLoggingState('Not Logging');
       this.logSvc.clearTrackingItems();
-      this.props.helpSvc.pushHelp(HELP_LOG_STAT_VIEW, true);
     };
   }
 
@@ -411,7 +412,7 @@ class LogTrek extends Component<
           this.logSvc.setLayoutOpts("Current");
         });
         if (this.logState.timeLimit !== 0 || this.logState.distLimit !== 0) {
-          alert(this.logState.timeLimit + '\n' + this.logState.distLimit)
+          // alert(this.logState.timeLimit + '\n' + this.logState.distLimit)
           this.giveVibrationStartSignal();
         }
       }
@@ -884,6 +885,7 @@ class LogTrek extends Component<
     this.closeLimitForm();
     if(status){
       this.tS.updateType(this.newTrek, this.mS.defaultTrekType);
+      this.tS.updateStrideLength(this.newTrek, this.mS.strideLength);
       this.props.navigation.setParams({ icon: this.newTrek.type });
     } else {
       this.mS.updateDefaultType(this.oldTrekType);
@@ -929,8 +931,7 @@ class LogTrek extends Component<
   }
 
   switchMeasurementSystem = () => {
-    this.mS.switchMeasurementSystem();
-    this.tS.updateCalculatedValues(this.newTrek, this.logState.timerOn, true);
+    this.tS.switchMeasurementSystem(this.newTrek, this.logState.timerOn, true);
   }
   // respond to action from controls
   setActiveNav = val => {
@@ -1089,6 +1090,7 @@ class LogTrek extends Component<
   render() {
     const lS = this.logState;
     const numPts = lS.trekPointCount;
+    const state = lS.loggingState;
     const formOpen = this.limitFormOpen || this.trackingMethodFormOpen || this.coursePickerOpen ||
                       this.radioPickerOpen;
     const stopOk =
@@ -1096,10 +1098,8 @@ class LogTrek extends Component<
       (lS.timerOn ||
         lS.logging ||
         lS.limitsActive);
-    const startOk =
-      !stopOk && !lS.pendingReview;
-    const reviewOk =
-      !stopOk && lS.pendingReview;
+    const startOk = !stopOk && state !== 'Review';
+    const reviewOk = ! stopOk && state === 'Review';
     const { controlsArea, navItem, navIcon, bigNavItemWithLabel, navItemWithLabel, navItemLabel,
             fontLight } = this.uiTheme;
     const {
@@ -1119,7 +1119,8 @@ class LogTrek extends Component<
     const noMenu = formOpen || this.lockNavMenu;
     const trackingMarker = lS.trackingMarkerLocation;
     const currType = this.mS.resObj ? this.mS.resObj.trek.type : this.newTrek.type;
-    const headerTitle = this.logState.loggingState === 'Not Logging' ? 'Log a Trek' : 'Trek Stats';
+    const headerTitle = state === 'Not Logging' ? 'Log a Trek' : 'Trek Stats';
+    const containerBottom = stopOk ? BIG_CONTROLS_HEIGHT : (reviewOk ? CONTROLS_HEIGHT : 0);
 
     let navMenuItems;
     if (stopOk){    
@@ -1195,13 +1196,13 @@ class LogTrek extends Component<
       trekStats: {
         flex: 1,
         marginTop: trackingMarker ? TRACKING_STATUS_BAR_HEIGHT + 15 : 0,
-        justifyContent: "space-around",
+        // justifyContent: "space-between",
         alignItems: "center",
       },
       trackingStatusDivider: {
         flex: 1,
         marginHorizontal: 20,
-        marginBottom: 25,
+        marginBottom: 10,
         borderTopWidth: 2,
         borderColor: disabledTextColor,
         borderStyle: "solid",
@@ -1219,133 +1220,161 @@ class LogTrek extends Component<
         setOpenFn={this.setOpenNavMenu}
         locked={noMenu}
         open={this.openNavMenu}> 
-        <View style={[styles.container]}>
-          <TrekLogHeader
-            icon="*"
-            titleText={headerTitle}
-            actionButtons={this.headerActions}
-            position="absolute"
-            backButtonFn={this.checkBackButton}
-            openMenuFn={this.openMenu}
-            disableMenu={noMenu}
-          />
-          <RadioPicker pickerOpen={this.radioPickerOpen}/>
-          <RadioPicker pickerOpen={this.coursePickerOpen}/>
-          <CheckboxPicker pickerOpen={this.checkboxPickerOpen} />
-          {this.mS.waitingForSomething && (
-            <Waiting msg={this.mS.waitingMsg} />
-          )}
-          {this.courseToTrack && 
-            <TrackingMethodForm
-              open={this.trackingMethodFormOpen}
-              header="Course Challenge Method"
-              title={'Challenge ' + this.courseToTrack.name + ' Using:'}
-              inMethod={lS.trackingMethod || 'courseTime'}
-              icon="Course"
-              onChangeFn={this.logSvc.setTrackingValueInfo}
-              course={this.courseToTrack}
+        {this.mS.appReady && 
+          <View style={[styles.container]}>
+            <TrekLogHeader
+              icon="*"
+              titleText={headerTitle}
+              actionButtons={this.headerActions}
+              position="absolute"
+              backButtonFn={this.checkBackButton}
+              openMenuFn={this.openMenu}
+              disableMenu={noMenu}
             />
-          }
-          <TrekLimitsForm
-            open={this.limitFormOpen}
-            limits={this.limitProps}
-          />
-            <View
-              style={[
-                styles.container, (stopOk || reviewOk) ?
-                { top: HEADER_HEIGHT, bottom: BIG_CONTROLS_HEIGHT, alignItems: "center" } : 
-                {top: HEADER_HEIGHT, alignItems: "center"}
-              ]}
-            >
-              <PageTitle 
-                colorTheme={this.mS.colorTheme}
-                icon={currType}
-                iconColor={!startOk ? TREK_TYPE_DIM_COLORS_OBJ[currType] : TREK_TYPE_COLORS_OBJ[currType]}
-                iconFn={this.setActiveNav}
-                iconFnArg={'TType'}
-                titleText={currType}
-                iconFnDisabled={!startOk}
-                style={pageTitleFormat}
-                groupName={this.mS.group || "None"}
-                setGroupFn={startOk ? this.getDifferentGroup : undefined}
+            <RadioPicker pickerOpen={this.radioPickerOpen}/>
+            <RadioPicker pickerOpen={this.coursePickerOpen}/>
+            <CheckboxPicker pickerOpen={this.checkboxPickerOpen} />
+            {this.mS.waitingForSomething && (
+              <Waiting msg={this.mS.waitingMsg} />
+            )}
+            {this.courseToTrack && 
+              <TrackingMethodForm
+                open={this.trackingMethodFormOpen}
+                header="Course Challenge Method"
+                title={'Challenge ' + this.courseToTrack.name + ' Using:'}
+                inMethod={lS.trackingMethod || 'courseTime'}
+                icon="Course"
+                onChangeFn={this.logSvc.setTrackingValueInfo}
+                course={this.courseToTrack}
               />
-              {(startOk) && !trackingMarker &&
-                <Text style={styles.bigTitle}>{bigTitle}</Text>
-              }
-              {(numPts > 0 && trackingMarker) &&
-                <TrackingStatusBar
+            }
+            <TrekLimitsForm
+              open={this.limitFormOpen}
+              limits={this.limitProps}
+            />
+              <View
+                style={[
+                  styles.container, {top: HEADER_HEIGHT, bottom: containerBottom, alignItems: "center"}
+                ]}
+              >
+                <PageTitle 
                   colorTheme={this.mS.colorTheme}
-                  trackingDiffDist={lS.trackingDiffDist}
-                  trackingDiffDistStr={lS.trackingDiffDistStr}
-                  trackingDiffTime={lS.trackingDiffTime}
-                  trackingDiffTimeStr={lS.trackingDiffTimeStr}
-                  trackingHeader={lS.trackingObj ? lS.trackingObj.challengeTitle : undefined}
-                  trackingTime={lS.trackingObj ? lS.trackingObj.goalTime : undefined}
-                  barTop={45}
-                  logOn={true}
+                  icon={currType}
+                  iconColor={!startOk ? TREK_TYPE_DIM_COLORS_OBJ[currType] : TREK_TYPE_COLORS_OBJ[currType]}
+                  iconFn={this.setActiveNav}
+                  iconFnArg={'TType'}
+                  titleText={currType}
+                  iconFnDisabled={!startOk}
+                  style={pageTitleFormat}
+                  groupName={this.mS.group || "None"}
+                  setGroupFn={startOk ? this.getDifferentGroup : undefined}
                 />
-              }
-              {!lS.logging && !reviewOk && (
-                <View style={{ flex: 1, justifyContent: "center" }}>
-                  <IconButton
-                    iconSize={bigIconSize}
-                    icon={currType}
-                    disabled={formOpen}
-                    style={{...navItem, ...styles.bigStart}}
-                    borderColor={mediumTextColor}
-                    iconStyle={navIcon}
-                    color={TREK_TYPE_COLORS_OBJ[currType]}
-                    onPressFn={this.setActiveNav}
-                    onPressArg="StartU"
-                  />
-                </View>
-              )}
-              <View style={styles.trekStats}>
-                {(numPts > 0 && trackingMarker) &&
-                  <View style={{flexDirection: 'row'}}>
-                    <View style={styles.trackingStatusDivider}/>
-                  </View>
+                {(startOk) && !trackingMarker &&
+                  <Text style={styles.bigTitle}>{bigTitle}</Text>
                 }
-                {(stopOk || reviewOk) && numPts > 0 && (
-                  <TrekStats 
-                    trek={this.newTrek}
-                    logging={stopOk} 
-                    trekType={currType} 
-                    sysChangeFn={this.switchMeasurementSystem}
-                    format='big'
+                {(numPts > 0 && trackingMarker) &&
+                  <TrackingStatusBar
+                    colorTheme={this.mS.colorTheme}
+                    trackingDiffDist={lS.trackingDiffDist}
+                    trackingDiffDistStr={lS.trackingDiffDistStr}
+                    trackingDiffTime={lS.trackingDiffTime}
+                    trackingDiffTimeStr={lS.trackingDiffTimeStr}
+                    trackingHeader={lS.trackingObj ? lS.trackingObj.challengeTitle : undefined}
+                    trackingTime={lS.trackingObj ? lS.trackingObj.goalTime : undefined}
+                    barTop={45}
+                    logOn={true}
                   />
+                }
+                {!lS.logging && !reviewOk && (
+                  <View style={{ flex: 1, justifyContent: "center" }}>
+                    <IconButton
+                      iconSize={bigIconSize}
+                      icon={currType}
+                      disabled={formOpen}
+                      style={{...navItem, ...styles.bigStart}}
+                      borderColor={mediumTextColor}
+                      iconStyle={navIcon}
+                      color={TREK_TYPE_COLORS_OBJ[currType]}
+                      onPressFn={this.setActiveNav}
+                      onPressArg="StartU"
+                    />
+                  </View>
+                )}
+                <View style={styles.trekStats}>
+                  {(numPts > 0 && trackingMarker) &&
+                    <View style={{flexDirection: 'row'}}>
+                      <View style={styles.trackingStatusDivider}/>
+                    </View>
+                  }
+                  {(stopOk || reviewOk) && numPts > 0 && (
+                    <TrekStats 
+                      trek={this.newTrek}
+                      logging={stopOk} 
+                      trekType={currType} 
+                      sysChangeFn={this.switchMeasurementSystem}
+                      format='big'
+                    />
+                  )}
+                </View>
+              </View>
+            {stopOk && (
+              <View style={[controlsArea,styles.caAdjust]}>
+                {numPts > 0 && (
+                  <IconButton
+                    iconSize={navIconSize}
+                    icon="Camera"
+                    style={styles.navButton}
+                    iconStyle={navIcon}
+                    borderColor={navItemBorderColor}
+                    color={navIconColor}
+                    onPressFn={this.setActiveNav}
+                    onPressArg="UseCamera"
+                    label="Camera"
+                    labelStyle={[navItemLabel, styles.navLabelColor]}
+                    />
+                )}
+                <IconButton
+                  iconSize={BIG_NAV_ICON_SIZE}
+                  icon="CheckeredFlag"
+                  style={styles.bigNavButton}
+                  borderColor={trekLogRed}
+                  iconStyle={navIcon}
+                  color={BLACKISH}
+                  onPressFn={this.setActiveNav}
+                  onPressArg="Stop"
+                  label="Finish"
+                  labelStyle={[navItemLabel, styles.navLabelColor]}
+                />
+                {numPts > 0 && (
+                  <IconButton
+                    iconSize={navIconSize}
+                    icon="Map"
+                    style={styles.navButton}
+                    iconStyle={navIcon}
+                    borderColor={navItemBorderColor}
+                    color={navIconColor}
+                    onPressFn={this.setActiveNav}
+                    onPressArg="ShowMap"
+                    label="Map"
+                    labelStyle={[navItemLabel, styles.navLabelColor]}
+                    />
                 )}
               </View>
-            </View>
-          {stopOk && (
-            <View style={[controlsArea,styles.caAdjust]}>
-              {numPts > 0 && (
+            )}
+            {reviewOk && (
+              <View style={[controlsArea, styles.caAdjust, {height: CONTROLS_HEIGHT + 5}]}>
                 <IconButton
                   iconSize={navIconSize}
-                  icon="Camera"
+                  icon="ArrowBack"
                   style={styles.navButton}
                   iconStyle={navIcon}
                   borderColor={navItemBorderColor}
                   color={navIconColor}
                   onPressFn={this.setActiveNav}
-                  onPressArg="UseCamera"
-                  label="Camera"
+                  onPressArg="ReviewDone"
+                  label="Done"
                   labelStyle={[navItemLabel, styles.navLabelColor]}
-                  />
-              )}
-              <IconButton
-                iconSize={BIG_NAV_ICON_SIZE}
-                icon="CheckeredFlag"
-                style={styles.bigNavButton}
-                borderColor={trekLogRed}
-                iconStyle={navIcon}
-                color={BLACKISH}
-                onPressFn={this.setActiveNav}
-                onPressArg="Stop"
-                label="Finish"
-                labelStyle={[navItemLabel, styles.navLabelColor]}
-              />
-              {numPts > 0 && (
+                />
                 <IconButton
                   iconSize={navIconSize}
                   icon="Map"
@@ -1357,39 +1386,11 @@ class LogTrek extends Component<
                   onPressArg="ShowMap"
                   label="Map"
                   labelStyle={[navItemLabel, styles.navLabelColor]}
-                  />
-              )}
-            </View>
-          )}
-          {reviewOk && (
-            <View style={[controlsArea, styles.caAdjust]}>
-              <IconButton
-                iconSize={navIconSize}
-                icon="ArrowBack"
-                style={styles.navButton}
-                iconStyle={navIcon}
-                borderColor={navItemBorderColor}
-                color={navIconColor}
-                onPressFn={this.setActiveNav}
-                onPressArg="ReviewDone"
-                label="Done"
-                labelStyle={[navItemLabel, styles.navLabelColor]}
-              />
-              <IconButton
-                iconSize={navIconSize}
-                icon="Map"
-                style={styles.navButton}
-                iconStyle={navIcon}
-                borderColor={navItemBorderColor}
-                color={navIconColor}
-                onPressFn={this.setActiveNav}
-                onPressArg="ShowMap"
-                label="Map"
-                labelStyle={[navItemLabel, styles.navLabelColor]}
-              />
-            </View>
-          )}
-        </View>
+                />
+              </View>
+            )}
+          </View>
+        }
       </NavMenu>
     );
   }

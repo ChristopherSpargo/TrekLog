@@ -1,5 +1,5 @@
 import React, { Component } from "react";
-import { View, Text, StyleSheet, Dimensions } from "react-native";
+import { View, Text, StyleSheet } from "react-native";
 import { observable, action } from "mobx";
 import { observer, inject } from "mobx-react";
 
@@ -11,7 +11,8 @@ import {
   NUMBERS_BAR_Z_INDEX,
   INVISIBLE_Z_INDEX,
   HEADER_HEIGHT,
-  TREK_TYPE_COLORS_OBJ
+  TREK_TYPE_COLORS_OBJ,
+  APP_VIEW_HEIGHT
 } from "./App";
 import TrekStats from "./TrekStatsComponent";
 import SvgButton from './SvgButtonComponent';
@@ -48,6 +49,7 @@ class NumbersBar extends Component<
 
   mS = this.props.mainSvc;
   uSvc = this.props.utilsSvc;
+  tS = this.props.trekSvc;
 
   constructor(props) {
     super(props);
@@ -76,7 +78,6 @@ class NumbersBar extends Component<
   };
 
   render() {
-    const { height } = Dimensions.get('window');
     const tInfo = this.props.trek;
     const {
       highTextColor,
@@ -93,7 +94,8 @@ class NumbersBar extends Component<
       ? tInfo.type + " in progress"
       : "No Label";
     const noLabel = labelText === "No Label";
-    const nHt = small ? 320 : (height - this.props.bottom - HEADER_HEIGHT);
+    const elevHt = this.tS.hasElevations(tInfo) ? 30 : 0;
+    const nHt = small ? (320 + elevHt) : (APP_VIEW_HEIGHT - this.props.bottom - HEADER_HEIGHT);
     const statsAreaHt = nHt;
     const areaHeight = statsAreaHt;
     const typeIconSize = 20;

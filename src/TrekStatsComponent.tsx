@@ -319,17 +319,16 @@ function toggleElevDisplay3() {
     selectOnTheme,
     mediumTextColor,
     secondaryColor,
-    pageBackground,
     disabledTextColor,
     rippleColor
   } = uiTheme.palette[mainSvc.colorTheme];
   const { fontRegular } = uiTheme;
+  const state = lS.logState.loggingState;
   const noSteps = !STEPS_APPLY[trek.type];
   const small = format === 'small';
   const carIconSize = small ? 12 : 14;
   const minItemWidth = 135;
   const minElevItemWidth = 60;
-  const timeFontSie = small ? 32 : 94
   const statLabelFontSize = small ? 18 : 24;
   const statValueFontSize = small ? 26 : 54;
   const statUnitsFontSize = small ? 20 : 33;
@@ -340,12 +339,9 @@ function toggleElevDisplay3() {
   const selectColor = bgImage ? selectOnFilm : selectOnTheme;
   const switchSys = sysChangeFn || mainSvc.switchMeasurementSystem;
   const haveElevs = tS.hasElevations(trek);
+  const timeFontSie = small ? 32 : (state === 'Review' && haveElevs ? 54 : 94);
 
   const styles = StyleSheet.create({
-    container: {
-      ...StyleSheet.absoluteFillObject,
-      backgroundColor: pageBackground
-    },
     statItem: {
       flex: 1,
       alignItems: "center",
@@ -384,12 +380,12 @@ function toggleElevDisplay3() {
       fontSize: statUnitsFontSize
     },
     bigStats: {
+      flex: 1,
       alignItems: "center",
       overflow: "hidden",
-      justifyContent: "center"
+      justifyContent: "space-around"
     },
     bigStatPair: {
-      flex: 1,
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between"
@@ -451,10 +447,12 @@ function toggleElevDisplay3() {
 
   return useObserver(() => (
     <View style={styles.bigStats}>
-      <StatItem
-        item={{ value: formattedDuration(), units: "", label: "Duration" }}
-        valueStyle={{ fontSize: timeFontSie }}
-      />
+      <View style={styles.bigStatPair}>
+        <StatItem
+          item={{ value: formattedDuration(), units: "", label: "Duration" }}
+          valueStyleAdj={{ fontSize: timeFontSie }}
+        />
+      </View>
       <View style={styles.bigStatPair}>
         <StatItem
           item={formattedDist()}

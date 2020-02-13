@@ -101,6 +101,7 @@ function NavMenu({
       color: navMenuTitleTextColor,
     },
     menuButton: {
+      minHeight: 55,
       flexDirection: "row",
       alignItems: "center",
       paddingVertical: 10,
@@ -108,7 +109,7 @@ function NavMenu({
     },
     menuButtonText: {
       fontFamily: fontRegular,
-      fontSize: 18,
+      fontSize: 20,
       color: navMenuTextColor,
       flex: 1,
     },
@@ -239,8 +240,9 @@ function NavMenu({
       </View>
     ));
 
-    return useObserver(() => (
-      <DrawerLayoutAndroid
+    // return useObserver(() => (
+      return  (
+        <DrawerLayoutAndroid
       ref={nav => navRef.current = nav} 
       drawerWidth={200}
       drawerLockMode={locked ? 'locked-closed' : 'unlocked'}
@@ -251,7 +253,7 @@ function NavMenu({
       renderNavigationView={() => navigationView}>
         {children}
       </DrawerLayoutAndroid>
-    ));
+    );
   }
 export default NavMenu;
 

@@ -1,6 +1,6 @@
 import { observable, action } from "mobx"
 import { DatePickerAndroid } from 'react-native'
-import { TrekInfo, TrekObj } from './TrekInfoModel';
+import { TrekInfo, TrekObj, ELEV_DATA_CHANGE_VERSION } from './TrekInfoModel';
 import { MainSvc, TrekType, DIST_UNIT_CHOICES, SortByTypes, ShowTypes,
          MeasurementSystemType, TREK_SELECT_BITS, ALL_SELECT_BITS, TREK_TYPE_HIKE, 
          RESP_OK, RESP_CANCEL } from './MainSvc'
@@ -782,7 +782,20 @@ export class FilterSvc {
     this.trekSvc.setTrekProperties(this.tInfo, trek, false);
     this.mainSvc.setCurrentMapType(trek.type === TREK_TYPE_HIKE ? 'terrain' 
                                                                 : this.mainSvc.defaultMapType)
-    if (trek.type === TREK_TYPE_HIKE && !trek.elevations) { // read and save elevation data for Hike if necessary
+    // if(trek.pointList.length > 1){
+    //   let badSpd = this.utilsSvc.fourSigDigits(
+    //     this.utilsSvc.computeImpliedSpeed(trek.pointList[1], trek.pointList[0]));
+    //   alert(JSON.stringify(trek.pointList[0],null,2) + 
+    //         JSON.stringify(trek.pointList[1],null,2) + 
+    //         JSON.stringify(trek.pointList[2],null,2) + '\n' + badSpd);
+  // if(badSpd > Math.max(trek.pointList[1].s, trek.pointList[0].s) * 3){ 
+      //   alert('Bad first point: ' + '\n' + badSpd + '\n' + trek.pointList[1].s + '\n' + 
+      //   (trek.pointList[1].d - trek.pointList[0].d));
+      // }
+    // }
+    if ((trek.type === TREK_TYPE_HIKE && !trek.elevations) ||
+        (trek.elevations && trek.dataVersion < ELEV_DATA_CHANGE_VERSION)) { 
+      // read and save elevation data for Trek if necessary
       this.trekSvc.setElevationProperties(this.tInfo)
       .then(() => {
         this.toastSvc.toastOpen({tType: 'Info', content: 'Retreived elevation data.'})
@@ -790,6 +803,7 @@ export class FilterSvc {
         trek.elevationGain = this.tInfo.elevationGain;
         trek.hills = this.tInfo.hills;
         trek.calories = this.tInfo.calories;
+        trek.dataVersion = this.tInfo.dataVersion = ELEV_DATA_CHANGE_VERSION;
         this.mainSvc.saveTrek(trek, 'none')
         this.setSelectedTrekIndex(indx);
       })

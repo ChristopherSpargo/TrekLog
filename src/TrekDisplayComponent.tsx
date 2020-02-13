@@ -7,11 +7,13 @@ import { RectButton } from 'react-native-gesture-handler'
 
 import { INTERVAL_MARKER_Z_INDEX, CURRENT_POS_MARKER_Z_INDEX, INITIAL_POS_MARKER_Z_INDEX, 
          PICTURE_MARKER_Z_INDEX, MAIN_PATH_Z_INDEX, TRACKING_POS_MARKER_Z_INDEX,
-         SHORT_CONTROLS_HEIGHT, CONTROLS_HEIGHT,
-         HEADER_HEIGHT,
+         SHORT_CONTROLS_HEIGHT, CONTROLS_HEIGHT, _3D_CAMERA_PITCH,
+         HEADER_HEIGHT, APP_VIEW_HEIGHT, APP_VIEW_WIDTH,
          semitransWhite_8,
          semitransWhite_5,
          semitransBlack_5,
+         _2D_CAMERA_PITCH_STR,
+         _3D_CAMERA_PITCH_STR,
         } from './App';
 import SpeedDial, {SpeedDialItem} from './SpeedDialComponent';
 import { TrekInfo, TrekPoint } from './TrekInfoModel';
@@ -25,7 +27,7 @@ import { LoggingSvc } from './LoggingService';
 import { RangeDataPathsObj, INTERVAL_AREA_HEIGHT } from './IntervalSvc';
 import FadeInTemp from './FadeInTempComponent';
 import TrackingStatusBar from './TrackingStatusBar';
-import { MainSvc, MapType } from './MainSvc';
+import { MainSvc, MapType, TREK_TYPE_HIKE } from './MainSvc';
 
 export type mapDisplayModeType = "normal" | "noControls" | "noIntervals" | "noSpeeds";
 
@@ -139,7 +141,8 @@ export const StdMapStyle =
 @observer
 class TrekDisplay extends Component<{
   trek: TrekInfo,             // trek whos map is being displayed
-  displayMode : mapDisplayModeType,
+  badPoints ?: TrekPoint[];
+  displayMode: mapDisplayModeType,
   intervalMarkers ?: LatLng[],
   intervalLabelFn ?: Function,
   selectedInterval ?: number,
@@ -148,6 +151,7 @@ class TrekDisplay extends Component<{
   layoutOpts : string,
   showControls : boolean,     // show title and controls overlay on map if true
   mapType : MapType,          // current map type (Sat/Terrain/Std)
+  mapPitch : number,          // pitch angle for camera
   changeMapFn : Function,     // function to call to switch map type
   changeZoomFn : Function,    // switch between zoomed-in or out
   speedDialIcon ?: string,    // icon for speed dial trigger
@@ -156,6 +160,7 @@ class TrekDisplay extends Component<{
   markerDragFn ?: Function,   // function to call if interval marker dragged
   useCameraFn ?: Function,    // function to call if user takes picture or video while logging
   showImagesFn ?: Function,   // function to call if user taps an image marker on the map
+  showImageMarkers ?: boolean, // show image markers if true or undefined
   nextFn ?: Function,         // if present, display "right" button on map and call this function when pressed
   prevFn ?: Function,         // if present, display "left" button on map and call this function when pressed
   rangeDataObj ?: RangeDataPathsObj,  // if present, show different colored PolyLine segements for path
@@ -195,11 +200,13 @@ class TrekDisplay extends Component<{
   currentImageSetIndex : number;
   backgroundTimeoutID : number;
 
+
   initRegionLatDelta = 0.090;     // amount of latitude to show on initial map render
   initRegionLngDelta = 0.072;     // amount of longitude to show on initial map render
 
-  currRegionLatDelta = 0.05; //0.015;
-  currRegionLngDelta = 0.04; //0.01211;
+  currRegionLatDelta = this.props.trek.type === TREK_TYPE_HIKE ? 0.05 : 0.015;
+  currRegionLngDelta = this.props.trek.type === TREK_TYPE_HIKE ? 0.04 : 0.01211;
+  currCameraZoom = this.props.trek.type === TREK_TYPE_HIKE ? 14 : 15;
 
   currRegion : any = {
     latitude: 34,
@@ -218,8 +225,23 @@ class TrekDisplay extends Component<{
     if (prevProps.mapType !== this.props.mapType){ 
       this.forceUpdate();
     }
-    if (this.mode !== this.props.layoutOpts ||
-      prevProps.rateRangeObj !== this.props.rangeDataObj){ 
+    if (prevProps.mapPitch !== this.props.mapPitch){
+      this.resetPitch();
+    }
+    // check need to recenter the map if watching current position
+    if (this.mode === 'Current' && this.props.pathToCurrent.length && this.mapViewRef) {
+      let minY = this.props.mapPitch === _3D_CAMERA_PITCH ? 120 : 80;
+      let p = this.props.pathToCurrent[this.props.pathToCurrent.length- 1];
+      this.mapViewRef.pointForCoordinate({latitude: p.l.a, longitude: p.l.o})
+      .then((pt) => {
+        if (pt.x < 20 || pt.y < minY || pt.x > APP_VIEW_WIDTH - 20 || pt.y > APP_VIEW_HEIGHT - 80){
+          this.mapViewRef.animateCamera({center: {latitude: p.l.a, longitude: p.l.o}}, 
+            {duration: 500});
+        }
+      })
+      .catch((err) => alert(err))
+    }
+    if (this.mode !== this.props.layoutOpts ){ 
         this.mode = this.props.layoutOpts;
       this.setLayout();
     }
@@ -238,6 +260,7 @@ class TrekDisplay extends Component<{
             let bottomPad = (this.props.rangeDataObj && this.props.showControls) ? 200 : 50;
             this.mapViewRef.fitToCoordinates(this.props.selectedPath,
                     {edgePadding: {top: topPad, right: 50, bottom: bottomPad, left: 50}, animated: true});
+            this.resetPitch(1500);
           }
         } 
         // otherwise just center map at interval marker
@@ -260,8 +283,8 @@ class TrekDisplay extends Component<{
     if (this.mode !== 'Open') {
       this.currRegion.latitude        = r.latitude;
       this.currRegion.longitude       = r.longitude;
-      this.currRegion.latitudeDelta   = r.latitudeDelta;
-      this.currRegion.longitudeDelta  = r.longitudeDelta;
+      // this.currRegion.latitudeDelta   = r.latitudeDelta;
+      // this.currRegion.longitudeDelta  = r.longitudeDelta;
 
     }
   }
@@ -271,8 +294,8 @@ class TrekDisplay extends Component<{
     if (this.mode === 'Open') {
       this.currRegion.latitude        = r.latitude;
       this.currRegion.longitude       = r.longitude;
-      this.currRegion.latitudeDelta   = r.latitudeDelta;
-      this.currRegion.longitudeDelta  = r.longitudeDelta;
+      // this.currRegion.latitudeDelta   = r.latitudeDelta;
+      // this.currRegion.longitudeDelta  = r.longitudeDelta;
 
     }
   }
@@ -285,14 +308,23 @@ class TrekDisplay extends Component<{
     }
   }
 
-  // set the camera center to the given point and the zoom to TREK_ZOOM_CURRENT
+  // set the camera center to the given point
   resetCameraCenter = (point: TrekPoint) => {
     if (point){
       this.currRegion.latitude        = point.l.a;
       this.currRegion.longitude       = point.l.o;
-      this.currRegion.latitudeDelta   = this.currRegionLatDelta;
-      this.currRegion.longitudeDelta  = this.currRegionLngDelta;
+      // this.currRegion.latitudeDelta   = this.currRegionLatDelta;
+      // this.currRegion.longitudeDelta  = this.currRegionLngDelta;
     }
+  }
+
+  // set the pitch angle of the camera
+  resetPitch = (delay = 200) => {
+    setTimeout(() => {
+      if(this.mapViewRef){
+        this.mapViewRef.animateCamera({ pitch: this.props.mapPitch }, {duration: 500});
+      }
+    }, delay)
   }
 
   // change the focus or zoom level on the map
@@ -308,21 +340,28 @@ class TrekDisplay extends Component<{
           this.mapViewRef.fitToCoordinates(path,
                                           {edgePadding: {top: topPadding, right: 50, 
                                                          bottom: bPadding, left: 50}, 
-                                          animated: true});
+                                          animated: false});
+          this.resetPitch();
         }
         break;
       case 'Interval':
         if (this.mapViewRef) { 
           this.mapViewRef.fitToCoordinates(path,
                                           {edgePadding: {top: topPadding, right: 50, 
-                                           bottom: 50, left: 50}, animated: true});
+                                           bottom: 50, left: 50}, animated: false});
+          this.resetPitch();
         }
         break;
       case 'Current':
       case 'NewAll':        
       case 'Start':
         if (this.mapViewRef) { 
-          this.mapViewRef.animateToRegion({...this.currRegion}, 500);
+          this.mapViewRef.animateCamera(
+            {center: {latitude: this.currRegion.latitude, longitude: this.currRegion.longitude},
+             zoom: this.currCameraZoom,
+             pitch: this.props.mapPitch
+            },
+            {duration: 1000});
         }
         if (this.mode === 'NewAll'){
           this.mode = 'All';
@@ -403,19 +442,21 @@ class TrekDisplay extends Component<{
   }
 
   takeMapSnapshot () {
-    const snapshot = this.mapViewRef.takeSnapshot({
-      format: 'jpg',   // image formats: 'png', 'jpg' (default: 'png')
-      quality: .1,
-      result: 'file'   // result types: 'file', 'base64' (default: 'file')
-    });
-    snapshot.then((uri) => {
-      this.props.takeSnapshotFn(uri);
-    });
+    if(this.mapViewRef){      
+      const snapshot = this.mapViewRef.takeSnapshot({
+        format: 'jpg',   // image formats: 'png', 'jpg' (default: 'png')
+        quality: .1,
+        result: 'file'   // result types: 'file', 'base64' (default: 'file')
+      });
+      snapshot.then((uri) => {
+        this.props.takeSnapshotFn(uri);
+      });
+    }
   }  
   
   render () {
     const { trekLogYellow, highTextColor, secondaryColor, matchingMask_8,
-            matchingMask_3, contrastingMask_5, pageBackground, pathColor, navItemBorderColor, 
+            pageBackground, pathColor, 
             locationRadiusBorder, intervalMarkerBorderColor, intervalMarkerBackgroundColor,
             trackingMarkerRadiusBorder, trackingMarkerPathColor, dividerColor,
             primaryColor, rippleColor, footerButtonText,
@@ -430,8 +471,13 @@ class TrekDisplay extends Component<{
     const triggerIcon = this.props.speedDialIcon || "Location";
     const radiusBg = "rgba(18, 46, 59, .5)";
     const trekImages = this.props.trek.trekImages && (this.props.trek.trekImages.length !== 0);
-    const imageMarkerIconSize = 18;
+    const showImgMarkers = trekImages && 
+          (this.props.showImageMarkers === undefined || this.props.showImageMarkers === true);
+    const imageMarkerIconSize = 10;
+    const imageMarkerSize = 18;
+    const intervalMarkerSize = 20;
     const imageSelectorWidth = 50;
+    const imageSelectorBorderColor = semitransBlack_5;
     const selectedIntervalColor = '#660000';//trekLogOrange; //'rgba(255, 167, 38,.8)';  //"#ff704d";
     const showNext = this.props.nextFn !== undefined;
     const showPrev = this.props.prevFn !== undefined;
@@ -501,29 +547,30 @@ class TrekDisplay extends Component<{
         overflow: "hidden"
       },
       intervalMarker: {
-        width: 20,
-        height: 20,
+        width: intervalMarkerSize,
+        height: intervalMarkerSize,
         borderWidth: 1,
-        borderRadius: 10,
+        borderRadius: intervalMarkerSize/2,
         borderColor: intervalMarkerBorderColor,
         backgroundColor: intervalMarkerBackgroundColor,
         justifyContent: "center",
         alignItems: "center",
       },
       selected: {
-        width: 32,
-        height: 32,
-        borderRadius: 16,
+        width: 30,
+        height: 30,
+        borderRadius: 15,
         borderColor: selectedIntervalColor,
       },
       finalBg: {
         backgroundColor: "red"
       },
-      finalText: {
-        color: "white",
+      selectedText: {
+        fontSize: 13,
+        fontFamily: fontBold,
       },
       intervalTxt: {
-        fontSize: 12,
+        fontSize: 11,
         fontFamily: fontRegular,
         color: "white",
       },
@@ -535,10 +582,10 @@ class TrekDisplay extends Component<{
         width: imageMarkerIconSize,
       },
       imageMarker: {
-        width: 24,
-        height: 24,
+        width: imageMarkerSize,
+        height: imageMarkerSize,
         borderWidth: 2,
-        borderRadius: 12,
+        borderRadius: imageMarkerSize/2,
         borderColor: 'firebrick',
         backgroundColor: pageBackground,
         justifyContent: "center",
@@ -567,7 +614,7 @@ class TrekDisplay extends Component<{
         alignItems: "center",
       },
       imageSelectorStyle: {
-        backgroundColor: matchingMask_3, 
+        backgroundColor: semitransWhite_8, 
         borderRadius: imageSelectorWidth/2,
         borderStyle: "solid",
         borderWidth: 1,
@@ -694,13 +741,13 @@ class TrekDisplay extends Component<{
             {index !== last &&
               <View style={[styles.intervalMarker, props.selection === index ? styles.selected : {}]}>
                 <Text style={[styles.intervalTxt,
-                              (index === props.markers.length - 1) ? styles.finalText : {}]}>{index + 1}</Text>
+                              props.selection === index ? styles.selectedText : {}]}>{index + 1}</Text>
               </View>
             }
             {index === last &&
               <View style={styles.markerRadius}>
                 <View style={[styles.intervalMarker, props.selection === index ? styles.selected : {}, styles.finalBg]}>
-                  <Text style={[styles.intervalTxt, styles.finalText]}>{index + 1}</Text>
+                  <Text style={styles.intervalTxt}>{index + 1}</Text>
                 </View>
               </View>
             }
@@ -735,280 +782,301 @@ class TrekDisplay extends Component<{
       )})
     )}
 
+    const BadPts = (props: any) => {
+      return (
+        props.points.map((item, index) => {
+          return (
+          <Marker
+            zIndex={PICTURE_MARKER_Z_INDEX}
+            key={index}
+            anchor={{x: 0.5, y: 0.5}}
+            coordinate={{latitude: item.l.a, longitude: item.l.o}}
+            tracksViewChanges={false}
+          >
+            <View style={[styles.marker, {backgroundColor: 'black'}]}/>
+          </Marker>
+      )})
+    )}
+
     const  mapTypes : SpeedDialItem[] = 
-              [ {icon: 'Orbit', label: 'Satellite', value: 'hybrid', lStyle: styles.sdLabelStyle},
-                {icon: 'Landscape', label: 'Terrain', value: 'terrain', lStyle: styles.sdLabelStyle},
-                {icon: 'Highway', label: 'Standard', value: 'standard', lStyle: styles.sdLabelStyle}];
+              [ {icon: this.props.mapPitch === _3D_CAMERA_PITCH ? 'TwoInBox' : 'ThreeInBox', 
+                 value: this.props.mapPitch === _3D_CAMERA_PITCH ? 
+                                                _2D_CAMERA_PITCH_STR : _3D_CAMERA_PITCH_STR},
+                {icon: 'Orbit', value: 'hybrid'},
+                {icon: 'Landscape', value: 'terrain'},
+                {icon: 'Highway', value: 'standard'}
+              ];
 
 
     return (
-      <View style={styles.container}>
-        {(numPts > 0) &&
-          <MapView              // Map that shows wile recording
-              ref={mv => this.mapViewRef = mv} 
-              onLayout={this.setLayout}
-              style={styles.map}
-              onRegionChangeComplete={this.regionChangeDone}
-              onRegionChange={this.regionChange}
-              onPanDrag={() => this.mapMoved()}
-              onPress={() => this.toggleShowMapControls()}
-              moveOnMarkerPress={false}
-              initialRegion={{latitude: path[numPts-1].latitude,
-                longitude: path[numPts-1].longitude,
-                latitudeDelta: this.initRegionLatDelta,
-                longitudeDelta: this.initRegionLngDelta}
-              }
-              region={this.mode === 'Current' ? 
-                { latitude: path[numPts-1].latitude,
-                  longitude: path[numPts-1].longitude,
-                  latitudeDelta: this.currRegion.latitudeDelta,
-                  longitudeDelta: this.currRegion.longitudeDelta
-                } : undefined}
-              mapType={mType}
-              customMapStyle={StdMapStyle}
-          >
-            {(trackingMarker) &&
-              <Marker
-                zIndex={TRACKING_POS_MARKER_Z_INDEX}
-                anchor={{x: 0.5, y: 0.5}}
-                tracksViewChanges={false}
-                coordinate={{latitude: trackingMarker.l.a, longitude: trackingMarker.l.o}}
-                draggable={(trackingMarker && this.props.courseMarkerDragFn) ? true : undefined}
-                onDragEnd={(event) => this.props.courseMarkerDragFn(event.nativeEvent.coordinate)}
-                >
-                <View style={styles.trackingMarkerRadius}>
-                  <View style={styles.trackingMarker}/>
-                </View>
-              </Marker>
-            }
-            {(this.props.trackingPath) &&
-              <Polyline
-                coordinates={this.props.trackingPath}
-                strokeColor={trackingMarkerPathColor}
-                strokeWidth={7}
-              />
-            }
+          <View style={styles.container}>
             {(numPts > 0) &&
-              <Marker
-                zIndex={INITIAL_POS_MARKER_Z_INDEX}
-                anchor={{x: 0.5, y: 0.5}}
-                tracksViewChanges={false}
-                coordinate={path[0]}
-              >
-                <View style={styles.markerRadius}>
-                  <View style={styles.marker}/>
-                </View>
-              </Marker>
-            }
-            {((numPts > 1) && !markers) &&
-              <Marker
-                zIndex={CURRENT_POS_MARKER_Z_INDEX}
-                anchor={{x: 0.5, y: 0.5}}
-                tracksViewChanges={false}
-                coordinate={path[numPts-1]}
-                draggable={(trackingMarker && this.props.trekMarkerDragFn) ? true : undefined}
-                onDragEnd={(event) => this.props.trekMarkerDragFn(event.nativeEvent.coordinate)}
-              >
-                <View style={[styles.markerRadius, {borderColor: "#99c2ff"}]}>
-                  <View style={styles.currMarker}/>
-                </View>
-              </Marker>
-            }
-            {((numPts > 1) && markers) &&
-              <Polyline
-                coordinates={this.props.selectedPath}
-                strokeColor={selectedIntervalColor}
-                strokeWidth={7}
-              />
-            }
-            {(numPts > 1 && !rangesObj) &&
-              <Polyline
-                zIndex={MAIN_PATH_Z_INDEX}
-                coordinates={path}
-                strokeColor={pathColor}
-                strokeWidth={3}
-              />
-            }
-            {(numPts > 1 && rangesObj) && 
-              rangesObj.lines.map((pathSeg, idx) => {
-                let line = [...pathSeg.lineSegment];
-                return (
-                <Polyline
-                  key={idx}
-                  zIndex={MAIN_PATH_Z_INDEX}
-                  coordinates={line}
-                  strokeColor={pathSeg.fillColor}
-                  strokeWidth={3}
-                />)
-              }
-              )
-            }
-            {((numPts > 1) && markers) &&
-              <Intervals 
-                lableFn={this.props.intervalLabelFn}
-                selection={selection}
-                selectFn={this.props.selectFn}
-                markers={markers}
-              />
-            }
-            {((numPts > 0) && trekImages) &&
-              <Images 
-                images={this.props.trek.trekImages}
-                imageCount={this.props.trek.trekImageCount}
-              />
-            }
-          </MapView>
-        }
-        <View style={styles.menuTouchArea}/>
-        {(showControls && numPts > 0 && this.props.rangeDataObj) &&
-          <View style={styles.legendLocation}>
-          <FadeInTemp dimOpacity={0.2} onPressFn={this.props.toggleRangeDataFn} viewTime={5000}>            
-            <View style={styles.legendArea}>
-              <View style={{flex: 1}}>               
-                <Text style={styles.legendHeader}>{rangesObj.legend.title}</Text>
-                <View style={styles.legendRangesArea}>
-                  {rangesObj.legend.ranges.map((range) =>
-                      <View style={styles.legendRange}>
-                        <View style={[styles.legendRangeValue, {borderColor: range.color}]}>
-                          <Text style={styles.legendRangeText}>{range.start}</Text>
-                          <Text style={[styles.legendRangeText]}> - </Text>
-                          <Text style={styles.legendRangeText}>{range.end}</Text>
-                        </View>
-                      </View>
-                    )
+              <MapView              // Map that shows wile recording
+                  ref={mv => this.mapViewRef = mv} 
+                  onLayout={this.setLayout}
+                  style={styles.map}
+                  onRegionChangeComplete={this.regionChangeDone}
+                  onRegionChange={this.regionChange}
+                  onPanDrag={() => this.mapMoved()}
+                  onPress={() => this.toggleShowMapControls()}
+                  moveOnMarkerPress={false}
+                  initialCamera={{center: {latitude: path[numPts-1].latitude,
+                    longitude: path[numPts-1].longitude},
+                    pitch: this.props.mapPitch,
+                    heading: 0,
+                    altitude: 0,
+                    zoom: this.currCameraZoom,}
                   }
-                </View>
-              </View>
-            </View>
-          </FadeInTemp>
-          </View>
-        }
-        {(numPts > 0 && this.props.trackingTime) &&
-          <TrackingStatusBar
-            colorTheme={this.mS.colorTheme}
-            trackingHeader={this.props.trackingHeader}
-            headerLeft={!logOn}
-            trackingDiffDist={this.props.trackingDiffDist}
-            trackingDiffDistStr={this.props.trackingDiffDistStr}
-            trackingDiffTime={this.props.trackingDiffTime}
-            trackingDiffTimeStr={this.props.trackingDiffTimeStr}
-            trackingTime={this.props.trackingTime}
-            barTop={logOn ? CONTROLS_HEIGHT : 0}
-            logOn={logOn}
-          />
-        }
-        {(showControls && numPts > 0) &&
-          <SpeedDial
-            bottom={this.props.bottom + minSDOffset + 60}
-            // right={10}
-            icon={triggerIcon}
-            triggerValue={this.props.speedDialValue}
-            selectFn={this.props.changeZoomFn}
-            style={styles.speedDialTrigger}
-            horizontal={true}
-            iconSize="Large"
-            fadeOut={0}
-          />
-        }
-        {(showControls && logOn && this.props.useCameraFn && (numPts > 0)) &&
-          <SpeedDial
-            icon="Camera"
-            bottom={this.props.bottom + minSDOffset + 120}
-            // right={10}
-            selectFn={this.callUseCameraFn}
-            style={styles.speedDialTrigger}
-            iconSize="Large"
-            fadeOut={0}
-          />
-        }
-        {(showControls && numPts > 0) &&
-          <SpeedDial
-            top={HEADER_HEIGHT + 10}
-            items={mapTypes}
-            icon="LayersOutline"
-            menuColor="transparent"
-            selectFn={this.props.changeMapFn}
-            style={styles.speedDialTrigger}
-            itemIconsStyle={{backgroundColor: 'white', borderColor: 'black'}}
-            horizontal={true}
-            iconSize="Large"
-            itemSize="Big"
-            fadeOut={5000}
-            autoClose={5000}
-          />
-        }
-        {this.props.pauseFn &&
-          <View style={styles.pauseButtonArea}>
-            <IconButton 
-              style={styles.pauseButtonStyle}
-              iconSize={40}
-              icon={!this.props.isPaused ? 'Pause' : 'Play'}
-              color={semitransWhite_8}
-              iconStyle={navIcon}
-              onPressFn={this.props.pauseFn}
-            />
-          </View>
-        }
-        {showControls && (showPrev || showNext) &&
-          <View style={styles.imageSelectorArea}>
-            {showPrev &&
-              <View style={styles.imageSelectorPrev}>
-                <IconButton 
-                  style={styles.imageSelectorStyle}
-                  iconSize={imageSelectorWidth}
-                  icon="ChevronLeft"
-                  color={contrastingMask_5}
-                  borderColor={navItemBorderColor}
-                  iconStyle={navIcon}
-                  onPressFn={this.callPrevFn}
-                />
-              </View>
-            }
-            {showNext &&
-              <View style={styles.imageSelectorNext}>
-                <IconButton
-                  style={styles.imageSelectorStyle}
-                  iconSize={imageSelectorWidth}
-                  icon="ChevronRight"
-                  color={contrastingMask_5}
-                  borderColor={navItemBorderColor}
-                  iconStyle={navIcon}
-                  onPressFn={this.callNextFn}
-                />
-              </View>
-            }
-          </View>
-        }
-        {this.props.takeSnapshotFn &&
-          <View style={[styles.footer]}>
-              <RectButton
-                rippleColor={rippleColor}
-                style={{flex: 1}}
-                onPress={() => this.props.takeSnapshotFn(undefined)}>
-                <View style={[footerButton, { height: footerHeight }]}>
-                  <Text
-                    style={[footerButtonText, { color: primaryColor }]}
+                  mapType={mType}
+                  customMapStyle={StdMapStyle}
+              >
+                {(trackingMarker) &&
+                  <Marker
+                    zIndex={TRACKING_POS_MARKER_Z_INDEX}
+                    anchor={{x: 0.5, y: 0.5}}
+                    tracksViewChanges={false}
+                    coordinate={{latitude: trackingMarker.l.a, longitude: trackingMarker.l.o}}
+                    draggable={(trackingMarker && this.props.courseMarkerDragFn) ? true : undefined}
+                    onDragEnd={(event) => this.props.courseMarkerDragFn(event.nativeEvent.coordinate)}
+                    >
+                    <View style={styles.trackingMarkerRadius}>
+                      <View style={styles.trackingMarker}/>
+                    </View>
+                  </Marker>
+                }
+                {(this.props.trackingPath) &&
+                  <Polyline
+                    coordinates={this.props.trackingPath}
+                    strokeColor={trackingMarkerPathColor}
+                    strokeWidth={7}
+                  />
+                }
+                {(numPts > 0) &&
+                  <Marker
+                    zIndex={INITIAL_POS_MARKER_Z_INDEX}
+                    anchor={{x: 0.5, y: 0.5}}
+                    tracksViewChanges={false}
+                    coordinate={path[0]}
                   >
-                    {canTxt}
-                  </Text>
+                    <View style={styles.markerRadius}>
+                      <View style={styles.marker}/>
+                    </View>
+                  </Marker>
+                }
+                {((numPts > 1) && !markers) &&
+                  <Marker
+                    zIndex={CURRENT_POS_MARKER_Z_INDEX}
+                    anchor={{x: 0.5, y: 0.5}}
+                    tracksViewChanges={false}
+                    coordinate={path[numPts-1]}
+                    draggable={(trackingMarker && this.props.trekMarkerDragFn) ? true : undefined}
+                    onDragEnd={(event) => this.props.trekMarkerDragFn(event.nativeEvent.coordinate)}
+                  >
+                    <View style={[styles.markerRadius, {borderColor: "#99c2ff"}]}>
+                      <View style={styles.currMarker}/>
+                    </View>
+                  </Marker>
+                }
+                {((numPts > 1) && markers) &&
+                  <Polyline
+                    coordinates={this.props.selectedPath}
+                    strokeColor={selectedIntervalColor}
+                    strokeWidth={7}
+                  />
+                }
+                {(numPts > 1 && !rangesObj) &&
+                  <Polyline
+                    zIndex={MAIN_PATH_Z_INDEX}
+                    coordinates={path}
+                    strokeColor={pathColor}
+                    strokeWidth={3}
+                  />
+                }
+                {(numPts > 1 && rangesObj) && 
+                  rangesObj.lines.map((pathSeg, idx) => {
+                    let line = [...pathSeg.lineSegment];
+                    return (
+                    <Polyline
+                      key={idx}
+                      zIndex={MAIN_PATH_Z_INDEX}
+                      coordinates={line}
+                      strokeColor={pathSeg.fillColor}
+                      strokeWidth={3}
+                    />)
+                  }
+                  )
+                }
+                {((numPts > 1) && markers) &&
+                  <Intervals 
+                    lableFn={this.props.intervalLabelFn}
+                    selection={selection}
+                    selectFn={this.props.selectFn}
+                    markers={markers}
+                  />
+                }
+                {((numPts > 0) && showImgMarkers) &&
+                  <Images 
+                    images={this.props.trek.trekImages}
+                    imageCount={this.props.trek.trekImageCount}
+                  />
+                }
+                {((numPts > 0) && this.props.badPoints !== undefined) &&
+                  <BadPts 
+                    points={this.props.badPoints}
+                  />
+                }
+              </MapView>
+            }
+            <View style={styles.menuTouchArea}/>
+            {(showControls && numPts > 0 && this.props.rangeDataObj) &&
+              <View style={styles.legendLocation}>
+              <FadeInTemp dimOpacity={0.2} onPressFn={this.props.toggleRangeDataFn} viewTime={5000}>            
+                <View style={styles.legendArea}>
+                  <View style={{flex: 1}}>               
+                    <Text style={styles.legendHeader}>{rangesObj.legend.title}</Text>
+                    <View style={styles.legendRangesArea}>
+                      {rangesObj.legend.ranges.map((range) =>
+                          <View style={styles.legendRange}>
+                            <View style={[styles.legendRangeValue, {borderColor: range.color}]}>
+                              <Text style={styles.legendRangeText}>{range.start}</Text>
+                              <Text style={[styles.legendRangeText]}> - </Text>
+                              <Text style={styles.legendRangeText}>{range.end}</Text>
+                            </View>
+                          </View>
+                        )
+                      }
+                    </View>
+                  </View>
                 </View>
-              </RectButton>
-              <RectButton
-                rippleColor={rippleColor}
-                style={{flex: 1}}
-                onPress={() => this.takeMapSnapshot()}>
-                <View style={[footerButton, { height: footerHeight }]}>
-                  <Text style={[footerButtonText, { color: primaryColor }]}>
-                    {okPrompt}
-                  </Text>
-                  <Text style={[footerButtonText, { color: primaryColor }]}>
-                    {okCourse}
-                  </Text>
+              </FadeInTemp>
+              </View>
+            }
+            {(numPts > 0 && this.props.trackingTime) &&
+              <TrackingStatusBar
+                colorTheme={this.mS.colorTheme}
+                trackingHeader={this.props.trackingHeader}
+                headerLeft={!logOn}
+                trackingDiffDist={this.props.trackingDiffDist}
+                trackingDiffDistStr={this.props.trackingDiffDistStr}
+                trackingDiffTime={this.props.trackingDiffTime}
+                trackingDiffTimeStr={this.props.trackingDiffTimeStr}
+                trackingTime={this.props.trackingTime}
+                barTop={logOn ? CONTROLS_HEIGHT : 0}
+                logOn={logOn}
+              />
+            }
+            {(showControls && numPts > 0) &&
+              <SpeedDial
+                bottom={this.props.bottom + minSDOffset + 60}
+                // right={10}
+                icon={triggerIcon}
+                triggerValue={this.props.speedDialValue}
+                selectFn={this.props.changeZoomFn}
+                style={styles.speedDialTrigger}
+                horizontal={true}
+                iconSize="Large"
+                fadeOut={0}
+              />
+            }
+            {(showControls && logOn && this.props.useCameraFn && (numPts > 0)) &&
+              <SpeedDial
+                icon="Camera"
+                bottom={this.props.bottom + minSDOffset + 120}
+                // right={10}
+                selectFn={this.callUseCameraFn}
+                style={styles.speedDialTrigger}
+                iconSize="Large"
+                fadeOut={0}
+              />
+            }
+            {(showControls && numPts > 0) &&
+              <SpeedDial
+                top={HEADER_HEIGHT + 10}
+                items={mapTypes}
+                icon="LayersOutline"
+                menuColor="transparent"
+                selectFn={this.props.changeMapFn}
+                style={styles.speedDialTrigger}
+                itemIconsStyle={{backgroundColor: 'white', borderColor: 'black'}}
+                horizontal={true}
+                iconSize="Large"
+                itemSize="Big"
+                fadeOut={5000}
+                autoClose={5000}
+              />
+            }
+            {this.props.pauseFn &&
+              <View style={styles.pauseButtonArea}>
+                <IconButton 
+                  style={styles.pauseButtonStyle}
+                  iconSize={40}
+                  icon={!this.props.isPaused ? 'Pause' : 'Play'}
+                  color={semitransWhite_8}
+                  iconStyle={navIcon}
+                  onPressFn={this.props.pauseFn}
+                />
+              </View>
+            }
+            {showControls && (showPrev || showNext) &&
+              <View style={styles.imageSelectorArea}>
+                {showPrev &&
+                  <View style={styles.imageSelectorPrev}>
+                    <IconButton 
+                      style={styles.imageSelectorStyle}
+                      iconSize={imageSelectorWidth}
+                      icon="ChevronLeft"
+                      color={"black"}
+                      borderColor={imageSelectorBorderColor}
+                      iconStyle={navIcon}
+                      onPressFn={this.callPrevFn}
+                    />
+                  </View>
+                }
+                {showNext &&
+                  <View style={styles.imageSelectorNext}>
+                    <IconButton
+                      style={styles.imageSelectorStyle}
+                      iconSize={imageSelectorWidth}
+                      icon="ChevronRight"
+                      color={"black"}
+                      borderColor={imageSelectorBorderColor}
+                      iconStyle={navIcon}
+                      onPressFn={this.callNextFn}
+                    />
+                  </View>
+                }
+              </View>
+            }
+            {this.props.takeSnapshotFn &&
+              <View style={[styles.footer]}>
+                  <RectButton
+                    rippleColor={rippleColor}
+                    style={{flex: 1}}
+                    onPress={() => this.props.takeSnapshotFn(undefined)}>
+                    <View style={[footerButton, { height: footerHeight }]}>
+                      <Text
+                        style={[footerButtonText, { color: primaryColor }]}
+                      >
+                        {canTxt}
+                      </Text>
+                    </View>
+                  </RectButton>
+                  <RectButton
+                    rippleColor={rippleColor}
+                    style={{flex: 1}}
+                    onPress={() => this.takeMapSnapshot()}>
+                    <View style={[footerButton, { height: footerHeight }]}>
+                      <Text style={[footerButtonText, { color: primaryColor }]}>
+                        {okPrompt}
+                      </Text>
+                      <Text style={[footerButtonText, { color: primaryColor }]}>
+                        {okCourse}
+                      </Text>
+                    </View>
+                  </RectButton>
                 </View>
-              </RectButton>
-            </View>
-        }
-      </View>
+            }
+          </View>
     )   
   }
 }

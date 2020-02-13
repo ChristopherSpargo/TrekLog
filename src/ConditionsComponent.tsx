@@ -60,7 +60,7 @@ function Conditions() {
     // Get the current GPS position
     locationSvc.getCurrentLocation((location: Location) => {   
         currLocation.current = {latitude: location.latitude, longitude: location.longitude};
-        locationSvc.stopGeolocation();
+        // locationSvc.stopGeolocation();
         getWeatherConds();
       },
       { enableHighAccuracy: true, 

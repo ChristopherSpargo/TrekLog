@@ -613,6 +613,7 @@ export class TrekDetails extends Component<{
                 <TrekImageListDisplay
                   tInfo={tI}
                   trekId={tI.sortDate}
+                  imageCount={tI.trekImageCount}
                   imageStyle={styles.trekImage}
                   focusImageStyle={styles.trekImage}
                   showImagesFn={this.props.showImagesFn}

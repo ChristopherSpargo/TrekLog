@@ -26,7 +26,10 @@ const SPEED_RANGES_MPS = [
   64 * MPH_TO_MPS
 ];
 const DIST_FILTER_VALUES = [2, 4, 8, 12, 20, 40, 64];
-export const SMOOTH_INTERVAL = 12; // smooth route and recompute distance every so many points
+export const STATIONARY_DIST_FILTER_VALUE = 5;  // m to move before pos tracking resumes after stopping
+export const STOPPED_TIME_MS = 5000;
+const ACTIVITY_INTERVAL_VALUES = [1000, 1000, 1000, 1000, 1000, 1000, 1000];
+export const SMOOTH_INTERVAL = 10; // smooth route and recompute distance every so many points
 export const MIN_SIG_SPEED = {
   Walk: 0.2235,
   Run: 0.447,
@@ -35,11 +38,11 @@ export const MIN_SIG_SPEED = {
   Board: .447,
   Drive: 1.341
 }; // used to smooth based on type
-export const KINK_FACTOR = 1.7; // min height (meters) of "kinks" in the route (think triangle height)
-export const MIN_POINT_DIST_LIMITED_WALK = 1; // minimum relevant when walking limited
-export const MIN_POINT_DIST_LIMITED_RUN = 1; // minimum relevant distance when running limited
-export const MIN_POINT_DIST_LIMITED_BIKE = 3; // minimum relevant distance when biking limited
-export const MIN_POINT_DIST_LIMITED_HIKE = 1; // minimum relevant distance when hiking limited
+export const KINK_FACTOR = 1.7; // min height (m) of "kinks" to keep in the route (triangle height)
+export const MIN_POINT_DIST_LIMITED_WALK  = 1; // minimum relevant when walking limited
+export const MIN_POINT_DIST_LIMITED_RUN   = 1; // minimum relevant distance when running limited
+export const MIN_POINT_DIST_LIMITED_BIKE  = 3; // minimum relevant distance when biking limited
+export const MIN_POINT_DIST_LIMITED_HIKE  = 1; // minimum relevant distance when hiking limited
 export const MIN_POINT_DIST_LIMITED_BOARD = 3; // minimum relevant distance when boarding limited
 export const MIN_POINT_DIST_LIMITED_DRIVE = 7; // minimum relevant distance when driving limited
 export const MIN_POINT_DISTS_LIMITED = {
@@ -101,6 +104,8 @@ export interface LogStateProperties {
 export class LoggingSvc {
 
   newTrek = this.logState.trek;
+  zeroSpeedTimerId: number;
+  moving: boolean = false;
 
   constructor(
     public logState: LogState,
@@ -161,6 +166,7 @@ export class LoggingSvc {
     this.trekSvc.setTrekImageCount(this.newTrek, 0);
     this.setAllowImageDisplay(true);
     this.trekSvc.resetTrek(this.newTrek);
+    this.setTrekPointCount();
   };
 
   stopTrek = () => {
@@ -297,7 +303,7 @@ export class LoggingSvc {
     this.mainSvc.setMinPointDist(
       this.logState.limitsActive
         ? MIN_POINT_DISTS_LIMITED[this.newTrek.type]
-        : 1
+        : STATIONARY_DIST_FILTER_VALUE
     );
     this.locationSvc.startGeoLocation(gotPos, startFresh, {
       distanceFilter: this.mainSvc.minPointDist,
@@ -367,7 +373,7 @@ export class LoggingSvc {
           // calculatedValues have not been updated recently, user must be stopped
           this.trekSvc.updateCalculatedValues(this.newTrek, this.logState.timerOn, true);
           this.logState.calculatedValuesTimer = CALC_VALUES_INTERVAL;
-          // make sure distance filter is at minimum since we're stopped
+          // make sure distance filter is at minimum since we're starting
           if (this.mainSvc.minPointDist !== 1) {
             this.mainSvc.setMinPointDist(1);
             this.locationSvc.updateGeolocationConfig({
@@ -415,14 +421,45 @@ export class LoggingSvc {
     this.trekSvc.setDuration(this.newTrek, Math.round((now - this.logState.startMS) / 1000));
   };
 
+  // a point has been seen, start a timer to denote stationary status
+  resetZeroSpeedTimer = (speed: number) => {
+    if(speed !== 0 || this.moving){
+      if (!this.moving){
+        this.moving = true;
+        // alert("moving again")
+      }
+      this.cancelZeroSpeedTimer();
+      this.zeroSpeedTimerId = window.setTimeout(() => {
+          this.moving = false;
+          // alert("not moving")
+          this.mainSvc.currSpeedRange = 99;
+          this.mainSvc.setMinPointDist(STATIONARY_DIST_FILTER_VALUE);
+          this.locationSvc.updateGeolocationConfig({
+            distanceFilter: STATIONARY_DIST_FILTER_VALUE
+          });
+      }, STOPPED_TIME_MS);
+    }
+  }
+
+  // a non-zero speed point has been seen, cancel timer (if necessary)
+  cancelZeroSpeedTimer = () => {
+    if(this.zeroSpeedTimerId !== undefined) {
+      window.clearTimeout(this.zeroSpeedTimerId);
+      this.zeroSpeedTimerId = undefined;
+    }
+  }
+
   // Add a point with the given location to the pointList. Update the trek distance and smooth the path
   // every so often.
   // Return TRUE if point added
   @action
   addPoint = (pos: Location): boolean => {
     let added = false;
+    let badPt = false;
+    let newFirstPt = false;
 
     if(this.logState.logging){
+      badPt = newFirstPt = false;
       if (this.newTrek.totalGpsPoints === 0) {
         // start Trek timer after recieving first GPS reading
         this.startTrekTimer();
@@ -441,19 +478,22 @@ export class LoggingSvc {
       let newPt = {
         l: { a: pos.latitude, o: pos.longitude },
         t: Math.round((pos.time - this.logState.startMS) / 1000),
-        s: this.utilsSvc.fourSigDigits(pos.speed)
+        s: this.utilsSvc.fourSigDigits(pos.speed),
+        d: 0
       };
-      let lastPt = this.logState.trekPointCount ? this.newTrek.pointList[this.logState.trekPointCount - 1] : undefined;
+      let tpc = this.logState.trekPointCount;
+      let lastPt = tpc > 0 ? this.newTrek.pointList[tpc - 1] : undefined;
         // check for point unbelievably far from last pt (check for high implied speed)
-      let badPt = false;
-        // lastPt && (newPt.s > 0) &&
-        // this.utilsSvc.computeImpliedSpeed(newPt, lastPt) > newPt.s * 5;
-
-      let secondZero = newPt.s === 0 && (lastPt && lastPt.s === 0);
-
-      let newFirstPt = this.logState.trekPointCount === 1 && (badPt || secondZero)
-      // leave out bad points and multiple 0-speed points
-      if (newFirstPt || !(badPt || secondZero)) {
+      if (tpc === 1){
+        newFirstPt = this.utilsSvc.computeImpliedSpeed(newPt, lastPt) > Math.max(lastPt.s , newPt.s); 
+      } else {
+        // if not, check for point unbelievably far from last pt (check for high implied speed)
+        badPt = lastPt && 
+              this.utilsSvc.computeImpliedSpeed(newPt, lastPt) > Math.max(newPt.s, lastPt.s) * 3;
+      }
+        
+      // leave out bad points
+      if (newFirstPt || !badPt) {
   
         if (!newFirstPt) {
           this.logState.pointsSinceSmooth++;
@@ -483,14 +523,16 @@ export class LoggingSvc {
                               || newPt.s / MPH_TO_MPS > DRIVING_A_CAR_SPEED;
           this.trekSvc.updateSpeedNow(this.newTrek, this.logState.timerOn);
           if (!this.logState.limitsActive) {
+            this.resetZeroSpeedTimer(newPt.s);
             // don't change distance filter if limited trek
             let range = this.utilsSvc.findRangeIndex(newPt.s, SPEED_RANGES_MPS);
             if (range !== -1 && range !== this.mainSvc.currSpeedRange) {
-              // update the distance filter to reflect the new speed range
+              // update the distance filter  and activity interval to reflect the new speed range
               this.mainSvc.currSpeedRange = range;
               this.mainSvc.minPointDist = DIST_FILTER_VALUES[range];
               this.locationSvc.updateGeolocationConfig({
-                distanceFilter: this.mainSvc.minPointDist
+                distanceFilter: this.mainSvc.minPointDist,
+                activitiesInterval: ACTIVITY_INTERVAL_VALUES[range]
               });
             }
           }
@@ -503,10 +545,19 @@ export class LoggingSvc {
           }
           this.logState.calculatedValuesTimer = CALC_VALUES_INTERVAL;
           added = true;
-        } else {
-          newPt.t = 0;
-          this.newTrek.pointList[0] = newPt; // replace 0-speed first point with new 0-speed pt
-          this.setStartTime();
+        } 
+        else {
+          // if(newFirstPt){
+            newPt.t = 0;
+            this.newTrek.pointList[0] = this.utilsSvc.copyObj(newPt); // replace first point with new pt
+            this.setStartTime();
+            this.setTrekPointCount();
+          // } 
+          // else {        // update location of last point
+          //   let endPt = this.logState.trekPointCount- 1;
+          //   this.newTrek.pointList[endPt].l.a = newPt.l.a;
+          //   this.newTrek.pointList[endPt].l.o = newPt.l.o; 
+          // }
         }
       }
     }

@@ -348,14 +348,14 @@ class GoalDetails extends Component<{
 
   // switch measurements system then update the bar graph
   switchMeasurementSystem = () => {
-    this.mS.switchMeasurementSystem();
+    this.tS.switchMeasurementSystem(this.tInfo, false, false);
     this.gS.buildGraphData(this.detailObj, this.selectedIntervalIndex, this.displayChoice);
     this.forceUpdate();
   };
 
   // Display the map for the Trek at the given index in the items list of the given display object
   showTrekMap = () => {
-    this.mS.setShowMapControls(false);
+    this.mS.setShowMapControls(true);
     requestAnimationFrame(() => {
       this.props.navigation.navigate({routeName: 'SelectedTrek', 
         params: { title: this.props.utilsSvc.formattedLocaleDateAbbrDay(this.tInfo.date) + 
@@ -428,7 +428,7 @@ class GoalDetails extends Component<{
           this.intervalSelected(newInterval, false);  // this builds trekGraphData for the new interval
         }
         trek = this.setCurrentTrek(index);        // this sets the selectedTrekBar property
-        this.mS.setShowMapControls(false);
+        this.mS.setShowMapControls(true);
         resolve(this.props.utilsSvc.formattedLocaleDateAbbrDay(trek.date) + '  ' + trek.startTime.toLowerCase());
       }
     }) 

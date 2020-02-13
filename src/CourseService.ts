@@ -114,23 +114,6 @@ export class CourseSvc {
   initializeObservables = () => {
   }
 
-  private convertEffort = (effort: any) : CourseEffort => {
-    if(effort.subject){
-      let newEffort : CourseEffort = this.utilsSvc.copyObj(effort.subject);
-      return newEffort;
-    }
-    return effort;
-  }
-
-  private convertCourseEfforts = (course: Course) => {
-    course.definingEffort = this.convertEffort(course.definingEffort)
-    course.bestEffort = this.convertEffort(course.bestEffort)
-    course.lastEffort = this.convertEffort(course.lastEffort)
-    for(let i=0; i<course.efforts.length; i++) {
-      course.efforts[i] = this.convertEffort(course.efforts[i]);
-    }
-  }
-
   // create the courseListFile by reading all entries in the Courses directory
   private createCourseListFile = () : Promise<any> => {
     let allDone : Promise<any>[] = [];
@@ -152,8 +135,8 @@ export class CourseSvc {
               //   course.courseImageUri = 
               //       course.courseImageUri.replace('TrekLogCourseMaps', TREKLOG_PICTURES_DIRECTORY)
               // }
-              this.convertCourseEfforts(course);
-              allDone.push(this.storageSvc.storeCourseFile(course));    // write updated course file
+              // this.convertCourseEfforts(course);
+              // allDone.push(this.storageSvc.storeCourseFile(course));    // write updated course file
               newListItem = {
                 name: course.name,
                 createDate: course.createDate,
@@ -169,7 +152,8 @@ export class CourseSvc {
         }
         Promise.all(allDone)
         .then(() => {
-            this.saveCourseList()
+          // this.storageSvc.storeOldCourseListFile({courses: this.courseList})
+          this.saveCourseList()
             .then(() => resolve(RESP_OK))
             .catch((err) => reject(err))         
         })
@@ -1001,7 +985,6 @@ export class CourseSvc {
       this.getTrackingPath(course, method, effort, targetTrek)
       .then((result) => {
         pList = result.list;
-        // this.utilsSvc.setPointDistances(pList);
         let params = this.getTrackingParams(course, method, value, result.trek);
         
         // init to show ending positions for both markers

@@ -3,7 +3,9 @@ import RNFetchBlob, { RNFetchBlobStat } from 'react-native-fetch-blob'
 import { TREKLOG_SETTINGS_FILENAME, TREKLOG_FILE_FORMAT, TREKLOG_GOALS_FILENAME, 
           TREKLOG_FILE_EXT, TREKLOG_GROUPS_FILENAME, TREKLOG_GROUPS_DIRECTORY, 
           TREKLOG_PICTURES_DIRECTORY, COLOR_THEME_DARK, TREKLOG_COURSES_DIRECTORY, 
-          TREKLOG_COURSES_FILENAME } from './App'
+          TREKLOG_COURSES_FILENAME, 
+          _3D_CAMERA_PITCH,
+          _3D_CAMERA_PITCH_STR} from './App'
 import { GoalObj } from './GoalsService';
 import { SettingsObj, GroupsObj } from './GroupService';
 import { TrekObj, CURR_DATA_VERSION } from './TrekInfoModel';
@@ -25,6 +27,7 @@ export class StorageSvc {
   }
 
   directoriesPresent = false;
+  haveDeleted = false;
 
   // create a directory from the given path
   // resolve whether directory already existed or not
@@ -66,9 +69,9 @@ export class StorageSvc {
     return this.formatGroupPath(group) + '/' + sortDate + TREKLOG_FILE_EXT;
   }
 
-  // Format the path to the Courses directoruy (Groups/Courses)
-  formatCoursesPath = () => {
-    return (this.formatGroupsPath() + '/' + TREKLOG_COURSES_DIRECTORY);
+  // Format the path to the Groups directory
+  private formatCoursesPath = () => {
+    return (RNFetchBlob.fs.dirs.DocumentDir + '/' + TREKLOG_COURSES_DIRECTORY);
   }
 
   // Format the path for CourseList file  (Groups/Courses/CourseList.txt)
@@ -81,14 +84,31 @@ export class StorageSvc {
     return (this.formatCoursesPath() + '/' + courseName.toUpperCase()) + TREKLOG_FILE_EXT;
   }
 
-  // return the path to the TrekLog pictures directory
-  formatTrekLogPicturesPath = () : string => {
-    return RNFetchBlob.fs.dirs.PictureDir + '/' + TREKLOG_PICTURES_DIRECTORY;
-  }
-
   // return the path to the Course Map Images directory
   formatCourseMapImagesPath = () : string => {
     return this.formatTrekLogPicturesPath();
+  }
+
+  // write the given picture to the Course Map Images directory
+  // return the new uri
+  saveCourseMapImage = (courseName: string, tempUri : string) : Promise<string> => {
+    let cmiDir = this.formatCourseMapImagesPath();
+
+    return new Promise<any>((resolve, reject) => {
+      RNFetchBlob.fs.stat(tempUri)
+      .then((stats) => {
+        let uri = cmiDir + '/' + courseName + '.jpg';
+        RNFetchBlob.fs.cp(stats.path, uri)
+        .then(() => resolve(uri))
+        .catch((err) => reject(err))
+      })
+      .catch((err) => reject(err))
+    })
+  }
+
+  // return the path to the TrekLog pictures directory
+  formatTrekLogPicturesPath = () : string => {
+    return RNFetchBlob.fs.dirs.PictureDir + '/' + TREKLOG_PICTURES_DIRECTORY;
   }
 
   // write the given picture to the TrekLog Pictures directory
@@ -101,23 +121,6 @@ export class StorageSvc {
       .then((stats) => {
         let extPos = stats.filename.search(/\./);
         let uri = picDir + '/' + imageName + stats.filename.substr(extPos);
-        RNFetchBlob.fs.cp(stats.path, uri)
-        .then(() => resolve(uri))
-        .catch((err) => reject(err))
-      })
-      .catch((err) => reject(err))
-    })
-  }
-
-  // write the given picture to the Course Map Images directory
-  // return the new uri
-  saveCourseMapImage = (courseName: string, tempUri : string) : Promise<string> => {
-    let cmiDir = this.formatCourseMapImagesPath();
-
-    return new Promise<any>((resolve, reject) => {
-      RNFetchBlob.fs.stat(tempUri)
-      .then((stats) => {
-        let uri = cmiDir + '/' + courseName + '.jpg';
         RNFetchBlob.fs.cp(stats.path, uri)
         .then(() => resolve(uri))
         .catch((err) => reject(err))
@@ -163,52 +166,57 @@ export class StorageSvc {
     let cDir = this.formatCoursesPath();
 
     return new Promise((resolve, reject) => {
-      if(this.directoriesPresent) {resolve(RESP_OK)}
-      this.checkStoragePermission()
-      .then((perm) => {
-        if(perm){
-          let p1 = RNFetchBlob.fs.isDir(this.formatGroupsPath());       // Groups direcory?
-          allDone.push(p1);
-          p1.then((haveDir) => {
-          if(!haveDir) {
-              let p1a = this.makeDirectory(this.formatGroupsPath());
-              allDone.push(p1a);
-              p1a.then(() =>{
-                allDone.push(this.storeGroupListFile({groups: [], lastGroup: '', 
-                        measurementSystem: 'US', theme: COLOR_THEME_DARK,
-                        imageStorageMode: IMAGE_STORE_COMPRESSED}))  // store empty GroupsObj
-              })
-            }
-          })
-          let p2 = RNFetchBlob.fs.isDir(pDir);
-          allDone.push(p2);                         // Pictures directory?
-          p2.then((haveDir) => {
-            if(!haveDir) {
-              allDone.push(RNFetchBlob.fs.mkdir(pDir))  // make directory for pictures
-            }
-          })
-          let p3 = RNFetchBlob.fs.isDir(cDir);                         // Courses directory?
-          allDone.push(p3);
-          p3.then((haveDir) => {
-            if(!haveDir) {
-              let p3a = this.makeDirectory(cDir);
-              allDone.push(p3a);
-              p3a.then(() =>{
-                allDone.push(this.storeCourseListFile({courses: []}))  // store empty CourseList
-              })
-            }
-          })
-          Promise.all(allDone)
-          .then(() => {
-            this.directoriesPresent = true;
-            resolve(RESP_OK);
-          })
-          .catch((err) => reject('Error creating directories\n' + err))
-        }
-        else {
-          reject('No Storage Permission');
-        }
-      })
+      if(this.directoriesPresent) {
+        resolve(RESP_OK)
+      }
+      else {
+        this.checkStoragePermission()
+        .then((perm) => {
+          if(perm){
+            let p1 = RNFetchBlob.fs.isDir(this.formatGroupsPath());       // Groups direcory?
+            allDone.push(p1);
+            p1.then((havegDir) => {
+            if(!havegDir) {
+                let p1a = this.makeDirectory(this.formatGroupsPath());
+                allDone.push(p1a);
+                p1a.then(() => {
+                  allDone.push(this.storeGroupListFile({groups: [], lastGroup: '', 
+                          measurementSystem: 'US', theme: COLOR_THEME_DARK,
+                          mapViewPitch: _3D_CAMERA_PITCH_STR,
+                          imageStorageMode: IMAGE_STORE_COMPRESSED}))  // store empty GroupsObj
+                })
+              }
+            })
+            let p2 = RNFetchBlob.fs.isDir(pDir);
+            allDone.push(p2);                         // Pictures directory?
+            p2.then((havepDir) => {
+              if(!havepDir) {
+                allDone.push(RNFetchBlob.fs.mkdir(pDir))  // make directory for pictures
+              }
+            })
+            let p3 = RNFetchBlob.fs.isDir(cDir);          // Courses directory?
+            allDone.push(p3);
+            p3.then((havecDir) => {
+              if(!havecDir) {
+                let p3a = this.makeDirectory(cDir);
+                allDone.push(p3a);
+                p3a.then(() => {
+                  allDone.push(this.storeCourseListFile({courses: []}))  // store empty CourseList
+                })
+              }
+            })
+            Promise.all(allDone)
+            .then(() => {
+              this.directoriesPresent = true;
+              resolve(RESP_OK);
+            })
+            .catch((err) => reject('Error creating directories\n' + err))
+          }
+          else {
+            reject('No Storage Permission');
+          }
+        })
+      }
     })
   }
 
@@ -607,8 +615,8 @@ export class StorageSvc {
       .then((glf) => {
         let groups = JSON.parse(glf) as GroupsObj;
         allDone.push(this.computeDirectorySize('App', RNFetchBlob.fs.dirs.DocumentDir, result))   // read directory for this app
-        allDone.push(this.computeDirectorySize('Groups', this.formatGroupsPath(), result))   // read Groups directory
         allDone.push(this.computeDirectorySize('Courses', this.formatCoursesPath(), result))   // read Groups directory
+        allDone.push(this.computeDirectorySize('Groups', this.formatGroupsPath(), result))   // read Groups directory
         for(let i=0; i<groups.groups.length; i++) {
           allDone.push(this.computeDirectorySize(groups.groups[i], this.formatGroupPath(groups.groups[i]), result));
         }

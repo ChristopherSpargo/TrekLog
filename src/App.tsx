@@ -1,5 +1,5 @@
 import React from 'react';
-import { Platform, UIManager, View, StyleSheet, StatusBar } from 'react-native';
+import { Platform, UIManager, View, StyleSheet, StatusBar, Dimensions } from 'react-native';
 import { Provider, observer } from 'mobx-react';
 import { configure } from "mobx";
 import { createStackNavigator } from 'react-navigation';
@@ -83,7 +83,6 @@ export const TREK_TYPE_DIM_COLORS_OBJ = { Walk: TL_BLUE_DIM, Run: TL_YELLOW_DIM,
 export const PROGRESS_COLORS = [TL_RED, TL_YELLOW, TL_GREEN];
 export const primaryColor = "#006845"; //"#388e3c";
 export const primaryDarker = "#003322"; //"#00600f";
-export const secondaryColor = "#9c27b0";
 export const linkActive = "#0275D8";
 export const semitransWhite_2 = "rgba(255, 255, 255, .2)";
 export const semitransWhite_3 = "rgba(255, 255, 255, .3)";
@@ -160,6 +159,19 @@ export const LABEL_FORM_Z_INDEX = 100;
 export const CONFIRM_Z_INDEX = 100;
 export const TOAST_Z_INDEX = 100;
 export const WAITING_Z_INDEX = 102;
+
+export const APP_VIEW_WIDTH = Dimensions.get('window').width;
+export const APP_VIEW_HEIGHT = Dimensions.get('window').height;
+
+export const _2D_CAMERA_PITCH = 0;
+export const _3D_CAMERA_PITCH = 80;
+export const MAP_VIEW_PITCH_VALUES = {
+  "2D": _2D_CAMERA_PITCH,
+  "3D": _3D_CAMERA_PITCH
+}
+export const _2D_CAMERA_PITCH_STR = "2D";
+export const _3D_CAMERA_PITCH_STR = "3D";
+export type MapViewPitchType = "2D" | "3D";
 
 export const uiTheme = {
   palette: { 
@@ -596,9 +608,10 @@ export const uiTheme = {
   },
   trekImageRow: {
     position: "absolute",
-    left: 5,
-    right: 5,
+    marginLeft: 5,
+    marginRight: 5,
     bottom: 3,
+    maxWidth: APP_VIEW_WIDTH - 10,
     height: FOCUS_IMAGE_HEIGHT + 2,
     flexDirection: "row",
     justifyContent: "center",
@@ -672,8 +685,8 @@ export const MainSvcContext = React.createContext(mainSvc);
 const trekSvc = new TrekSvc(mainSvc, utilsSvc, storageSvc, imageSvc);
 export const TrekSvcContext = React.createContext(trekSvc);
 
-const loggingState = new LogState(new TrekInfo(), mainSvc);
-// export const LogTrekContext = React.createContext(logTrekInfo);
+const loggingState = new LogState(new TrekInfo(), mainSvc, utilsSvc);
+// export const LoggingStateContext = React.createContext(loggingState);
 
 const locationSvc = new LocationSvc(loggingState, storageSvc);
 export const LocationSvcContext = React.createContext(locationSvc);
@@ -746,7 +759,7 @@ class TrekLog extends React.Component {
             <Toast toastOpen={toastSvc.toastIsOpen}/>
             <ConfirmationModal confirmOpen={modalSvc.simpleIsOpen}/>
             <GoalsAchievedModal goalsMetOpen={modalSvc.goalNoticeIsOpen}/>
-            <TrekLabelForm/>
+            <TrekLabelForm open={modalSvc.labelFormOpen}/>
           </View>
         </Provider>
       

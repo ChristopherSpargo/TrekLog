@@ -60,6 +60,7 @@ class LogTrekMap extends Component<{
   }
 
   componentWillMount() {
+    this.mS.setAppReady(true);
     if(this.mS.layoutOpts === 'Open'){
       this.toggleSpeedDialZoom(this.mS.speedDialZoomedIn ? 'All' : 'Current', true);
     } else {
@@ -332,6 +333,7 @@ class LogTrekMap extends Component<{
             layoutOpts={this.mS.layoutOpts} 
             changeZoomFn={this.toggleSpeedDialZoom}
             mapType={this.mS.currentMapType}
+            mapPitch={this.mS.mapViewPitch}
             speedDialIcon={sdIcon}
             speedDialValue={sdValue}
             changeMapFn={this.mS.setDefaultMapType}
@@ -410,10 +412,11 @@ class LogTrekMap extends Component<{
             }
           </View>
           {showControls && this.logState.allowImageDisplay &&
-            <View style={{...controlsArea, ...styles.caAdjust, ...trekImageRow, ...styles.imageRowAdj}}>
+            <View style={{...trekImageRow, ...styles.imageRowAdj}}>
               <TrekImageListDisplay
                 tInfo={this.tI}
                 trekId={this.tI.sortDate}
+                imageCount={this.tI.trekImageCount}
                 imageSetIndex={this.logState.currentDisplayImageSet}
                 imageStyle={styles.trekImage}
                 focusImageStyle={styles.focusImage}

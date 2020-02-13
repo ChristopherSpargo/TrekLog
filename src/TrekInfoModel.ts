@@ -20,6 +20,8 @@ export const CURR_DATA_VERSION = '5.6';
   // version 5.4 store cumulative distance with each point in trek pointList
   // version 5.5 add sDate property to TrekImage
   // version 5.6 remove time property from TrekImage
+export const ELEV_DATA_CHANGE_VERSION = '5.7';
+  // version 5.7 change scheme for elevations data (1 per GPS pt, 512 max, single API call)
 
 export interface LaLo {
   a: number,      // latitude value

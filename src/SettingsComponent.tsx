@@ -12,7 +12,7 @@ import RadioGroup from './RadioGroupComponent';
 import TrekTypeSelect from './TrekTypeSelectComponent';
 import { ToastModel } from './ToastModel';
 import { CONTROLS_HEIGHT, COLOR_THEME_LIGHT, COLOR_THEME_DARK, ThemeType,
-         SCROLL_DOWN_DURATION, FADE_IN_DURATION, TREKLOG_FILENAME_REGEX, SPEED_DIAL_Z_INDEX 
+         SCROLL_DOWN_DURATION, FADE_IN_DURATION, TREKLOG_FILENAME_REGEX, SPEED_DIAL_Z_INDEX, _3D_CAMERA_PITCH, _2D_CAMERA_PITCH, _2D_CAMERA_PITCH_STR, _3D_CAMERA_PITCH_STR, MapViewPitchType 
        } from './App';
 import { UtilsSvc, LB_PER_KG, CM_PER_INCH } from './UtilsService';
 import { ModalModel, CONFIRM_INFO } from './ModalModel';
@@ -58,12 +58,13 @@ class Settings extends Component<{
   @observable group;
   @observable defaultType : TrekType;
   @observable system : MeasurementSystemType;
+  @observable imageStorageMode : string;
+  @observable mapViewPitch : MapViewPitchType;
   @observable theme : ThemeType;
   @observable weightStr;
   @observable heightStr;
   @observable packWeightStr;
   @observable strideLengthStr;
-  @observable imageStorageMode : string;
   @observable keyboardOpen;
   @observable originalSettings : SettingsObj;
   @observable openItems;
@@ -83,6 +84,7 @@ class Settings extends Component<{
   oldTheme : ThemeType;
   oldSystem : MeasurementSystemType;
   oldImageMode : string;
+  oldMapViewPitch : MapViewPitchType;
   headerActions = [];
 
   keyboardDidShowListener;
@@ -104,9 +106,11 @@ class Settings extends Component<{
         this.oldTheme = groups.theme;
         this.oldSystem = groups.measurementSystem;
         this.oldImageMode = groups.imageStorageMode;
+        this.oldMapViewPitch = groups.mapViewPitch;
         this.setSystem(groups.measurementSystem || SYSTEM_TYPE_US);
-        this.setImageStorageMode(groups.imageStorageMode || IMAGE_STORE_FULL)
-        this.changeGroup(this.props.mainSvc.group)
+        this.setImageStorageMode(groups.imageStorageMode || IMAGE_STORE_COMPRESSED);
+        this.setMapViewPitch(groups.mapViewPitch || _3D_CAMERA_PITCH_STR);
+        this.changeGroup(this.props.mainSvc.group);
       } else {
           this.setNoGroups();
       }
@@ -136,6 +140,7 @@ class Settings extends Component<{
     this.group = '';
     this.system = SYSTEM_TYPE_METRIC;
     this.theme = this.gSvc.getTheme();
+    this.mapViewPitch = this.gSvc.getMapViewPitch();
     this.heightStr = '0';
     this.weightStr = '0';
     this.packWeightStr = '0';
@@ -220,7 +225,8 @@ class Settings extends Component<{
         this.setOriginalSettings(this.getSaveObj());     // save original settings
         resolve("ok");
       })
-      .catch(() => {
+      .catch((err) => {
+        alert(err)
         // Failed to read settings
         reject('error')
       })
@@ -234,6 +240,7 @@ class Settings extends Component<{
     // switch to wrong measurementSystem type
     this.setSystem(SYSTEM_TYPE_METRIC);
     this.setImageStorageMode(IMAGE_STORE_COMPRESSED);
+    this.setMapViewPitch(_3D_CAMERA_PITCH_STR);
     this.heightNum = 0;
     this.setHeight("0");
     this.weightDate = this.todayShortDate;
@@ -281,6 +288,7 @@ class Settings extends Component<{
     if(this.theme !== this.oldTheme) { same = false; }
     if (this.system !== this.oldSystem) { same =  false; }
     if (this.imageStorageMode !== this.oldImageMode) { same = false; }
+    if (this.mapViewPitch !== this.oldMapViewPitch ) { same = false; }
     if (same){
       sNow = this.getSaveObj();
       same = this.uSvc.compareObjects(sNow, sGiven);
@@ -292,6 +300,7 @@ class Settings extends Component<{
   @action
   updateTrekInfo = (saveObj: SettingsObj) => {
     this.mS.setMeasurementSystem(this.system);
+    this.mS.setMapVewPitch(this.mapViewPitch);
     this.mS.setTrekLogGroupProperties(this.group, saveObj, false);
   }
 
@@ -300,9 +309,11 @@ class Settings extends Component<{
     this.oldTheme = this.theme;
     this.oldSystem = this.system;
     this.oldImageMode = this.imageStorageMode;
+    this.oldMapViewPitch = this.mapViewPitch;
     this.gSvc.setTheme(this.theme);
     this.gSvc.setMeasurementSystem(this.system);
     this.gSvc.setImageStorageMode(this.imageStorageMode);
+    this.gSvc.setMapViewPitch(this.mapViewPitch);
     return this.gSvc.saveGroups(this.group);
   }
 
@@ -377,6 +388,12 @@ class Settings extends Component<{
   setTheme = (val: ThemeType) => {
     this.theme = val;
     this.mS.setColorTheme(val);
+  }
+
+  // Update the value of the mapViewPitch property
+  @action
+  setMapViewPitch = (val: MapViewPitchType) => {
+    this.mapViewPitch = val;
   }
 
   // set the value of the system property
@@ -615,7 +632,8 @@ class Settings extends Component<{
   }
 
   getDifferentGroup = () => {
-    this.gSvc.getGroupSelection(this.setRadioPickerOpen, this.group,  'Select A Group', true, TREKLOG_FILENAME_REGEX)
+    let title = this.gSvc.haveGroups() ? 'Select A Group' : 'Create A Group';
+    this.gSvc.getGroupSelection(this.setRadioPickerOpen, this.group, title, true, TREKLOG_FILENAME_REGEX)
     .then((newGroup) => {
       if(this.gSvc.isGroup(newGroup)){
         this.changeGroup(newGroup);
@@ -922,6 +940,30 @@ class Settings extends Component<{
                     <SlideDownView startValue={-cardHeight} endValue={0} open={this.openItems} 
                               duration={SCROLL_DOWN_DURATION}>
                       <View style={[cardLayout, styles.cardCustom]}>
+                        <SettingHeader icon={APP_ICONS.MapView} label="Map Viewing Perspective" 
+                                      description="Select 2D or 3D perspective for map views."
+                        />
+                        <View style={styles.inputRow}>
+                          <RadioGroup 
+                            onChangeFn={this.setMapViewPitch}
+                            selected={this.mapViewPitch}
+                            labels={["2D", "3D"]}
+                            values={[_2D_CAMERA_PITCH_STR, _3D_CAMERA_PITCH_STR]}
+                            labelStyle={{color: highTextColor, fontSize: 20}}
+                            justify='start'
+                            inline
+                            itemHeight={30}
+                            radioFirst
+                          />
+                        </View>
+                      </View>           
+                    </SlideDownView>
+                  </FadeInView>       
+                  <FadeInView startValue={0.1} endValue={1} open={this.openItems} 
+                            duration={FADE_IN_DURATION} style={{overflow: "hidden"}}>
+                    <SlideDownView startValue={-cardHeight} endValue={0} open={this.openItems} 
+                              duration={SCROLL_DOWN_DURATION}>
+                      <View style={[cardLayout, styles.cardCustom]}>
                         <SettingHeader icon={APP_ICONS.Compress} label="Image Compression" 
                                       description="Use image compression to save storage"
                         />
@@ -1121,20 +1163,20 @@ class Settings extends Component<{
               </ScrollView>
             </View>
           }
-          </View>
-          {(showSave && !this.keyboardOpen && haveGroups) &&
-            <SpeedDial 
-              selectFn={this.saveSettings}
-              bottom={CONTROLS_HEIGHT}
-              style={styles.saveFab}
-              icon="CheckMark"
-              triggerZ={SPEED_DIAL_Z_INDEX}
-              raised
-            />
-          }
           {(!this.dataReady || this.changingGroup) &&
             <Waiting/>
           }
+        </View>
+        {(showSave && !this.keyboardOpen && haveGroups) &&
+          <SpeedDial 
+            selectFn={this.saveSettings}
+            bottom={CONTROLS_HEIGHT}
+            style={styles.saveFab}
+            icon="CheckMark"
+            triggerZ={SPEED_DIAL_Z_INDEX}
+            raised
+          />
+        }
       </NavMenu>
     )
   }

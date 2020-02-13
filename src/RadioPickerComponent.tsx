@@ -52,8 +52,9 @@ function RadioPicker({pickerOpen}) {
     disabledTextColor,
     primaryColor,
     textOnPrimaryColor,
-    footerTextColor,
     footerButtonText,
+    shadow1,
+    altCardBackground,
   } = uiTheme.palette[mainSvc.colorTheme];
   const { cardLayout, roundedTop, roundedBottom, footer, footerButton, fontRegular 
         } = uiTheme;
@@ -92,9 +93,9 @@ function RadioPicker({pickerOpen}) {
       height: headerHeight,
       paddingLeft: 25,
       paddingBottom: 5,
-      borderStyle: "solid",
-      borderBottomColor: dividerColor,
-      borderBottomWidth: 1,
+      // borderStyle: "solid",
+      // borderBottomColor: dividerColor,
+      // borderBottomWidth: 1,
       backgroundColor: primaryColor,
     },
     title: {
@@ -104,8 +105,8 @@ function RadioPicker({pickerOpen}) {
     },
     body: {
       flexDirection: "column",
-      paddingTop: 3,
-      paddingBottom: 13,
+      // paddingTop: 3,
+      // paddingBottom: 13,
     },
     bodyText: {
       fontSize: 16,
@@ -113,7 +114,7 @@ function RadioPicker({pickerOpen}) {
     },
     footer: {
       ...footer,
-      ...{borderTopColor: dividerColor, backgroundColor: pageBackground}
+      ...{borderTopColor: dividerColor, backgroundColor: primaryColor}
     },
     rowLayout: {
       flexDirection: "row",
@@ -124,17 +125,29 @@ function RadioPicker({pickerOpen}) {
       alignItems: "center"
     },
     rgItem: {
-      paddingTop: 10,
-      backgroundColor: pageBackground,
+      paddingTop: 5,
+      paddingBottom: 5,
+      backgroundColor: altCardBackground,
       paddingRight: 0,
-      paddingLeft: 0,
-      marginLeft: 25,
+      paddingLeft: 25,
+      ...shadow1,
+      flex: 1,
+    },
+    rgItem1: {
+      paddingTop: 5,
+      paddingBottom: 5,
+      backgroundColor: altCardBackground,
+      paddingRight: 0,
+      paddingLeft: 25,
+      ...shadow1,
+      marginTop: 0,
+      flex: 1,
     },
     rgLabel: {
       fontSize: 22,
       paddingLeft: 10,
       paddingRight: 10,
-      flex: 1
+      // flex: 1
     }
   });
 
@@ -223,6 +236,7 @@ function RadioPicker({pickerOpen}) {
                         onChangeFn={checkSelection}
                         selected={selection}
                         itemStyle={styles.rgItem}
+                        item1Style={styles.rgItem1}
                         values={mData.selectionValues}
                         labels={mData.selectionNames}
                         comments={mData.selectionComments}
@@ -245,7 +259,7 @@ function RadioPicker({pickerOpen}) {
                       onPress={dismiss}>
                       <View style={footerButton}>
                         <Text
-                          style={footerButtonText}
+                          style={[footerButtonText, {color: textOnPrimaryColor}]}
                         >
                           {mData.cancelText}
                         </Text>
@@ -258,7 +272,7 @@ function RadioPicker({pickerOpen}) {
                       <View style={footerButton}>
                         <Text
                           style={{...footerButtonText, 
-                                  ...{ color: okDisabled ? disabledTextColor : footerTextColor }}}
+                                  ...{ color: okDisabled ? disabledTextColor : textOnPrimaryColor }}}
                         >
                           {mData.okText}
                         </Text>

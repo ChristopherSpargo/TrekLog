@@ -109,45 +109,31 @@ class HomeScreen extends Component<
           "hardwareBackPress",
           this.onBackButtonPressAndroid
         );
-        // this.init();
+        this.init();
       }
     );
   }
 
   componentWillMount() {
-    // alert('Home mount')
     StatusBar.setHidden(true, "none");
     this.initializeObservables();
-    this.setWaitingMsg("Loading...")
     this.props.navigation.setParams({ checkBackButton: this.checkBackButton });
     this.mS.setAppReady(false);
     // Get the current GPS position so the log map shows where we are
-    this.glS.getCurrentLocation(
-      location => {
-        this.mS.initialLoc = {
-          latitude: location.latitude,
-          longitude: location.longitude
-        };
-        this.glS.stopGeolocation();
-      },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 }
-    );
-    this.props.helpSvc.pushHelp(HELP_HOME, true);     // set home screen help context
     this.cS.getCourseList()                     // read the list of courses
-    .then(() => {
-      this.iS.getAllImages()                    // read all the images from all the treks
-      .then(() => {
-        this.getImageSet();
-        this.setWaitingMsg(undefined);          // clear the waiting indicator
-      })
-      .catch((err) =>  alert(err))
+    .then(() => {})
+    .catch((err) => {
+      alert(err);
     })
+    this.props.helpSvc.pushHelp(HELP_HOME, true);     // set home screen help context
     this.mS.resObj = undefined;
     this.props.storageSvc
       .fetchRestoreObj()
       .then((ro: RestoreObject) => {
+        this.setWaitingMsg(undefined)
         this.props.storageSvc.removeRestoreObj();
         this.mS.resObj = ro;
+        this.setWaitingMsg(undefined);
         this.props.navigation.navigate({routeName: 'LogTrek', key: 'Key-LogTrek'});
       })
       .catch(() => {
@@ -155,12 +141,29 @@ class HomeScreen extends Component<
         this.mS
           .init()
           .then(() => {
+            this.glS.getCurrentLocation(
+              location => {
+                this.mS.initialLoc = {
+                  latitude: location.latitude,
+                  longitude: location.longitude
+                };
+                this.glS.stopGeolocation();
+              },
+              { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 }
+            );
             this.mS.setAppReady(true);
+            this.setWaitingMsg("Your journey continues...")
+            this.iS.getAllImages()                    // read all the images from all the treks
+            .then(() => {
+              this.getImageSet();
+              this.setWaitingMsg(undefined);          // clear the waiting indicator
+            })
+            .catch((err) =>  {
+              this.setWaitingMsg(undefined);
+              alert(err)
+            })
           })
           .catch((err) => {
-            // this.cS.getCourseList()
-            // .then(() => {})
-            // .catch(() => {})
             this.mS.setAppReady(true);
             this.setWaitingMsg(undefined);
             // need to create a group or enter settings
@@ -221,37 +224,8 @@ class HomeScreen extends Component<
 
   init = () => {
     StatusBar.setHidden(true, "none");
-    if (
-      this.mS.appReady &&
-      !this.mS.pendingInit &&
-      !this.lS.logState.logging &&
-      !this.lS.logState.pendingReview && 
-      this.waitingMsg === undefined
-    ) {
-      this.mS
-        .init()
-        .then(() => {
-          if(this.iS.allImages === undefined){
-            this.setWaitingMsg('Loading...')
-            this.iS.getAllImages()
-            .then(() => {
-              this.mS.setAppReady(true);
-              this.setWaitingMsg(undefined);
-              this.getImageSet();
-            })
-            .catch((err) =>  alert(err))
-          }
-        })
-        .catch((err) => {
-          // need to create a use or enter settings
-          switch (err) {
-            case "NO_GROUPS":
-            case "NO_SETTINGS":
-              this.props.navigation.navigate("Settings");
-              break;
-            default:
-          }
-        });
+    if(this.currentImages.length === 0){
+      this.getImageSet();
     }
   };
 
@@ -480,7 +454,8 @@ class HomeScreen extends Component<
     const {
       pageBackground,
       rippleColor,
-      mediumTextColor
+      mediumTextColor,
+      disabledTextColor
     } = this.uiTheme.palette[this.mS.colorTheme];
     const { fontRegular } = this.uiTheme;
     const bgColor = pageBackground;
@@ -609,10 +584,10 @@ class HomeScreen extends Component<
         left: layouts[this.layout].TR2.left,
       },
       welcome: {
-        fontSize: 36,
+        fontSize: 52,
         fontFamily: fontRegular,
-        color: mediumTextColor,
-        marginTop: 150,
+        color: disabledTextColor,
+        marginTop: 120,
       }
     });
 
@@ -639,51 +614,52 @@ class HomeScreen extends Component<
         setOpenFn={this.setOpenNavMenu}
         locked={noMenu}
         open={this.openNavMenu}> 
-        <View style={[styles.container]}>
-          <TrekLogHeader
-            logo={this.selectedImage === undefined}
-            titleText={tText}
-            icon={tIcon as string}
-            backButtonFn={tBackFn}
-            actionButtons={this.headerActions}
-            position="absolute"
-            openMenuFn={this.openMenu}
-            disableMenu={noMenu}
-          />
-          {this.waitingMsg !== undefined && 
-            <Waiting msg={this.waitingMsg}/>
-          }
-          {(this.waitingMsg === undefined && this.currentImages.length !== 0) &&
-            <View style={[styles.container, {top: HEADER_HEIGHT, justifyContent: "center", flex: 1}]}
-            >
-                <ImageButton style={styles.imageSS1} index={0}/>
-                <ImageButton style={styles.imageWR1} index={1}/>
-                <ImageButton style={styles.imageTR1} index={2}/>
-                <ImageButton style={styles.imageDS1} index={3}/>
-                <ImageButton style={styles.imageDS2} index={4}/>
-                <ImageButton style={styles.imageTR2} index={5}/>
-                {this.selectedImage && 
-                  <View style={[styles.container]}>
-                    <ImageView imageUri={imageUri}
-                              imageType={imageType}
-                              imageDate={imageDate}
-                              imageLabel={imageLabel}
-                              imageNote={imageNote}
-                              showNote={this.showNote}
-                              imageHeight={imageHeight}
-                              imageWidth={imageWidth}
-                    />
-                  </View>
-                }
-            </View>
-          }
-          {this.currentImages.length === 0 && 
-            <View style={[styles.container, {top: HEADER_HEIGHT, 
-                          alignItems: "center", flex: 1}]}>
-              <Text style={styles.welcome}>Welcome to TrekLog</Text>
-            </View>
-          }
-        </View>
+        {this.mS.appReady && 
+          <View style={[styles.container]}>
+            <TrekLogHeader
+              logo={this.selectedImage === undefined}
+              titleText={tText}
+              icon={tIcon as string}
+              backButtonFn={tBackFn}
+              actionButtons={this.headerActions}
+              position="absolute"
+              openMenuFn={this.openMenu}
+              disableMenu={noMenu}
+            />
+            {this.waitingMsg !== undefined && 
+              <Waiting msg={this.waitingMsg}/>
+            }
+            {(this.waitingMsg === undefined && this.currentImages.length !== 0) &&
+              <View style={[styles.container, {top: HEADER_HEIGHT, justifyContent: "center", flex: 1}]}
+              >
+                  <ImageButton style={styles.imageSS1} index={0}/>
+                  <ImageButton style={styles.imageWR1} index={1}/>
+                  <ImageButton style={styles.imageTR1} index={2}/>
+                  <ImageButton style={styles.imageDS1} index={3}/>
+                  <ImageButton style={styles.imageDS2} index={4}/>
+                  <ImageButton style={styles.imageTR2} index={5}/>
+                  {this.selectedImage && 
+                    <View style={[styles.container]}>
+                      <ImageView imageUri={imageUri}
+                                imageType={imageType}
+                                imageDate={imageDate}
+                                imageLabel={imageLabel}
+                                imageNote={imageNote}
+                                showNote={this.showNote}
+                                imageHeight={imageHeight}
+                                imageWidth={imageWidth}
+                      />
+                    </View>
+                  }
+              </View>
+            }
+            {(this.waitingMsg !== undefined) && 
+              <View style={[styles.container, {top: HEADER_HEIGHT, alignItems: "center", flex: 1}]}>
+                <Text style={styles.welcome}>Welcome</Text>
+              </View>
+            }
+          </View>
+        }
       </NavMenu>
     );
   }

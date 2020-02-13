@@ -2,7 +2,7 @@ import { action } from 'mobx'
 
 import {  TrekTypeDataNumeric } from './TrekInfoModel'
 import { LB_PER_KG } from './UtilsService';
-import { ThemeType, COLOR_THEME_DARK } from './App';
+import { ThemeType, COLOR_THEME_DARK, _3D_CAMERA_PITCH, MapViewPitchType, _3D_CAMERA_PITCH_STR } from './App';
 import { ModalModel } from './ModalModel';
 import { StorageSvc } from './StorageService';
 import { TrekType, MeasurementSystemType } from './MainSvc';
@@ -14,20 +14,21 @@ export interface WeightObj {
 
 export interface SettingsObj {
   group:         string,         // group these settings are for
-  type:         TrekType,
-  height:       number,
+  type:          TrekType,
+  height:        number,
   strideLengths: TrekTypeDataNumeric,
   weights:       WeightObj[],
-  packWeight:   number,
+  packWeight:    number,
 }
 
 
 export interface GroupsObj {
-  groups:     string[],
-  lastGroup:  string,
-  measurementSystem: MeasurementSystemType,
-  theme:      ThemeType,
-  imageStorageMode: string
+  groups:     string[],             // array of group names
+  lastGroup:  string,               // name of last group used
+  measurementSystem: MeasurementSystemType, // Imperial or Metric
+  theme:      ThemeType,            // Light or Dark
+  imageStorageMode: string          // Compress images taken with TrekLog or not
+  mapViewPitch?: MapViewPitchType;  // default pitch for map viewing (3D or 2D)
 }
 
 export const NEW_GROUP = '#new#';
@@ -104,6 +105,18 @@ export class GroupSvc {
   // get the theme property of the GroupsObj
   getTheme = () => {
     return this.groups ? this.groups.theme : COLOR_THEME_DARK;
+  }
+
+  // set the mapViewPitch property of the GroupsObj
+  setMapViewPitch = (pitch: MapViewPitchType) => {
+    if(this.groups){
+      this.groups.mapViewPitch = pitch;
+    }
+  }
+
+  // get the mapViewPitch property of the GroupsObj
+  getMapViewPitch = () => {
+    return this.groups ? this.groups.mapViewPitch : _3D_CAMERA_PITCH_STR;
   }
 
   // set the measurementSystem property of the GroupsObj
@@ -183,7 +196,7 @@ export class GroupSvc {
 
     return new Promise<any>((resolve, reject) => {
       this.modalSvc.openRadioPicker({heading: heading, selectionNames: selNames,
-      selectionValues: selValues, selection: currGroup, itemTest: nameTest,
+      selectionValues: selValues, selection: currGroup || NEW_GROUP, itemTest: nameTest,
       openFn: pickerOpenFn})
       .then((newGroup) => {
         resolve(newGroup);

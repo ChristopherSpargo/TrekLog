@@ -7,7 +7,7 @@ import { action, observable } from "mobx";
 import { NavigationActions, StackActions } from "react-navigation";
 
 import { FilterSvc, SORTDIRECTION_ASCEND } from "./FilterService";
-import { TrekObj } from './TrekInfoModel';
+import { TrekObj, TrekPoint } from './TrekInfoModel';
 import {  MainSvc, RESP_CANCEL, MSG_HAS_LINK, RESP_OK, MSG_LINK_ADDED,
           SortByTypes,
           MSG_NO_LIST, MSG_NEW_COURSE_RECORD, MSG_NEW_COURSE, MSG_NONE_NEARBY } from "./MainSvc";
@@ -79,6 +79,7 @@ class ReviewTreks extends Component<
   mS = this.props.mainSvc;
   tS = this.props.trekSvc;
   fS = this.props.filterSvc;
+  lS = this.props.loggingSvc;
   courseSvc = this.props.courseSvc;
 
   activeNav: string = "";
@@ -200,8 +201,68 @@ class ReviewTreks extends Component<
   // Display the map for the Trek at the given index in filteredTreks
   @action
   showTrekMap = (indx: number) => {
+    // let count = 0;
+    // interface ReportItem  {pt: number, time: number, iSpd: number,
+    //                        dDist: number, dTime: number, sp1: number, sp2: number};
+    // let repItems : ReportItem[] = [];
+    // let repItem : ReportItem;
+    // let skipNext = false;
+    // let bad;
+    // let newPts: TrekPoint[] = [];
+    // let oldPts: TrekPoint[];
+    // let iSpd: number;
+
     if (this.fS.filteredTreks.length) {
       let trek = this.mS.allTreks[this.fS.filteredTreks[indx]];
+      // this.mS.badPoints = [];
+      // oldPts = this.props.utilsSvc.copyObj(trek.pointList);
+      // oldPts = this.lS.smooth(trek.pointList, 1.7, MIN_SIG_SPEED[this.fS.tInfo.type]);
+      // this.props.utilsSvc.setPointDistances(oldPts);
+      // for(let i=0, j=-1; i<oldPts.length-1; i++){
+      //   if(skipNext){
+      //     bad = true;
+      //     skipNext = false;
+      //   }
+      //   else {
+      //     if (j === -1){
+      //       // check for distance too far for 2nd point speed
+
+      //       iSpd = this.props.utilsSvc.computeImpliedSpeed(oldPts[i], oldPts[i+1]);
+      //       bad = iSpd > Math.max(oldPts[i].s , oldPts[i+1].s);
+      //       if (bad){        
+      //         repItem = {pt: j, time: oldPts[i].t, iSpd: iSpd, dDist: oldPts[i+1].d - oldPts[i].d, 
+      //           dTime: oldPts[i+1].t - oldPts[i].t, sp1: oldPts[i].s, sp2: oldPts[i+1].s}
+      //       }
+      //     } else {
+      //       // check for distance too far based on current point speed or 2 zero-speed pts in a row
+      //       iSpd = this.props.utilsSvc.computeImpliedSpeed(oldPts[i], newPts[j]) 
+      //       bad = oldPts[i].s === 0 && newPts[j].s === 0;
+      //       skipNext = !bad && iSpd > Math.max(oldPts[i].s , newPts[j].s) * 3;
+      //       if (bad || skipNext){             
+      //         repItem = {pt: j, time: newPts[j].t, iSpd: iSpd, dDist: oldPts[i].d - newPts[j].d, 
+      //           dTime: oldPts[i].t - newPts[j].t, sp1: newPts[j].s, sp2: oldPts[i].s}
+      //       }
+      //     }
+      //   }
+      //   if (bad && !skipNext) {
+      //     count++;
+      //     repItems.push(this.props.utilsSvc.copyObj(repItem));
+      //     this.mS.badPoints.push(oldPts[i]);
+      //     // if(j !== -1 && oldPts[i].s === 0){//replace location
+      //     //   newPts[j].l.a = oldPts[i].l.a;
+      //     //   newPts[j].l.o = oldPts[i].l.o;
+      //     // }
+      //   } else {
+      //     newPts.push(oldPts[i]);
+      //     j++;
+      //   }
+      // }
+      // newPts.push(oldPts[oldPts.length-1])
+      // if(count){alert('Bad Points: ' + count + '\n' + JSON.stringify(repItems,null,2))};
+      // this.props.utilsSvc.setPointDistances(newPts);
+      // this.tS.setPointList(this.fS.tInfo, newPts);
+      // this.tS.setTrekDist(this.fS.tInfo, newPts[newPts.length - 1].d);
+      // alert(JSON.stringify({...trek, ...{pointList: undefined}},null,2))
       this.mS.setShowMapControls(true);
       this.props.courseSvc.clearTrackingSnapshot();
       this.props.navigation.navigate({ 
@@ -417,8 +478,7 @@ class ReviewTreks extends Component<
 
   // switch measurements system then update the bar graph
   switchMeasurementSystem = () => {
-    this.mS.switchMeasurementSystem();
-    this.tS.updateCalculatedValues(this.fS.tInfo, false, true)
+    this.tS.switchMeasurementSystem(this.fS.tInfo, false, false)
     this.fS.buildGraphData(this.fS.filteredTreks);
     this.fS.getFilterDefaults(this.fS.filteredTreks);
     this.forceUpdate();

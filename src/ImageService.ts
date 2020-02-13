@@ -1,5 +1,5 @@
 import { TrekObj, LaLo } from "./TrekInfoModel";
-import { RESP_OK, MSG_TREK_LIST_READ_ERROR, MSG_TREK_READ_ERROR } from './MainSvc'
+import { RESP_OK, MSG_TREK_LIST_READ_ERROR, MSG_TREK_READ_ERROR, TREK_TYPE_HIKE } from './MainSvc'
 import { StorageSvc } from "./StorageService";
 import { SortDate, UtilsSvc } from "./UtilsService";
 
@@ -58,6 +58,7 @@ export class ImageSvc {
   // read all the treks and make a list of all image information
   getAllImages = () => {
     // let count = 0;
+    // let allDone: Promise<any>[] = [];
 
     return new Promise<any>((resolve, reject) => {
       this.allImages = [];
@@ -66,7 +67,18 @@ export class ImageSvc {
         let trekList = result.list;
         for(let i = 0; i<trekList.length; i++) {
           let trek = trekList[i];
-          // if(trek.elevations && trek.elevations.length > 0) { count++; }
+          // if(trek.pointList.length > 1){
+          //   let badSpd = this.utilsSvc.computeImpliedSpeed(trek.pointList[1], trek.pointList[0]);
+          //   if(badSpd > trek.pointList[1].s * 5){ 
+          //     count++;
+          //   }
+          // }
+                // if(trek.type === TREK_TYPE_HIKE){ 
+          //   let cals = this.utilsSvc.computeCalories(trek.pointList, trek.duration, trek.type,
+          //             trek.hills, trek.weight, trek.packWeight || 0);
+          //   trek.calories = cals;
+          //   allDone.push(this.storageSvc.storeTrekData(trek));
+          // }
           if(trek.trekImages){
             let imageList : TrekImageSet[] = trek.trekImages;
             for(let j=0; j<imageList.length; j++) {
@@ -78,7 +90,10 @@ export class ImageSvc {
             }
           }
         }
-        // alert('Treks with elevations: ' + count + '/' + trekList.length)
+        // Promise.all(allDone)
+        // .then(() => resolve(RESP_OK))
+        // .catch((err) => reject('Error updating calories\n' + err))
+        // alert('Treks with bad first points: ' + count + '/' + trekList.length)
         resolve(RESP_OK)
       })
       .catch(() => {reject(MSG_TREK_LIST_READ_ERROR)})

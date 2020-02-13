@@ -132,7 +132,7 @@ class SelectedTrek extends Component<{
   @action
   initializeObservables = () => {
     this.statsOpen = false;
-    this.layoutOpts = "NewAll";
+    this.layoutOpts = "All";
     this.zValue = -1;
     this.selectedIntervalIndex = -1;
     this.intervalFormOpen = false;
@@ -171,17 +171,17 @@ class SelectedTrek extends Component<{
     this.iSvc.intervalData = undefined;
     this.setIntervalCatIndex(this.iSvc.show);
     this.tS.updateShowSpeedStat(this.tInfo, 'speedAvg');
+    // requestAnimationFrame(() => {
+      this.setLayoutOpts('All');
+      if(this.courseSnapshotName) {
+        this.takeCourseMapSnapshot();
+      }
+    // })
   }
 
   componentDidMount() {
     this.keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', this.keyboardDidShow);
     this.keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', this.keyboardDidHide);
-    requestAnimationFrame(() => {
-      this.setLayoutOpts('NewAll');
-      if(this.courseSnapshotName) {
-        this.takeCourseMapSnapshot();
-      }
-    })
   }
 
   componentWillUnmount() {
@@ -245,7 +245,6 @@ class SelectedTrek extends Component<{
   // switch measurement systems then reformat the rateRangeObj
   switchMeasurementSys = () => {
     this.switchSysFn();
-    this.tS.updateCalculatedValues(this.tInfo, false, true);
     if (this.rangeDataObj){
       this.setRateRangeObj(this.currRangeData)
     }
@@ -1071,14 +1070,14 @@ class SelectedTrek extends Component<{
     [ !ints ? 
         {label: 'Map Options', 
          submenu: [
-          {icon: 'Resistor', label: 'Speed Ranges', value: this.currRangeData},
+          {icon: 'Resistor', label: 'Value Ranges', value: this.currRangeData},
           {icon: statsIcon, label: statsLabel, value: 'Stats'},
         ]} :
         {label: 'Map Options', 
          submenu: [
           {icon: intervalsIcon, label: intervalsLabel, value: 'Intervals'},
           {icon: 'Close', label: 'Close Intervals', value: 'IntervalsDone'},
-          {icon: 'Resistor', label: 'Speed Ranges', value: this.currRangeData},
+          {icon: 'Resistor', label: 'Value Ranges', value: this.currRangeData},
           {icon: statsIcon, label: statsLabel, value: 'Stats'},
         ]},
       {icon: 'Home', label: 'Home', value: 'Home'},
@@ -1243,6 +1242,7 @@ class SelectedTrek extends Component<{
           }
           <TrekDisplay 
             trek={this.tInfo}
+            badPoints={this.mS.badPoints}
             showControls={this.mS.showMapControls}
             bottom={bottomHeight} 
             displayMode={this.mapDisplayMode}
@@ -1269,9 +1269,11 @@ class SelectedTrek extends Component<{
             speedDialValue={sdValue}
             markerDragFn={this.callMarkerToPath}
             mapType={this.mS.currentMapType}
+            mapPitch={this.mS.mapViewPitch}
             changeMapFn={this.mS.setDefaultMapType}
             changeZoomFn={changeZFn}
             showImagesFn={this.setCurrentDisplayImageSet}
+            showImageMarkers={this.allowImageDisplay}
             prevFn={prevOk ? (() => this.setActiveNav('Prev')) : undefined}
             nextFn={nextOk ? (() => this.setActiveNav('Next')) : undefined}
             rangeDataObj={this.rangeDataObj}
@@ -1399,6 +1401,7 @@ class SelectedTrek extends Component<{
               <TrekImageListDisplay
                 tInfo={this.tInfo}
                 trekId={this.tInfo.sortDate}
+                imageCount={this.tInfo.trekImageCount}
                 imageSetIndex={this.currentDisplayImageSet}
                 imageStyle={styles.trekImage}
                 focusImageStyle={styles.focusImage}

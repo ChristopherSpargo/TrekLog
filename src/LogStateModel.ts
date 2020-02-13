@@ -7,7 +7,8 @@ import { CourseTrackingMethod } from './TrackingMethodComponent';
 import { TrekInfo, TrekPoint, TrekState } from "./TrekInfoModel";
 import { Course} from './CourseService';
 import { CALC_VALUES_INTERVAL, LogStateProperties, TrekLoggingState } from './LoggingService';
-import { MainSvc, MainStateProperties, RESP_OK, TREK_TYPE_HIKE } from './MainSvc';
+import { MainSvc, MainStateProperties, RESP_OK } from './MainSvc';
+import { UtilsSvc } from './UtilsService';
 
 export interface TrackingObject {
   courseName: string,           // name of the course used for tracking
@@ -77,7 +78,6 @@ export class LogState {
   lastDistUnits = 'miles';
   lastPackWeight = undefined;                     // used to provide default value for pack weight form
   limitTrekDone = false;
-  limitTimeoutFn : Function;
   haveShownDriving = false;
   trackingMarkerTimerId: number;
   pointsSinceSmooth = 0;
@@ -86,7 +86,9 @@ export class LogState {
   cancelDialogOpen = false;                       // state of Cancel this Trek Log dialog form (used for Restore)
 
   constructor ( public trek: TrekInfo, 
-                private mainSvc: MainSvc) {
+                private mainSvc: MainSvc,
+                private uSvc: UtilsSvc,
+              ) {
   }
 
   @action
@@ -230,18 +232,57 @@ export class LogState {
           this.startMS =            resObj.logState.startMS;
           // first, rebuild the pointList from the Geolocation service
           resObj.trek.totalGpsPoints = dataPts.length;
-          resObj.trek.pointList = dataPts.map((pt) => {
-            return ({l:{a: pt.latitude, o: pt.longitude}, 
-                     t: Math.round((pt.time - this.startMS) / 1000), s: pt.speed}) as TrekPoint;
+          let skipNext = false;
+          let bad;
+          let newPts: TrekPoint[] = [];
+          let oldPts: TrekPoint[] = [];
+          let iSpd: number;
+          let count: number;
+
+          // First, build a TrekPoint[] from the raw GPS data points.
+          dataPts.forEach((pt) => {
+            if(pt.time >= this.startMS){    // this.should eliminate bad first points
+              oldPts.push({l:{a: pt.latitude, o: pt.longitude}, 
+                      t: Math.round((pt.time - this.startMS) / 1000), 
+                      s: (!pt.speed) ? 0 : Math.round(pt.speed * 10000) / 10000}); // get 4 sig digits
+            }
           })
+          if (oldPts.length > 0){
+            // Now, go through the TrekPoint[] removing the "bad" points using the same
+            // logic as when logging.
+            for(let i=0, j=-1; i<oldPts.length-1; i++){
+              if(skipNext){
+                bad = true;
+                skipNext = false;
+              }
+              else {
+                if (j === -1){
+                  // check for distance too far for 2nd point speed
+                  iSpd = this.uSvc.computeImpliedSpeed(oldPts[i], oldPts[i+1]);
+                  bad = iSpd > Math.max(oldPts[i].s , oldPts[i+1].s);
+                } else {
+                  // check for distance too far based on current point speed or 2 zero-speed pts in a row
+                  iSpd = this.uSvc.computeImpliedSpeed(oldPts[i], newPts[j]) 
+                  bad = oldPts[i].s === 0 && newPts[j].s === 0;
+                  skipNext = !bad && iSpd > Math.max(oldPts[i].s , newPts[j].s) * 3;
+                }
+              }
+              if (bad && !skipNext) {
+                count++;
+              } else {
+                newPts.push(oldPts[i]);
+                j++;
+              }
+            }
+            newPts.push(oldPts[oldPts.length-1]);
+          }
+          resObj.trek.pointList = newPts;
+          if(count){alert(count + ' bad points found during restore')}
           this.mainSvc.restoreMainState(resObj.mainState)
           this.restoreTrekState(resObj.trek);
           this.restoreLoggingState(resObj.logState)
           this.mainSvc.currentGroupSettings.weight = this.trek.weight;            
           this.mainSvc.currentGroupSettings.packWeight = this.trek.packWeight;    
-          this.mainSvc.setCurrentMapType(this.trek.type === TREK_TYPE_HIKE ? 'terrain' 
-                                                                : this.mainSvc.defaultMapType)
-          this.mainSvc.setDataReady(true);
           resolve(RESP_OK);
           BackgroundGeolocation.endTask(taskKey);
         });

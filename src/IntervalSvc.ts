@@ -16,7 +16,7 @@ export interface SegmentAndPoint {
 
 export const RANGE_COLORS = { 
   speed: ['#4d4dff', '#00cc00', '#ffff00', '#ff9900', '#ff3300'],
-  calories: ['#4d4dff', '#00cc00', '#ffff00', '#ff9900', '#ff3300'],
+  calories: ['#4d4dff', '#ff9900', '#00cc00', '#ffff00', '#ff3300'],
   elevation: ['#ff3300', '#ff9900', '#ffff00', '#00cc00', '#4d4dff'],
 };
 export interface RateRangeLine {
@@ -799,17 +799,45 @@ export class IntervalSvc {
     let list = rdInfo.pointList;
     let lastPtIndex = list.length - 1;
     let elevs = rdInfo.elevs;
+    let spList: number[];
+    let szList: number[];
+    let val: number;
 
     if (list.length === 0) { return undefined; }
+    if (rdInfo.rangeType !== 'elevation'){
+      if(lastPtIndex > 80){
+        spList = list.map((pt) => pt.s);  //extract speeds
+      }
+      szList = list.map((pt, i, list) => 
+                          i === lastPtIndex ? 0 : list[i + 1].t - pt.t); // extract durations
+    }
     switch (rdInfo.rangeType) {
       case 'speed':
-        // get speeds at every point
-        for(let i=0; i<=lastPtIndex; i++) {
-          let val = list[i].s;
-          if (val > valueRange.max){ valueRange.max = val; }
-          if (val < valueRange.min){ valueRange.min = val; }
-          itemList.push({value: val, size: i === lastPtIndex ? 0 : (list[i + 1].t - list[i].t)});
+        if(list.length > 80){ 
+          // attempt to smooth speeds by computing a running average
+          for(let i=0, j=4; i<=lastPtIndex; i++, j++) {
+            if(spList[i] === 0){
+              val = 0;
+            } else {
+              if(j<=lastPtIndex){
+                val = this.utilsSvc.getArraySegmentAverage(spList, i, j, szList);
+              } else {
+                val = this.utilsSvc.getArraySegmentAverage(spList, i - 3, i, szList);
+              }
+            }
+            if (val > valueRange.max){ valueRange.max = val; }
+            if (val < valueRange.min){ valueRange.min = val; }
+            itemList.push({value: val, size: szList[i]});
+          } 
+        } else{
+          // get speeds at every point
+          for(let i=0; i<=lastPtIndex; i++) {
+            val = list[i].s;
+            if (val > valueRange.max){ valueRange.max = val; }
+            if (val < valueRange.min){ valueRange.min = val; }
+            itemList.push({value: val, size: szList[i]});
           };
+        }
         break;
       case 'calories':
         // get calories burned/minute at every point
@@ -818,17 +846,39 @@ export class IntervalSvc {
         let speedIndex, currMET, calRate;
         let weight = rdInfo.weight;
         let pWt = rdInfo.packWeight || 0;
-        for(let i=0; i<=lastPtIndex; i++) {
-          calRate = 0;
-          speedIndex = this.utilsSvc.findRangeIndex(list[i].s, ACTIVITY_SPEEDS);
-          if (speedIndex !== -1) {
-            currMET = metTable[speedIndex][hIndex];
-            calRate = currMET * (weight + (currMET === DRIVING_A_CAR_MET ? 0 : pWt)) / 60;
-          }
-          if (calRate > valueRange.max){ valueRange.max = calRate; }
-          if (calRate < valueRange.min){ valueRange.min = calRate; }
-          itemList.push({value: calRate, size: i === lastPtIndex ? 0 : (list[i + 1].t - list[i].t)});
-        };
+        if(list.length > 80){ 
+          // attempt to smooth speeds by computing a running average
+          for(let i=0, j=5; i<=lastPtIndex; i++, j++) {
+            if(j<=lastPtIndex){
+              val = this.utilsSvc.getArraySegmentAverage(spList, i, j, szList);
+            } else {
+              val = this.utilsSvc.getArraySegmentAverage(spList, i - 4, i, szList);
+            }
+            speedIndex = this.utilsSvc.findRangeIndex(val, ACTIVITY_SPEEDS);
+            if (speedIndex !== -1) {
+              currMET = metTable[speedIndex][hIndex];
+              calRate = currMET * (weight + (currMET === DRIVING_A_CAR_MET ? 0 : pWt)) / 60;
+            } else {
+              calRate = 0;
+            }
+            if (calRate > valueRange.max){ valueRange.max = calRate; }
+            if (calRate < valueRange.min){ valueRange.min = calRate; }
+            itemList.push({value: calRate, size: szList[i]});
+          };
+        } else {
+          for(let i=0; i<=lastPtIndex; i++) {
+            calRate = 0;
+            // get speeds at every point
+            speedIndex = this.utilsSvc.findRangeIndex(list[i].s, ACTIVITY_SPEEDS);
+            if (speedIndex !== -1) {
+              currMET = metTable[speedIndex][hIndex];
+              calRate = currMET * (weight + (currMET === DRIVING_A_CAR_MET ? 0 : pWt)) / 60;
+            }
+            if (calRate > valueRange.max){ valueRange.max = calRate; }
+            if (calRate < valueRange.min){ valueRange.min = calRate; }
+            itemList.push({value: calRate, size: szList[i]});
+          };
+        }
         break;
       case 'elevation':
         // get elevations at every point
@@ -847,7 +897,7 @@ export class IntervalSvc {
     
     // now determine some ranges for the data in the itemList
     valueRange.range = valueRange.max - valueRange.min;
-    let nRanges = valueRange.range >= 15 ? 5 : 3;
+    let nRanges = valueRange.range >= 10 ? 5 : 3;
     let rSize = valueRange.range / nRanges;
     let precision = valueRange.range < 1 ? 100 : (valueRange.range > 10 ? 1 : 10);
     let rTop = Math.round((valueRange.min + rSize) * precision) / precision;

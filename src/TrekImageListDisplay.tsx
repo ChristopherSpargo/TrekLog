@@ -9,6 +9,7 @@ import { TrekSvc } from "./TrekSvc";
 function TrekImageListDisplay({
   tInfo,            // TrekInfo object containing images
   trekId,           // id for trek (sortDate & group)
+  imageCount,       // total number of images in trek
   showImages = true,  // don't show list if false
   imageSetIndex = undefined,    // index of image set to show (show all sets if undefined)
   showImagesFn,     // function to call if user taps an image
@@ -28,7 +29,7 @@ function TrekImageListDisplay({
       let pos = tS.imagesToSet(tInfo, imageSetIndex) * (imageStyle.width + imageStyle.marginRight);
       scrollViewRef.current.scrollToOffset({offset: pos , animated: true});
     }
-  },[trekId, imageSetIndex, showImages]);
+  },[trekId, imageSetIndex, showImages, imageCount]);
 
   // call the given function function to show the selected trek image
   function showSelectedImage(set: number, image: number) {

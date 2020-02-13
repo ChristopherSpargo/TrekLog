@@ -561,8 +561,7 @@ class CourseDetails extends Component<
 
   // switch measurements system then update the bar graph
   switchMeasurementSystem = () => {
-    this.mainSvc.switchMeasurementSystem();
-    this.tS.updateCalculatedValues(this.tInfo, false, true);
+    this.tS.switchMeasurementSystem(this.tInfo, false, false);
     this.buildGraphData();
     this.forceUpdate();
   };
@@ -749,9 +748,6 @@ class CourseDetails extends Component<
         case "Replay":
           this.openTrackingMethodForm();
           break;
-        case "GoBack":
-          this.props.navigation.dispatch(goBack);
-          break;
         case "Home":
           this.props.navigation.dispatch(StackActions.popToTop());
           break;
@@ -811,7 +807,6 @@ class CourseDetails extends Component<
         {icon: 'Map', label: 'View Map', value: 'Map', disabled: !gotTreks}]
       },
       {icon: 'Home', label: 'Home', value: 'Home'},
-      {icon: 'ArrowBack', label: 'Back', value: 'GoBack'},
       {icon: 'InfoCircleOutline', label: 'Help', value: 'Help'}  
 
     ]  

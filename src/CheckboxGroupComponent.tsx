@@ -14,6 +14,7 @@ function CheckboxGroup({
   itemHeight = undefined, // height for items
   align = undefined, // style to apply to each item container
   itemStyle = undefined, // style object for items
+  item1Style=undefined,   // optional style for first item in list
   labelStyle = undefined, // style object for labels
   justify = undefined, // how to justify buttons
   inline = undefined, // if true, labels should be inline with icons (otherwise above or below the icons)
@@ -36,6 +37,7 @@ function CheckboxGroup({
           rippleColor } = uiTheme.palette[mainSvc.colorTheme];
   const lStyle = labelStyle || {};
   const iStyle = itemStyle || {};
+  const i1Style = item1Style || iStyle;
 
   const styles = StyleSheet.create({
     container: {
@@ -89,36 +91,38 @@ function CheckboxGroup({
   },[selections]);
 
   function changeOne(indx: number){
-    let temp = [...selectedItems];
-    temp[indx] = !temp[indx];
-    setSelectedItems(temp);
-    valueChange(temp);
+    requestAnimationFrame(() => {
+      let temp = [...selectedItems];
+      temp[indx] = !temp[indx];
+      setSelectedItems(temp);
+      valueChange(temp);
+    });
   }
 
   // toggle all-selected status
   function changeAll() {
-    let temp = [];
-    temp.length = selectedItems.length;
-    checkAll.current = !checkAll.current;
-    temp.fill(checkAll.current);
-    valueChange(temp);
-  }
-
-  function valueChange(sels: boolean[]) {
     requestAnimationFrame(() => {
-      onChangeFn(sels);
+      let temp = [];
+      temp.length = selectedItems.length;
+      checkAll.current = !checkAll.current;
+      temp.fill(checkAll.current);
+      valueChange(temp);
     });
   }
 
-  const CheckBoxItem = ({item, indx, onPress, itemSelected}) => {
+  function valueChange(sels: boolean[]) {
+    onChangeFn(sels);
+  }
+
+  const CheckBoxItem = ({item, onPress, itemSelected, moreStyle}) => {
 
     return (  
         <TouchableNativeFeedback
-        key={indx}
+        key={item}
         background={TouchableNativeFeedback.Ripple(rippleColor, false)}
         onPress={onPress}
       >
-        <View style={[styles.item, iStyle]}>
+        <View style={[styles.item, moreStyle]}>
           {!checkboxFirst && (
             <Text style={[styles.label, lStyle]}>{item}</Text>
           )}
@@ -146,10 +150,15 @@ function CheckboxGroup({
     <View>
       {validProps && (selections !== undefined) && (
         <View style={styles.container}>
-          <CheckBoxItem item={checkAll.current ? "Select None" : "Select All"} indx={0} 
-                                                    onPress={() => changeAll()} itemSelected={checkAll.current}/>
+          <CheckBoxItem item={checkAll.current ? "Select None" : "Select All"} 
+                        onPress={() => changeAll()} 
+                        itemSelected={checkAll.current}
+                        moreStyle={i1Style}/>
           {labels.map((item, indx) => (
-              <CheckBoxItem item={item} indx={indx} onPress={() => changeOne(indx)} itemSelected={selectedItems[indx]}/>
+              <CheckBoxItem item={item} 
+                            onPress={() => changeOne(indx)} 
+                            itemSelected={selectedItems[indx]}
+                            moreStyle={iStyle}/>
             ))}
         </View>
       )}

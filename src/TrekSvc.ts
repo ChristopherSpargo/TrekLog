@@ -51,7 +51,7 @@ export class TrekSvc {
 
   // set the trek properties from the given trek objeck
   @action
-  setTrekProperties = (trek: TrekInfo, data: TrekObj, timerOn: boolean) => {
+  setTrekProperties = (trek: TrekInfo, data: TrekObj, timerOn: boolean, forceUpdate = false) => {
     trek.dataVersion    = data.dataVersion || '1';
     trek.sortDate       = data.sortDate;
     trek.group          = data.group;
@@ -79,7 +79,7 @@ export class TrekSvc {
     trek.drivingACar    = data.drivingACar;
     trek.course         = data.course;
     this.updateTrekImageCount(trek);
-    this.updateCalculatedValues(trek, timerOn, true);
+    this.updateCalculatedValues(trek, timerOn, forceUpdate);
   }
 
   // Add the given value to the trek distance.
@@ -192,9 +192,15 @@ export class TrekSvc {
   // reset properties related to the logging process
   resetTrek = (trek: TrekInfo) => {
     trek.startTime = ' ';
+    trek.pointList = [];
     trek.totalGpsPoints = 0;
     trek.trekImages = undefined;
     trek.hills = "Unknown";
+    trek.currentCalories = '';
+    trek.speedNow = '';
+    trek.averageSpeed = '';
+    trek.timePerDist = '';
+    trek.currentCaloriesPerMin = '';
     trek.drivingACar = false;
     this.setTrekLabel(trek, "");
     this.setTrekNotes(trek, "");
@@ -403,6 +409,12 @@ export class TrekSvc {
     trek.type = value;
   }
 
+  // Set the strideLength to the given value
+  @action
+  updateStrideLength = (trek: TrekInfo, value: number) => {
+    trek.strideLength = value;
+  }
+
   // Set the conditions to the given value
   @action
   updateConditions = (trek: TrekInfo, value: any) => {
@@ -498,12 +510,18 @@ export class TrekSvc {
     trek.showSpeedStat = stat;
   }
 
+  // switch the measurement system and update the calculated trek values
+  switchMeasurementSystem = (trek: TrekInfo, timerOn: boolean, force = false) => {
+    this.mainSvc.switchMeasurementSystem();
+    this.updateCalculatedValues(trek, timerOn, force);
+  }
+
   // compute and update various display values
   @action
   updateCalculatedValues = (trek: TrekInfo, timerOn: boolean, force = false) => {
       this.updateSpeedNow(trek, timerOn);
       this.updateAverageSpeed(trek);
-      this.updateCurrentCalories(trek, force);
+      this.updateCurrentCalories(trek, timerOn, force);
       this.updateCurrentDist(trek);
     // }
   }

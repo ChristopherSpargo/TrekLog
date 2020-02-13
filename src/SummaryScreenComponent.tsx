@@ -18,8 +18,9 @@ import NavMenu from './NavMenuComponent';
 import PageTitle from './PageTitleComponent';
 import { MainSvc, ALL_SELECT_BITS } from "./MainSvc";
 import { TrekSvc } from "./TrekSvc";
+import Waiting from './WaitingComponent';
 
-const pageTitleFormat = {marginBottom: 0};
+const pageTitleFormat = {marginBottom: 5};
 const goBack = NavigationActions.back();
 
 @inject(
@@ -116,9 +117,6 @@ class SummaryScreen extends Component<
     this._willBlurSubscription && this._willBlurSubscription.remove();
     this.tS.clearTrek(this.tInfo, false);
     this.sumSvc.setFTCount(0);
-    // if(this.fS.groupList.length !== 1 || this.fS.groupList[0] !== this.originalGroup){
-    //   this.tInfo.setTrekLogGroupProperties(this.originalGroup)
-    // }
   }
 
   checkBackButton = () => {
@@ -261,7 +259,7 @@ class SummaryScreen extends Component<
   
   render() {
     const {
-      disabledTextColor,
+      disabledTextColor, dividerColor,
       pageBackground,
     } = this.props.uiTheme.palette[this.mS.colorTheme];
     const {
@@ -310,6 +308,12 @@ class SummaryScreen extends Component<
         paddingRight: 0,
         backgroundColor: pageBackground,
       },
+      divider: {
+        flex: 1,
+        borderBottomWidth: 1,
+        borderStyle: "solid",
+        borderColor: dividerColor,
+      },
     });
 
     return (
@@ -321,33 +325,35 @@ class SummaryScreen extends Component<
         <View style={styles.container}>
           <RadioPicker pickerOpen={this.radioPickerOpen}/>
           <CheckboxPicker pickerOpen={this.checkboxPickerOpen} />
-          {(this.mS.appReady && this.mS.dataReady && this.fS.dataReady) && (
-            <View style={styles.container}>
-              <TrekLogHeader
-                titleText="Activity"
-                icon="*"
-                backButtonFn={this.checkBackButton}
-                actionButtons={this.headerActions}
-                openMenuFn={this.openMenu}
+          <View style={styles.container}>
+            <TrekLogHeader
+              titleText="Activity"
+              icon="*"
+              backButtonFn={this.checkBackButton}
+              actionButtons={this.headerActions}
+              openMenuFn={this.openMenu}
+            />
+            <View style={styles.listArea}>
+              <PageTitle 
+                colorTheme={this.mS.colorTheme}
+                titleText="Activity Summary"
+                groupName={this.fS.groupList.length === 1 ? this.fS.groupList[0] : "Multiple"}
+                setGroupFn={this.getDifferentGroups}
+                style={pageTitleFormat}
               />
-              <View style={styles.listArea}>
-                <PageTitle 
-                  colorTheme={this.mS.colorTheme}
-                  titleText="Activity Summary"
-                  groupName={this.fS.groupList.length === 1 ? this.fS.groupList[0] : "Multiple"}
-                  setGroupFn={this.getDifferentGroups}
-                  style={pageTitleFormat}
+              <View style={styles.divider}/>
+              {(this.mS.dataReady && this.fS.dataReady) && (
+                <DashBoard
+                  pickerOpenFn={this.setRadioPickerOpen}
+                  navigation={this.props.navigation}
+                  trekChecksum={this.fS.ftChecksum}
                 />
-                {(this.mS.dataReady === true) && (
-                  <DashBoard
-                    pickerOpenFn={this.setRadioPickerOpen}
-                    navigation={this.props.navigation}
-                    trekChecksum={this.fS.ftChecksum}
-                  />
-                )}
-              </View>
+              )}
             </View>
-          )}
+            {(!this.mS.dataReady || !this.fS.dataReady) && 
+              <Waiting/>
+            }
+          </View>
         </View>
       </NavMenu>
     );

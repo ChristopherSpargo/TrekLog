@@ -45,6 +45,8 @@ function CheckboxPicker({pickerOpen}) {
     textOnPrimaryColor,
     footerTextColor,
     footerButtonText,
+    shadow1,
+    altCardBackground,
   } = uiTheme.palette[mainSvc.colorTheme];
   const { cardLayout, roundedTop, roundedBottom, footer, footerButton, 
           fontRegular } = uiTheme;
@@ -89,9 +91,9 @@ function CheckboxPicker({pickerOpen}) {
       height: headerHeight,
       paddingLeft: 30,
       paddingBottom: 5,
-      borderStyle: "solid",
-      borderBottomColor: dividerColor,
-      borderBottomWidth: 1,
+      // borderStyle: "solid",
+      // borderBottomColor: dividerColor,
+      // borderBottomWidth: 1,
       backgroundColor: primaryColor
     },
     title: {
@@ -101,7 +103,7 @@ function CheckboxPicker({pickerOpen}) {
     },
     body: {
       flexDirection: "column",
-      paddingVertical: 8
+      // paddingVertical: 8
     },
     rowLayout: {
       flexDirection: "row",
@@ -113,13 +115,22 @@ function CheckboxPicker({pickerOpen}) {
     },
     footer: {
       ...footer,
-      ...{borderTopColor: dividerColor, backgroundColor: pageBackground}
+      ...{borderTopColor: dividerColor, backgroundColor: primaryColor}
     },
     rgItem: {
       paddingVertical: 5,
-      backgroundColor: pageBackground,
+      backgroundColor: altCardBackground,
       paddingRight: 15,
       paddingLeft: 30,
+      ...shadow1
+    },
+    rgItem1: {
+      paddingVertical: 5,
+      backgroundColor: altCardBackground,
+      paddingRight: 15,
+      paddingLeft: 30,
+      ...shadow1,
+      marginTop: 0,
     },
     rgLabel: {
       color: highTextColor,
@@ -219,6 +230,7 @@ function CheckboxPicker({pickerOpen}) {
                         onChangeFn={changeSelections}
                         selections={selections}
                         itemStyle={styles.rgItem}
+                        item1Style={styles.rgItem1}
                         labels={mData.selectionNames}
                         labelStyle={styles.rgLabel}
                         vertical={true}
@@ -236,7 +248,7 @@ function CheckboxPicker({pickerOpen}) {
                       onPress={dismiss}>
                       <View style={footerButton}>
                         <Text
-                          style={footerButtonText}
+                          style={{...footerButtonText, ...{color: textOnPrimaryColor}}}
                         >
                           {mData.cancelText}
                         </Text>
@@ -248,7 +260,7 @@ function CheckboxPicker({pickerOpen}) {
                       onPress={canClose ? close : undefined}>
                       <View style={footerButton}>
                         <Text
-                          style={{...footerButtonText, ...{ color: canClose ? footerTextColor : disabledTextColor }}}
+                          style={{...footerButtonText, ...{ color: canClose ? textOnPrimaryColor : disabledTextColor }}}
                         >
                           {mData.okText}
                         </Text>

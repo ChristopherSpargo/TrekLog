@@ -143,9 +143,9 @@ export const JOGGING_MET_M              = 9.8;
 export const JOGGING_MET_D              = 9.8;
 export const JOGGING_MET_E              = 14.8;
 export const RUNNING_MET                = 9.8;
-export const RUNNING_MET_M              = 9.8;
-export const RUNNING_MET_D              = 9.8;
-export const RUNNING_MET_E              = 9.8;
+export const RUNNING_MET_M              = 11.6;
+export const RUNNING_MET_D              = 11.6;
+export const RUNNING_MET_E              = 17.5;
 export const FAST_RUNNING_MET           = 11.8;
 export const FAST_RUNNING_MET_M         = 11.8;
 export const FAST_RUNNING_MET_D         = 11.8;
@@ -182,10 +182,18 @@ export const HIKING_MET                 = 6.0;
 export const HIKING_MET_M               = 7.0;
 export const HIKING_MET_D               = 9.0;
 export const HIKING_MET_E               = 13.0;
+export const HIKING_FAST_MET            = 7.2;
+export const HIKING_FAST_MET_M          = 8.4;
+export const HIKING_FAST_MET_D          = 10.8;
+export const HIKING_FAST_MET_E          = 15.6;
 export const HIKING_WITH_PACK_MET       = 7.8;
-export const HIKING_WITH_PACK_MET_M     = 7.8;
+export const HIKING_WITH_PACK_MET_M     = 9.1;
 export const HIKING_WITH_PACK_MET_D     = 11.7;
 export const HIKING_WITH_PACK_MET_E     = 15;
+export const HIKING_FAST_WITH_PACK_MET   = 9.4;
+export const HIKING_FAST_WITH_PACK_MET_M = 11.0;
+export const HIKING_FAST_WITH_PACK_MET_D = 14.0;
+export const HIKING_FAST_WITH_PACK_MET_E = 18.0;
 export const MODERATE_BOARDING_MET      = 5.0;
 export const MODERATE_BOARDING_MET_M    = 5.0;
 export const MODERATE_BOARDING_MET_D    = 5.0;
@@ -292,9 +300,9 @@ export const HIKING_METS = [
   [HIKING_MET, HIKING_MET_M, HIKING_MET_D, HIKING_MET_E],
   [HIKING_MET, HIKING_MET_M, HIKING_MET_D, HIKING_MET_E],
   [HIKING_MET, HIKING_MET_M, HIKING_MET_D, HIKING_MET_E],
-  [HIKING_MET, HIKING_MET_M, HIKING_MET_D, HIKING_MET_E],
-  [HIKING_MET, HIKING_MET_M, HIKING_MET_D, HIKING_MET_E],
-  [HIKING_MET, HIKING_MET_M, HIKING_MET_D, HIKING_MET_E],
+  [HIKING_FAST_MET, HIKING_FAST_MET_M, HIKING_FAST_MET_D, HIKING_FAST_MET_E],
+  [HIKING_FAST_MET, HIKING_FAST_MET_M, HIKING_FAST_MET_D, HIKING_FAST_MET_E],
+  [HIKING_FAST_MET, HIKING_FAST_MET_M, HIKING_FAST_MET_D, HIKING_FAST_MET_E],
   [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET],
   [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET],
   [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET],
@@ -316,9 +324,9 @@ export const HIKING_WITH_PACK_METS = [
   [HIKING_WITH_PACK_MET, HIKING_WITH_PACK_MET_M, HIKING_WITH_PACK_MET_D, HIKING_WITH_PACK_MET_E],
   [HIKING_WITH_PACK_MET, HIKING_WITH_PACK_MET_M, HIKING_WITH_PACK_MET_D, HIKING_WITH_PACK_MET_E],
   [HIKING_WITH_PACK_MET, HIKING_WITH_PACK_MET_M, HIKING_WITH_PACK_MET_D, HIKING_WITH_PACK_MET_E],
-  [HIKING_WITH_PACK_MET, HIKING_WITH_PACK_MET_M, HIKING_WITH_PACK_MET_D, HIKING_WITH_PACK_MET_E],
-  [HIKING_WITH_PACK_MET, HIKING_WITH_PACK_MET_M, HIKING_WITH_PACK_MET_D, HIKING_WITH_PACK_MET_E],
-  [HIKING_WITH_PACK_MET, HIKING_WITH_PACK_MET_M, HIKING_WITH_PACK_MET_D, HIKING_WITH_PACK_MET_E],
+  [HIKING_FAST_WITH_PACK_MET, HIKING_FAST_WITH_PACK_MET_M, HIKING_FAST_WITH_PACK_MET_D, HIKING_FAST_WITH_PACK_MET_E],
+  [HIKING_FAST_WITH_PACK_MET, HIKING_FAST_WITH_PACK_MET_M, HIKING_FAST_WITH_PACK_MET_D, HIKING_FAST_WITH_PACK_MET_E],
+  [HIKING_FAST_WITH_PACK_MET, HIKING_FAST_WITH_PACK_MET_M, HIKING_FAST_WITH_PACK_MET_D, HIKING_FAST_WITH_PACK_MET_E],
   [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET],
   [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET],
   [DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET, DRIVING_A_CAR_MET],
@@ -1149,13 +1157,32 @@ distToSegmentSquared = (p: LatLng, v: LatLng, w: LatLng) : DistAndPoint => {
   }
 
   // return the average of a segment of a list of numbers
-  getArraySegmentAverage = (list: number[], startIndex = 0, endIndex = list.length-1) =>{
+  // if given, use associated array of item weights to give a weighted average
+  getArraySegmentAverage = (list: number[], startIndex = 0, endIndex = list.length-1, wList?: number[]) =>{
     let sum = 0;
+    let count = 0;
 
+    if (wList){
+      for(let i=startIndex; i<= endIndex; i++) {
+        sum += list[i] * wList[i];
+        count += wList[i];
+      }
+      return sum / count;
+    }
     for(let i=startIndex; i<= endIndex; i++) {
       sum += list[i];
     }
     return sum / (endIndex - startIndex + 1);
+  }
+
+  // 
+  getMovingAvgValue = (list: number[], index: number, size: number) => {
+    let len = list.length - 1;
+    let first = index < size ? 0 : index - size + 1;
+    let last = first + size - 1;
+    let end = last <= len ? last : len;
+    let start = last <= len ? first : len - size + 1;
+    return this.getArraySegmentAverage(list, start, end)
   }
 
   // given a value and a list of numbers (sorted ascending) return the index of
@@ -1274,7 +1301,7 @@ distToSegmentSquared = (p: LatLng, v: LatLng, w: LatLng) : DistAndPoint => {
     let dist = 0;
     let last = path.length;
 
-    if (path.length) {        // skip if no points in path
+    if (path.length > 0) {        // skip if no points in path
       path[0].d = dist;
       if (--last > 0) {       // skip if only 1 point in path
         for (let i = 0; i < last; i++) {
@@ -1396,6 +1423,7 @@ distToSegmentSquared = (p: LatLng, v: LatLng, w: LatLng) : DistAndPoint => {
     let speedIndex : number;
     let numPts = pointList.length;
     let tWt : number;
+    // let carCnt = 0;
 
     if (numPts > 0){
       metTable = this.getMETTable(tType, bpweight);
@@ -1410,7 +1438,8 @@ distToSegmentSquared = (p: LatLng, v: LatLng, w: LatLng) : DistAndPoint => {
         speedIndex = this.findRangeIndex(currPt.s, ACTIVITY_SPEEDS);
         if (speedIndex !== -1) {
           newMET = metTable[speedIndex][hIndex];
-          if ((newMET !== currMET) && ((currMET !== DRIVING_A_CAR_MET) || (currPt.s === 0))){
+          // if(newMET === DRIVING_A_CAR_MET) {carCnt++;}
+          if ((newMET !== currMET)) { //&& ((currMET !== DRIVING_A_CAR_MET) || (currPt.s === 0))){
             // MET has changed
             tWt = weight + (currMET === DRIVING_A_CAR_MET ? 0 : bpweight);
             cals += currMET * tWt * (currDurationSum / 3600);
@@ -1424,6 +1453,7 @@ distToSegmentSquared = (p: LatLng, v: LatLng, w: LatLng) : DistAndPoint => {
       tWt = weight + (currMET === DRIVING_A_CAR_MET ? 0 : bpweight);
       cals += currMET * tWt * (currDurationSum / 3600);  // add in final MET calc
     }
+    // alert('Times at car speed: ' + carCnt)
     let precision = cals < 10 ? 10 : 1;           // show 1 digit after decimal for small values ( < 10 )
     return cals !== 0 ? (Math.round(cals * precision) / precision) : 0;
   }

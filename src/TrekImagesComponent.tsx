@@ -790,13 +790,14 @@ class TrekImages extends Component<{
   render () {
     const { trekLogGreen, trekLogRed, mediumTextColor, pageBackground
           } = this.props.uiTheme.palette[this.mS.colorTheme];
-    const { navIcon, fontRegular } = this.props.uiTheme;
+    const { navIcon, fontBold } = this.props.uiTheme;
     const noPrev = !this.havePrevImage();
     const noNext = !this.haveNextImage();
     const imageSelectorWidth = 50;
     const cameraControlButtonSize = 72;
     const cameraControlIconSize = 48;
-    const controlsColor = semitransWhite_8;
+    const cameraControlsBackground = semitransWhite_8;
+    const controlsColor = "black";
     const buttonBorderColor = semitransBlack_5;
     
     const styles = StyleSheet.create({
@@ -849,7 +850,7 @@ class TrekImages extends Component<{
         height: cameraControlButtonSize,
         justifyContent: "center",
         alignItems: "center",
-        backgroundColor: semitransBlack_2, 
+        backgroundColor: cameraControlsBackground, 
         borderWidth: 1,
         borderStyle: "solid",
         borderColor: buttonBorderColor,
@@ -857,11 +858,9 @@ class TrekImages extends Component<{
       },
       imageSelectorArea: {
         position: "absolute",
-        top: 0,
-        bottom: 0,
+        top: 150,
         left: 0,
         right: 0,
-        justifyContent: "center",
       },
       imageSelectorPrev: {
         position: "absolute",
@@ -882,7 +881,7 @@ class TrekImages extends Component<{
         alignItems: "center",
       },
       imageSelectorStyle: {
-        backgroundColor: semitransBlack_2, 
+        backgroundColor: semitransWhite_8, 
         borderRadius: imageSelectorWidth/2,
         borderStyle: "solid",
         borderWidth: 1,
@@ -909,20 +908,6 @@ class TrekImages extends Component<{
         justifyContent: "center",
         alignItems: "center",
       },
-      videoControlsArea: {
-        position: "absolute",
-        bottom: 10,
-        left: 0,
-        right: 0,
-        height: cameraControlButtonSize + 60,
-        justifyContent: "space-between",
-      },
-      videoControls: {
-        height: cameraControlButtonSize + 10,
-        flexDirection: 'row', 
-        justifyContent: 'space-around', 
-        alignItems: 'center', 
-      },
       sliderArea: {
         position: "absolute",
         left: 0,
@@ -932,12 +917,12 @@ class TrekImages extends Component<{
         flexDirection: "row",
         alignItems: "center",
         paddingHorizontal: 5,
-        backgroundColor: semitransBlack_5,
+        backgroundColor: semitransWhite_8,
       },
       sliderText: {
         fontSize: 14,
-        fontFamily: fontRegular,
-        color: "white",
+        fontFamily: fontBold,
+        color: "black",
       },
     })
 
@@ -1024,7 +1009,7 @@ class TrekImages extends Component<{
                   <Slider
                     style={{flex: 1}}
                     step={.01}
-                    maximumTrackTintColor="rgba(255, 255, 102, .8)"
+                    maximumTrackTintColor={semitransBlack_5}
                     maximumValue={1}
                     onValueChange={this.setCameraZoom}
                     value={this.cameraZoom}
@@ -1054,6 +1039,7 @@ class TrekImages extends Component<{
                                 imageWidth={this.currentImage.width}
                                 imageDate={this.currentImage.sDate}
                                 clearTimeoutFn={this.clearImageBackgroundTextTimeout}
+                                setShowVideoControlsFn={this.setShowVideoControls}
                     />
                     {(((this.currentImage.type !== IMAGE_TYPE_VIDEO) || this.videoPaused)
                         && this.showVideoControls) && 
